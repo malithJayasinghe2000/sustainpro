@@ -9,12 +9,19 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@types/react-datepicker": "^6.2.0",
     "axios": "^1.13.2",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
+    "lucide-react": "^0.556.0",
     "next": "16.0.7",
     "react": "19.2.0",
+    "react-datepicker": "^9.1.0",
     "react-dom": "19.2.0",
     "react-hot-toast": "^2.6.0",
     "recharts": "^3.5.1",
+    "socket.io-client": "^4.8.1",
+    "sonner": "^2.0.7",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

@@ -11,9 +11,15 @@ const pool = new Pool({
     connectionTimeoutMillis: 2000,
 });
 
-// Test connection on startup
-pool.on('connect', () => {
-    console.log('✅ Connected to PostgreSQL database');
+
+// Set timezone to UTC for all connections
+pool.on('connect', async (client: PoolClient) => {
+    try {
+        await client.query("SET timezone TO 'UTC'");
+        console.log('✅ Connected to PostgreSQL database (Timezone: UTC)');
+    } catch (err) {
+        console.error('❌ Error setting timezone to UTC:', err);
+    }
 });
 
 pool.on('error', (err) => {
@@ -30,7 +36,6 @@ export async function query(
     try {
         const res = await pool.query(text, params);
         const duration = Date.now() - start;
-        console.log('Executed query', { text, duration, rows: res.rowCount });
         return res;
     } catch (error) {
         console.error('Database query error:', error);

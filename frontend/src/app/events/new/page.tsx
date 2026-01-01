@@ -1,0 +1,542 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import DashboardLayout from '@/components/DashboardLayout';
+import {
+    Calendar, Building2, MapPin, Check, AlertCircle,
+    Save, Image as ImageIcon, ShieldCheck, Crown, Zap, Thermometer, Ticket,
+    User, Mail, Lock, UserPlus, X, CheckCircle2, UserCog, Globe
+} from 'lucide-react';
+import { organizationsApi, eventsApi, uploadApi, usersApi } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import SetupWizard from '@/components/SetupWizard';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Textarea } from '@/components/ui/Textarea';
+import { PasswordInput, PasswordStrength } from '@/components/ui/PasswordInput';
+import dynamic from 'next/dynamic';
+
+const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
+
+interface WizardStep {
+    id: 'OVERVIEW' | 'LOCATION' | 'MANAGER' | 'REVIEW';
+    label: string;
+}
+
+const STEPS: WizardStep[] = [
+    { id: 'OVERVIEW', label: 'Event Overview' },
+    { id: 'LOCATION', label: 'Location & Logistics' },
+    { id: 'MANAGER', label: 'Event Manager' },
+    { id: 'REVIEW', label: 'Review & Create' }
+];
+
+export default function NewEventPage() {
+    const { user: currentUser } = useAuth();
+    const router = useRouter();
+    const [currentStep, setCurrentStep] = useState<number>(0);
+    const [isLoading, setIsLoading] = useState(false);
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    const [orgs, setOrgs] = useState<any[]>([]);
+
+    // Event Form Data
+    const [formData, setFormData] = useState({
+        organization_id: '',
+        name: '',
+        description: '',
+        event_type: 'MEGA_SPORTING',
+        location: '',
+        coordinates: { lat: 0, lng: 0 },
+        start_date: '',
+        end_date: '',
+        status: 'PLANNING',
+        image_url: '',
+        // Hidden / Optional fields (kept for schema compatibility)
+        climate_control: 'OUTDOOR_OPEN',
+        power_requirement: ''
+    });
+
+    // Manager Form Data
+    const [createManager, setCreateManager] = useState(true);
+    const [managerData, setManagerData] = useState({
+        full_name: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+    });
+
+    // Image Upload State
+    const [imagePreview, setImagePreview] = useState<string>('');
+
+    useEffect(() => {
+        if (currentUser?.is_super_admin) {
+            organizationsApi.getAll().then(setOrgs).catch(console.error);
+        } else if (currentUser?.organization_id) {
+            setFormData(prev => ({ ...prev, organization_id: currentUser.organization_id }));
+        }
+
+        // Permission Check
+        if (currentUser && !currentUser.is_super_admin) {
+            if (!currentUser.permissions?.includes('events:create')) {
+                // Redirect or Show Error
+                router.push('/events');
+                // toast.error('You do not have permission to create events'); // Ideally
+            }
+        }
+    }, [currentUser]);
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            // Validate file size (5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                setFieldErrors(prev => ({ ...prev, image_url: 'File size must be less than 5MB' }));
+                return;
+            }
+
+            try {
+                // Determine if we want to upload immediately or wait on submit.
+                // Organization page waits. For simplicity here let's upload immediately to get the URL
+                // reusing current logic but handling existing preview state better.
+                const res = await uploadApi.uploadImage(file);
+                setFormData(prev => ({ ...prev, image_url: res.url }));
+                setImagePreview(res.url); // Use the URL itself for preview
+                setFieldErrors(prev => ({ ...prev, image_url: '' }));
+            } catch (err) {
+                setFieldErrors(prev => ({ ...prev, image_url: 'Failed to upload image' }));
+            }
+        }
+    };
+
+    const handleLocationSelect = (lat: number, lng: number) => {
+        setFormData(prev => ({ ...prev, coordinates: { lat, lng } }));
+    };
+
+    const nextStep = () => {
+        // Validation
+        const errors: Record<string, string> = {};
+
+        if (currentStep === 0) {
+            if (!formData.name) errors.name = "Event Name is required";
+            if (!formData.organization_id) errors.organization_id = "Organization is required";
+            if (!formData.start_date) errors.start_date = "Start date is required";
+            if (!formData.end_date) errors.end_date = "End date is required";
+        }
+
+        if (currentStep === 2 && createManager) {
+            if (!managerData.full_name) errors.full_name = "Full name is required";
+            if (!managerData.email) errors.email = "Email is required";
+            if (!managerData.password) errors.password = "Password is required";
+            if (managerData.password.length < 8) errors.password = "Password must be at least 8 characters";
+            if (managerData.password && managerData.password !== managerData.confirmPassword) {
+                errors.confirmPassword = "Passwords do not match";
+            }
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setFieldErrors(errors);
+            return;
+        }
+
+        setFieldErrors({});
+        setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1));
+    };
+
+    const prevStep = () => {
+        setCurrentStep(prev => Math.max(prev - 1, 0));
+        setFieldErrors({});
+    };
+
+    const handleSubmit = async () => {
+        try {
+            setIsLoading(true);
+            setFieldErrors({});
+
+            // 1. Create Event
+            const eventRes = await eventsApi.create(formData);
+            const newEventId = eventRes.id; // Adjust based on actual API response structure (usually returns the object)
+
+            // 2. Create Manager (if requested)
+            if (createManager && newEventId) {
+                await usersApi.create({
+                    ...managerData,
+                    role: 'EVENT_MANAGER',
+                    organization_id: formData.organization_id,
+                    event_id: newEventId, // Link to the new event
+                    dept_id: '',
+                    service_id: ''
+                });
+            }
+
+            // Success
+            router.push('/events');
+        } catch (err: any) {
+            console.error(err);
+            setFieldErrors({ submit: err.response?.data?.error || err.message || 'Failed to create event or manager' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // --- Renderers ---
+
+    const renderOverview = () => (
+        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+            <h2 className="header-section">Event Overview</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                    {currentUser?.is_super_admin && (
+                        <Select
+                            label="Organization"
+                            value={formData.organization_id}
+                            onChange={e => { setFormData({ ...formData, organization_id: e.target.value }); setFieldErrors(prev => ({ ...prev, organization_id: '' })); }}
+                            options={[
+                                { value: '', label: 'Select Organization' },
+                                ...orgs.map(org => ({ value: org.id, label: org.name }))
+                            ]}
+                            error={fieldErrors.organization_id}
+                        />
+                    )}
+                    <Input
+                        label="Official Event Name *"
+                        placeholder="e.g. Formula 1 Abu Dhabi Grand Prix 2025"
+                        value={formData.name}
+                        onChange={e => { setFormData({ ...formData, name: e.target.value }); setFieldErrors(prev => ({ ...prev, name: '' })); }}
+                        error={fieldErrors.name}
+                    />
+
+                    <Select
+                        label="Mega-Event Category"
+                        value={formData.event_type}
+                        onChange={e => setFormData({ ...formData, event_type: e.target.value })}
+                        options={[
+                            { value: 'MEGA_SPORTING', label: 'Mega-Sporting Event' },
+                            { value: 'CULTURAL_FESTIVAL', label: 'Cultural & Heritage Festival' },
+                            { value: 'CONCERT', label: 'Live Entertainment / Concert' },
+                            { value: 'MICE', label: 'MICE & Trade Show' },
+                            { value: 'ROYAL_SUMMIT', label: 'Royal / Sovereign Event' },
+                            { value: 'SEASONAL_FESTIVAL', label: 'Seasonal Festival' }
+                        ]}
+                    />
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            type="datetime-local"
+                            label="Start Date *"
+                            value={formData.start_date}
+                            onChange={e => { setFormData({ ...formData, start_date: e.target.value }); setFieldErrors(prev => ({ ...prev, start_date: '' })); }}
+                            error={fieldErrors.start_date}
+                            icon={Calendar}
+                        />
+                        <Input
+                            type="datetime-local"
+                            label="End Date *"
+                            value={formData.end_date}
+                            onChange={e => { setFormData({ ...formData, end_date: e.target.value }); setFieldErrors(prev => ({ ...prev, end_date: '' })); }}
+                            error={fieldErrors.end_date}
+                            icon={Calendar}
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <label className="label-compact">Event Banner</label>
+                    <div className="h-full min-h-[160px]">
+                        {formData.image_url ? (
+                            <div className="relative w-full h-full min-h-[160px] rounded-lg border border-border overflow-hidden bg-muted/10 flex items-center justify-center group">
+                                <img src={formData.image_url} alt="Banner Preview" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFormData(prev => ({ ...prev, image_url: '' }));
+                                            setImagePreview('');
+                                        }}
+                                        className="bg-red-500 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-red-600 flex items-center gap-2"
+                                    >
+                                        <X className="w-4 h-4" /> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <label className="flex flex-col items-center justify-center w-full h-full min-h-[160px] border-2 border-dashed border-border rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors gap-3 p-6">
+                                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <ImageIcon className="w-6 h-6 text-primary" />
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-sm font-medium text-foreground">Click to Upload Banner</p>
+                                    <p className="text-xs text-muted-foreground mt-1">SVG, PNG, JPG (max. 5MB)</p>
+                                </div>
+                                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                            </label>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <Textarea
+                label="Executive Summary"
+                placeholder="Description for stakeholder reports..."
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                className="resize-none min-h-[100px]"
+            />
+        </div>
+    );
+
+    const renderLocation = () => (
+        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+            <h2 className="header-section">Location & Logistics</h2>
+
+            <div className="rounded-xl overflow-hidden border border-border h-[400px]">
+                <LeafletMap lat={formData.coordinates?.lat} lng={formData.coordinates?.lng} onLocationSelect={handleLocationSelect} />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                    label="Main Venue Location"
+                    placeholder="e.g. Yas Marina Circuit, Abu Dhabi"
+                    value={formData.location}
+                    onChange={e => setFormData({ ...formData, location: e.target.value })}
+                    icon={MapPin}
+                />
+                <Select
+                    label="Climate Control"
+                    value={formData.climate_control}
+                    onChange={e => setFormData({ ...formData, climate_control: e.target.value })}
+                    options={[
+                        { value: 'INDOOR', label: 'Indoors (AC)' },
+                        { value: 'OUTDOOR_OPEN', label: 'Outdoors - Open Air' },
+                        { value: 'OUTDOOR_TENT', label: 'Outdoors - AC Tent' },
+                        { value: 'HYBRID', label: 'Hybrid' }
+                    ]}
+                />
+            </div>
+        </div>
+    );
+
+    const renderManager = () => (
+        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+            <div className="space-y-2">
+                <h2 className="header-section">Event Manager Setup</h2>
+                <p className="text-sm text-muted-foreground">Assign a dedicated manager for this event.</p>
+            </div>
+
+
+
+            {createManager && (
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in fade-in duration-300">
+                    <div className="lg:col-span-3 space-y-5">
+                        <Input
+                            label="Manager Full Name"
+                            placeholder="e.g. Sarah Connor"
+                            value={managerData.full_name}
+                            onChange={e => { setManagerData({ ...managerData, full_name: e.target.value }); setFieldErrors(prev => ({ ...prev, full_name: '' })); }}
+                            error={fieldErrors.full_name}
+                            icon={User}
+                        />
+                        <Input
+                            label="Email Address"
+                            type="email"
+                            placeholder="sarah@event-org.com"
+                            value={managerData.email}
+                            onChange={e => { setManagerData({ ...managerData, email: e.target.value }); setFieldErrors(prev => ({ ...prev, email: '' })); }}
+                            error={fieldErrors.email}
+                            icon={Mail}
+                        />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <PasswordInput
+                                label="Password"
+                                value={managerData.password}
+                                onChange={(value) => {
+                                    setManagerData({ ...managerData, password: value });
+                                    setFieldErrors(prev => ({ ...prev, password: '', confirmPassword: '' }));
+                                }}
+                                error={fieldErrors.password}
+                            />
+                            <PasswordInput
+                                label="Confirm Password"
+                                value={managerData.confirmPassword}
+                                onChange={(value) => {
+                                    setManagerData({ ...managerData, confirmPassword: value });
+                                    setFieldErrors(prev => ({ ...prev, confirmPassword: '' }));
+                                }}
+                                error={fieldErrors.confirmPassword}
+                                confirmValue={managerData.password}
+                            />
+                        </div>
+                        {/* Password Strength - Full Width */}
+                        {managerData.password && (
+                            <div className="pt-2 border-t border-dashed border-border/50">
+                                <PasswordStrength
+                                    password={managerData.password}
+                                    confirmPassword={managerData.confirmPassword}
+                                />
+                            </div>
+                        )}
+                    </div>
+                    {/* Right Column - 40% - Role Card */}
+                    <div className="lg:col-span-2">
+                        <div className="h-full p-6 rounded-xl border border-border bg-muted/5 space-y-6 !shadow-none">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+                                    <UserCog className="w-5 h-5 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-sm text-foreground">Event Manager</h3>
+                                    <p className="text-xs text-muted-foreground">Operational Lead</p>
+                                </div>
+                            </div>
+                            <div className="space-y-3 pl-1">
+                                <div className="flex items-start gap-3 group">
+                                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                                    <div className="space-y-0.5">
+                                        <p className="text-sm font-medium text-foreground">Event Operations</p>
+                                        <p className="text-xs text-muted-foreground">Manage logistics, schedule, and assets</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 group">
+                                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                                    <div className="space-y-0.5">
+                                        <p className="text-sm font-medium text-foreground">Staff Coordination</p>
+                                        <p className="text-xs text-muted-foreground">Oversee department heads and teams</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    const renderReview = () => (
+        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+            <h2 className="header-section">Review & Launch</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                {/* Left Column: Event Summary */}
+                <div className="flex">
+                    <div className="card-compact !shadow-none border-border/60 w-full">
+                        <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
+                            <Building2 className="w-4 h-4" /> Event Profile
+                        </h3>
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+                                <div className="space-y-1 col-span-2">
+                                    <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Event Name</span>
+                                    <p className="font-medium text-foreground">{formData.name || '-'}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Type</span>
+                                    <p className="font-medium text-foreground">{formData.event_type.replace('_', ' ')}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Location</span>
+                                    <p className="font-medium text-foreground truncate" title={formData.location}>{formData.location || 'N/A'}</p>
+                                </div>
+                            </div>
+                            <div className="pt-4 border-t border-border/50">
+                                <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <Calendar className="w-3.5 h-3.5" /> Schedule
+                                </h4>
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Start</span>
+                                        <span className="font-medium">{formData.start_date ? new Date(formData.start_date).toLocaleString() : '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">End</span>
+                                        <span className="font-medium">{formData.end_date ? new Date(formData.end_date).toLocaleString() : '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right Column: Manager Access */}
+                <div className="flex">
+                    <div className="card-compact !shadow-none border-border/60 w-full flex flex-col">
+                        <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
+                            <UserCog className="w-4 h-4" /> Manager Access
+                        </h3>
+                        <div className="flex-1 space-y-6 flex flex-col justify-between">
+                            {createManager ? (
+                                <>
+                                    <div className="space-y-6">
+                                        <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                                <User className="w-5 h-5 text-primary" />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-semibold text-foreground">{managerData.full_name || 'Event Manager'}</p>
+                                                <p className="text-[11px] text-muted-foreground font-medium">Primary Event Lead</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4 px-1">
+                                            <div className="space-y-1">
+                                                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Login Email</span>
+                                                <div className="flex items-center gap-2 bg-muted/30 p-2 rounded-lg border border-border/50 text-sm">
+                                                    <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                                                    <span className="font-medium text-foreground">{managerData.email || '-'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="pt-6 border-t border-border/50">
+                                        <div className="flex items-center gap-2 text-xs text-green-600 font-semibold bg-green-50/50 p-3 rounded-lg border border-green-100/50">
+                                            <CheckCircle2 className="w-4 h-4" />
+                                            Security credentials configured
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-center p-6 text-muted-foreground">
+                                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                                        <UserPlus className="w-6 h-6 opacity-50" />
+                                    </div>
+                                    <p>No Manager Account will be created.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {fieldErrors.submit && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-600 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                    <X className="w-4 h-4" />
+                    {fieldErrors.submit}
+                </div>
+            )}
+        </div>
+    );
+
+    return (
+        <DashboardLayout>
+            <SetupWizard
+                title="Create Mega Event"
+                description="Setup high-security, permitted events (F1, Festivals, Royal Summits)."
+                breadcrumbs={[
+                    { label: 'Back to Events', href: '/events' },
+                    { label: 'Create Event', href: '#' }
+                ]}
+                steps={STEPS}
+                currentStep={currentStep}
+                onNext={currentStep === STEPS.length - 1 ? handleSubmit : nextStep}
+                onBack={prevStep}
+                nextLabel={currentStep === STEPS.length - 1 ? 'Launch Event' : 'Next Step'}
+                backLabel="Back"
+                isLastStep={currentStep === STEPS.length - 1}
+                isLoading={isLoading}
+            >
+                {currentStep === 0 && renderOverview()}
+                {currentStep === 1 && renderLocation()}
+                {currentStep === 2 && renderManager()}
+                {currentStep === 3 && renderReview()}
+            </SetupWizard>
+        </DashboardLayout>
+    );
+}

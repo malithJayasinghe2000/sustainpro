@@ -1,41 +1,223 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../db';
+import { authenticateDevice } from '../middleware/deviceAuth';
+import { getIO } from '../socket';
 
 const router = Router();
 
+// ... (previous interfaces) ...
+interface LiveDataEntry {
+    data: any;
+    timestamp: Date;
+    device_id: number;
+    device_code: string;
+}
+
+const liveDataStore: Map<string, LiveDataEntry> = new Map();
+const OFFLINE_THRESHOLD_MS = 10000;
+
+// ... (previous helper) ...
+const getDeviceStatus = (entry: LiveDataEntry | undefined): 'online' | 'offline' => {
+    if (!entry) return 'offline';
+    const now = Date.now();
+    const lastUpdate = entry.timestamp.getTime();
+    return (now - lastUpdate) < OFFLINE_THRESHOLD_MS ? 'online' : 'offline';
+};
+
 // ============================================
-// POST /api/v1/telemetry - Ingest telemetry data
+// POST /api/v1/telemetry - Ingest telemetry data (IN-MEMORY ONLY)
+// No database writes - purely live data
 // ============================================
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticateDevice, async (req: Request, res: Response) => {
     try {
-        const { device_id, data } = req.body;
+        console.log('[Telemetry] Body:', req.body);
+        const { data } = req.body;
+        const device = req.device;
 
-        // TODO: Add your SQL query here
-        const sql = `
-      INSERT INTO sps_telemetry (device_id, data, timestamp)
-      VALUES ($1, $2, NOW())
-      RETURNING id, device_id, timestamp
-    `;
+        if (!data) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing data payload'
+            });
+        }
 
-        // Convert data object to JSON string
-        const dataJson = JSON.stringify(data);
-        const result = await query(sql, [device_id, dataJson]);
+        // Store in memory only - NO DATABASE WRITES
+        const timestamp = new Date();
+        const liveEntry: LiveDataEntry = {
+            data,
+            timestamp,
+            device_id: device.id,
+            device_code: device.device_code
+        };
 
-        // Also update device's last_seen
-        await query(
-            'UPDATE sps_devices SET last_seen = NOW(), last_data = $1 WHERE id = $2',
-            [dataJson, device_id]
-        );
+        liveDataStore.set(device.device_code, liveEntry);
+
+        // Update Last Seen in DB (Async, don't block response)
+        query('UPDATE sps_devices SET last_seen = $1 WHERE id = $2', [timestamp, device.id])
+            .catch(err => console.error('Failed to update last_seen:', err));
+
+        // Get total device count for stats calculation
+        const devicesResult = await query('SELECT COUNT(*) as total FROM sps_devices');
+        const totalDevices = parseInt(devicesResult.rows[0]?.total || '0');
+
+        // Emit Real-Time Update via Socket.IO
+        try {
+            const io = getIO();
+
+            // Calculate stats
+            let onlineCount = 0;
+            liveDataStore.forEach((entry) => {
+                const status = getDeviceStatus(entry);
+                if (status === 'online') {
+                    onlineCount++;
+                }
+            });
+
+            const payload = {
+                device_code: device.device_code,
+                device_id: device.id,
+                timestamp: timestamp.toISOString(),
+                data: data,
+                status: 'online',
+                // Include stats in payload (same pattern as device list)
+                stats: {
+                    total_devices: totalDevices,
+                    online_devices: onlineCount,
+                    offline_devices: Math.max(0, totalDevices - onlineCount),
+                    active_alerts: 0
+                }
+            };
+
+            // Emit to specific device channel (for details page)
+            io.emit(`device:${device.device_code}`, payload);
+
+            // Emit to global dashboard channel (includes stats)
+            io.emit('dashboard:telemetry', payload);
+
+        } catch (socketError) {
+            // Don't fail request if socket fails
+            console.error('Socket emit error:', socketError);
+        }
 
         res.status(201).json({
             success: true,
-            data: result.rows[0]
+            message: 'Live data received (in-memory)',
+            device_id: device.id,
+            device_code: device.device_code,
+            timestamp: timestamp.toISOString(),
+            data
         });
     } catch (error) {
         console.error('Error ingesting telemetry:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to ingest telemetry data'
+        });
+    }
+});
+
+// ============================================
+// GET /api/v1/telemetry/live/:device_code - Get LIVE data (from memory)
+// ============================================
+router.get('/live/:device_code', async (req: Request, res: Response) => {
+    try {
+        const { device_code } = req.params;
+
+        const liveData = liveDataStore.get(device_code);
+        const status = getDeviceStatus(liveData);
+
+        if (!liveData) {
+            return res.json({
+                success: true,
+                data: null,
+                status: 'offline',
+                message: 'No live data available'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: liveData.data,
+            timestamp: liveData.timestamp.toISOString(),
+            device_code: liveData.device_code,
+            status: status
+        });
+    } catch (error) {
+        console.error('Error fetching live data:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch live data'
+        });
+    }
+});
+
+// ============================================
+// GET /api/v1/telemetry/stats - Dashboard Statistics
+// ============================================
+router.get('/stats/dashboard', async (req: Request, res: Response) => {
+    try {
+        // Get all devices from database
+        const devicesResult = await query(`
+            SELECT id, device_code, name, status, type, last_seen
+            FROM sps_devices
+            ORDER BY last_seen DESC NULLS LAST
+        `);
+
+        const devices = devicesResult.rows;
+        const totalDevices = devices.length;
+
+        // Check each device's live status from memory
+        let onlineCount = 0;
+        let offlineCount = 0;
+        const recentlyActive: any[] = [];
+
+        devices.forEach(device => {
+            const liveEntry = liveDataStore.get(device.device_code);
+            const status = getDeviceStatus(liveEntry);
+
+            if (status === 'online') {
+                onlineCount++;
+            } else {
+                offlineCount++;
+            }
+
+            // Add to recently active if has live data (limit to 5)
+            if (liveEntry && recentlyActive.length < 5) {
+                recentlyActive.push({
+                    id: device.id,
+                    device_code: device.device_code,
+                    name: device.name,
+                    type: device.type,
+                    status: status,
+                    last_seen: liveEntry.timestamp.toISOString(),
+                    data: liveEntry.data
+                });
+            }
+        });
+
+        // Sort by most recent
+        recentlyActive.sort((a, b) =>
+            new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime()
+        );
+
+        // TODO: Get active alerts count from alerts table when implemented
+        const activeAlerts = 0;
+
+        res.json({
+            success: true,
+            stats: {
+                total_devices: totalDevices,
+                online_devices: onlineCount,
+                offline_devices: offlineCount,
+                active_alerts: activeAlerts
+            },
+            recently_active: recentlyActive
+        });
+    } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch dashboard stats'
         });
     }
 });
@@ -54,21 +236,21 @@ router.get('/:device_id', async (req: Request, res: Response) => {
       SELECT id, device_id, timestamp, data
       FROM sps_telemetry
       WHERE device_id = $1
-    `;
+            `;
 
         const params: any[] = [device_id];
 
         if (start_time) {
-            sql += ` AND timestamp >= $${params.length + 1}`;
+            sql += ` AND timestamp >= $${params.length + 1} `;
             params.push(start_time);
         }
 
         if (end_time) {
-            sql += ` AND timestamp <= $${params.length + 1}`;
+            sql += ` AND timestamp <= $${params.length + 1} `;
             params.push(end_time);
         }
 
-        sql += ` ORDER BY timestamp DESC LIMIT $${params.length + 1}`;
+        sql += ` ORDER BY timestamp DESC LIMIT $${params.length + 1} `;
         params.push(limit);
 
         const result = await query(sql, params);
@@ -101,17 +283,17 @@ router.get('/:device_id/hourly', async (req: Request, res: Response) => {
         // TODO: Add your TimescaleDB query here
         // Use time_bucket for aggregation
         const sql = `
-      SELECT
+        SELECT
         time_bucket('1 hour', timestamp) AS hour,
-        COUNT(*) as reading_count,
-        MIN(timestamp) as first_reading,
-        MAX(timestamp) as last_reading
+            COUNT(*) as reading_count,
+            MIN(timestamp) as first_reading,
+            MAX(timestamp) as last_reading
       FROM sps_telemetry
       WHERE device_id = $1
         AND timestamp > NOW() - INTERVAL '${hours} hours'
       GROUP BY hour
       ORDER BY hour DESC
-    `;
+            `;
 
         const result = await query(sql, [device_id]);
 
@@ -145,7 +327,7 @@ router.get('/:device_id/latest', async (req: Request, res: Response) => {
       WHERE device_id = $1
       ORDER BY timestamp DESC
       LIMIT 1
-    `;
+            `;
 
         const result = await query(sql, [device_id]);
 

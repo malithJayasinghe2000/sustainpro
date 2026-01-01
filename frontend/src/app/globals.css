@@ -1,26 +1,498 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
-@theme inline {
+  /* We map Semantic Names to the underlying colors here for Tailwind to pick them up */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* 
+  Variable Definitions 
+  Using HSL or precise Hex values for better browser interpolation
+*/
+:root {
+  /* Light Mode (Clean & Soft) */
+  --background: #f8fafc;
+  /* slate-50 */
+  --foreground: #0f172a;
+  /* slate-900 */
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  --primary: #004737;
+  /* Deep Teal Brand Color */
+  --primary-foreground: #ffffff;
+
+  --secondary: #f1f5f9;
+  /* slate-100 */
+  --secondary-foreground: #0f172a;
+
+  --muted: #f1f5f9;
+  /* slate-100 */
+  --muted-foreground: #64748b;
+  /* slate-500 */
+
+  --accent: #f1f5f9;
+  /* slate-100 */
+  --accent-foreground: #0f172a;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --border: #e2e8f0;
+  /* slate-200 */
+  --input: #e2e8f0;
+  --ring: #4f46e5;
 }
 
+.dark {
+  /* Dark Mode (Deep Forest Green Premium) */
+  --background: #011512;
+  /* Deepest Green */
+  --foreground: #ecfdf5;
+  /* emerald-50 */
+
+  --card: #03221d;
+  /* Rich Dark Green Panel */
+  --card-foreground: #ecfdf5;
+
+  --popover: #03221d;
+  --popover-foreground: #ecfdf5;
+
+  --primary: #004737;
+  /* Deep Teal Brand Color */
+  --primary-foreground: #ffffff;
+
+  --secondary: #064e3b;
+  /* emerald-900 */
+  --secondary-foreground: #ecfdf5;
+
+  --muted: #064e3b;
+  /* emerald-900 */
+  --muted-foreground: #6ee7b7;
+  /* emerald-300 - lighter for readability */
+
+  --accent: #064e3b;
+  /* emerald-900 */
+  --accent-foreground: #ecfdf5;
+
+  --destructive: #7f1d1d;
+  --destructive-foreground: #ffffff;
+
+  --border: #0f3d35;
+  /* Dark Green Border */
+  --input: #0f3d35;
+  --ring: #10b981;
+}
+
+/* Global Reset */
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth Transition for Theme Toggle */
+body,
+.bg-card,
+.bg-background,
+.border-border {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Global Page Padding System */
+:root {
+  --page-gap: 1rem;
+  /* Mobile */
+}
+
+@media (min-width: 768px) {
+  :root {
+    --page-gap: 1.5rem;
+  }
+
+  /* Tablet */
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --page-gap: 2rem;
+  }
+
+  /* Desktop */
+}
+
+.page-padding {
+  padding: var(--page-gap);
+}
+
+.page-padding-x {
+  padding-left: var(--page-gap);
+  padding-right: var(--page-gap);
+}
+
+.gap-page {
+  gap: var(--page-gap);
+}
+
+/* Global Header Styles */
+.page-header-title {
+  @apply text-2xl font-bold tracking-tight text-foreground flex items-center gap-3;
+}
+
+.page-header-subtext {
+  @apply text-sm text-muted-foreground mt-1.5;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/20 rounded-full hover:bg-muted-foreground/40 transition-colors;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Global Data Table Styles */
+/* Global Data Table Styles */
+.data-table {
+  width: 100%;
+  text-align: left;
+  border-collapse: collapse;
+  min-width: 800px;
+}
+
+.data-table thead {
+  background-color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.data-table th {
+  padding: 1rem 1.5rem;
+  /* px-6 py-4 */
+  font-size: 0.75rem;
+  /* text-xs */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  /* tracking-wider */
+  font-weight: 700;
+  /* font-bold */
+  border-right: 1px solid var(--border);
+}
+
+.data-table th:first-child {
+  padding-left: 1.5rem;
+}
+
+.data-table th:last-child {
+  border-right: none;
+}
+
+.data-table td {
+  padding: 1rem 1.5rem;
+  /* px-6 py-4 */
+  border-right: 1px solid var(--border);
+}
+
+.data-table td:last-child {
+  border-right: none;
+}
+
+.data-table tr {
+  transition: background-color 0.15s ease;
+}
+
+.data-table tr:hover {
+  background-color: color-mix(in srgb, var(--muted), transparent 70%);
+  /* slightly lighter than bg-muted/30 */
+}
+
+/* Global Button Styles */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  /* gap-2 */
+  padding: 0.5rem 1rem;
+  /* px-4 py-2 */
+  border-radius: 0.5rem;
+  /* rounded-lg */
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 500;
+  /* font-medium */
+  font-size: 0.875rem;
+  /* text-sm */
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background-color: color-mix(in srgb, var(--primary), black 10%);
+  /* hover:bg-primary/90 */
+  transform: scale(0.98);
+  /* active:scale-95 */
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background-color: transparent;
+  color: var(--foreground);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.15s ease;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background-color: var(--muted);
+}
+
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  /* gap-1 */
+  padding: 0;
+  background-color: transparent;
+  color: var(--primary);
+  font-weight: 500;
+  font-size: 0.75rem;
+  /* text-xs */
+  transition: all 0.15s ease;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+/* ========================================= */
+/* GLOBAL UI SYSTEM (Tenant Standard)        */
+/* ========================================= */
+
+/* Standard Input (Matches Input.tsx component) */
+.input-compact {
+  width: 100%;
+  height: 2.5rem;
+  /* h-10 */
+  padding: 0.5rem 0.75rem;
+  /* px-3 py-2 */
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  /* rounded-lg */
+  font-size: 0.875rem;
+  /* text-sm */
+  color: var(--foreground);
+  transition: all 0.2s ease;
+}
+
+.input-compact:hover {
+  border-color: color-mix(in srgb, var(--primary), transparent 50%);
+}
+
+.input-compact:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--primary);
+  /* ring-2 default */
+}
+
+.input-compactWithIcon {
+  width: 100%;
+  height: 2.5rem;
+  /* h-10 */
+  padding-left: 2.25rem;
+  /* pl-9 */
+  padding-right: 0.75rem;
+  /* pr-3 */
+  padding-top: 0.5rem;
+  /* py-2 */
+  padding-bottom: 0.5rem;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  /* rounded-lg */
+  font-size: 0.875rem;
+  /* text-sm */
+  color: var(--foreground);
+  transition: all 0.2s ease;
+}
+
+.input-compactWithIcon:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--primary);
+}
+
+/* Input Labels (standard form labels) */
+.label-compact {
+  display: block;
+  font-size: 0.875rem;
+  /* text-sm */
+  font-weight: 500;
+  /* font-medium */
+  color: color-mix(in srgb, var(--foreground), transparent 20%);
+  /* text-foreground/80 */
+  line-height: 1;
+  margin-bottom: 0.375rem;
+  /* space-y-1.5 -> gap */
+}
+
+/* Section Headers (Uppercase Green) */
+.header-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  /* text-sm */
+  font-weight: 600;
+  /* font-semibold */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  margin-bottom: 1.5rem;
+  /* mb-6 */
+  border-bottom: none;
+  /* Reset old style */
+  padding-bottom: 0;
+}
+
+/* Cards / Panels */
+.card-compact {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  /* rounded-xl */
+  padding: 1.5rem;
+  /* p-6 */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  /* space-y-6 */
+}
+
+/* Icons within inputs */
+.icon-input {
+  position: absolute;
+  left: 0.75rem;
+  /* left-3 */
+  top: 50%;
+  transform: translateY(-50%);
+  height: 1rem;
+  /* w-4 */
+  width: 1rem;
+  /* h-4 */
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+/* Standard Primary Button */
+.btn-primary-compact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  /* h-10 matching inputs */
+  padding: 0 1rem;
+  /* px-4 */
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.875rem;
+  /* text-sm */
+  font-weight: 500;
+  border-radius: 0.5rem;
+  /* rounded-lg */
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-primary-compact:hover {
+  opacity: 0.9;
+}
+
+.btn-primary-compact:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Tabs */
+.tab-compact {
+  padding: 0.5rem 1rem;
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  border-color: transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: transparent;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.tab-compact:hover {
+  color: var(--foreground);
+}
+
+.tab-compact-active {
+  border-color: var(--primary);
+  color: var(--primary);
 }

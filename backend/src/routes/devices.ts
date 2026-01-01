@@ -1,26 +1,36 @@
 import { Router, Request, Response } from 'express';
-import { query } from '../db';
+import pool, { query } from '../db';
+import { authenticateToken } from '../middleware/auth';
+import { requireRole } from '../middleware/rbac';
+import { getCurrentSystemTime } from '../utils/timezone';
 
 const router = Router();
 
+// Protect all device routes
+router.use(authenticateToken);
+
 // ============================================
-// GET /api/v1/devices - Get all devices
+// GET /api/v1/devices
+// Fetch devices for the current User's Organization
 // ============================================
 router.get('/', async (req: Request, res: Response) => {
     try {
-        // TODO: Add your SQL query here
-        // You can add filters: ?user_id=1&status=active
-        const sql = `
-      SELECT 
-        d.id, d.device_code, d.name, d.type, d.status, d.location,
-        d.last_seen, d.battery_level, d.created_at,
-        u.username as owner_username
-      FROM sps_devices d
-      LEFT JOIN sps_users u ON d.user_id = u.id
-      ORDER BY d.created_at DESC
-    `;
+        const orgId = req.user?.organization_id;
 
-        const result = await query(sql);
+        const sql = `
+            SELECT 
+                d.id, d.device_code, d.name, d.type, d.status, 
+                d.last_seen, d.metadata, d.created_at,
+                s.name as service_name,
+                dept.name as dept_name
+            FROM sps_devices d
+            LEFT JOIN sps_services s ON d.service_id = s.id
+            LEFT JOIN sps_departments dept ON s.department_id = dept.id
+            WHERE d.organization_id = $1
+            ORDER BY d.created_at DESC
+        `;
+
+        const result = await query(sql, [orgId]);
         res.json({
             success: true,
             count: result.rowCount,
@@ -28,128 +38,75 @@ router.get('/', async (req: Request, res: Response) => {
         });
     } catch (error) {
         console.error('Error fetching devices:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch devices'
-        });
+        res.status(500).json({ success: false, error: 'Failed to fetch devices' });
     }
 });
 
 // ============================================
-// GET /api/v1/devices/:id - Get device by ID
+// POST /api/v1/devices (Manual Creation)
+// Requires ORG_ADMIN or TECHNICIAN
 // ============================================
-router.get('/:id', async (req: Request, res: Response) => {
+router.post('/', requireRole('TECHNICIAN'), async (req: Request, res: Response) => {
     try {
-        const { id } = req.params;
+        const { name, type, service_id, device_code } = req.body;
+        const orgId = req.user?.organization_id;
 
-        // TODO: Add your SQL query here
+        // Basic validation
+        if (!device_code) return res.status(400).json({ error: 'Device Code is required' });
+
         const sql = `
-      SELECT 
-        d.*,
-        u.username as owner_username,
-        u.email as owner_email
-      FROM sps_devices d
-      LEFT JOIN sps_users u ON d.user_id = u.id
-      WHERE d.id = $1
-    `;
+            INSERT INTO sps_devices (
+                organization_id, service_id, device_code, name, type, status
+            )
+            VALUES ($1, $2, $3, $4, $5, 'OFFLINE')
+            RETURNING *
+        `;
 
-        const result = await query(sql, [id]);
+        const result = await query(sql, [orgId, service_id, device_code, name, type]);
+        res.status(201).json({ success: true, data: result.rows[0] });
 
-        if (result.rowCount === 0) {
-            return res.status(404).json({
-                success: false,
-                error: 'Device not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            data: result.rows[0]
-        });
     } catch (error) {
-        console.error('Error fetching device:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch device'
-        });
+        console.error('Create device error:', error);
+        res.status(500).json({ success: false, error: 'Failed to create device' });
     }
 });
 
 // ============================================
-// POST /api/v1/devices - Create new device
+// POST /api/v1/devices/provision
+// Provisioning Logic (Simplified for brevity)
 // ============================================
-router.post('/', async (req: Request, res: Response) => {
+router.post('/provision', async (req: Request, res: Response) => {
     try {
-        const { name, type, user_id, location } = req.body;
+        const { serial_number, name } = req.body;
+        const orgId = req.user?.organization_id;
 
-        // TODO: Add your SQL query here
-        // Generate device_code (e.g., SPD-00001)
+        if (!serial_number) return res.status(400).json({ error: 'Serial Number required' });
+
+        // 1. Check uniqueness in Org? Or Globally? Serial is usually global unique.
+        // sps_devices.serial_unique constraint?
+
+        // For now, simple insert
+        const deviceCode = `SPS-${Date.now().toString().slice(-6)}`;
+        const apiKey = require('crypto').randomBytes(32).toString('hex');
+
         const sql = `
-      INSERT INTO sps_devices (name, type, user_id, location, status)
-      VALUES ($1, $2, $3, $4, 'active')
-      RETURNING id, device_code, name, type, status, created_at
-    `;
+            INSERT INTO sps_devices (
+                organization_id, device_code, api_key, serial_number, name, status, created_at
+            )
+            VALUES ($1, $2, $3, $4, $5, 'PROVISIONED', NOW())
+            RETURNING id, device_code, api_key, name, status
+        `;
 
-        const result = await query(sql, [name, type, user_id, location]);
+        const result = await query(sql, [orgId, deviceCode, apiKey, serial_number, name || deviceCode]);
 
         res.status(201).json({
             success: true,
             data: result.rows[0]
         });
-    } catch (error) {
-        console.error('Error creating device:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to create device'
-        });
-    }
-});
 
-// ============================================
-// PUT /api/v1/devices/:id - Update device
-// ============================================
-router.put('/:id', async (req: Request, res: Response) => {
-    try {
-        const { id } = req.params;
-        const updates = req.body;
-
-        // TODO: Add your SQL query here
-        // Build dynamic UPDATE query based on provided fields
-        const sql = `
-      UPDATE sps_devices
-      SET 
-        name = COALESCE($1, name),
-        location = COALESCE($2, location),
-        status = COALESCE($3, status),
-        updated_at = NOW()
-      WHERE id = $4
-      RETURNING *
-    `;
-
-        const result = await query(sql, [
-            updates.name,
-            updates.location,
-            updates.status,
-            id
-        ]);
-
-        if (result.rowCount === 0) {
-            return res.status(404).json({
-                success: false,
-                error: 'Device not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            data: result.rows[0]
-        });
-    } catch (error) {
-        console.error('Error updating device:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to update device'
-        });
+    } catch (err) {
+        console.error('Provision error:', err);
+        res.status(500).json({ success: false, error: 'Provisioning failed' });
     }
 });
 

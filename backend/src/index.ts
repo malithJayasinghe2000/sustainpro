@@ -1,16 +1,27 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
 import pool, { closePool } from './db';
 
 // Load environment variables
 dotenv.config();
 
+import http from 'http';
+import { initSocket } from './socket';
+
+// ... (previous code)
+
 // Initialize Express app
 const app: Express = express();
-const PORT = process.env.PORT || 5000;
+const httpServer = http.createServer(app); // Wrap express in HTTP server
+const PORT = parseInt(process.env.PORT || '5000', 10);
+
+// Initialize Socket.IO
+const io = initSocket(httpServer);
 
 // Middleware
+app.use(cookieParser());
 app.use(cors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
     credentials: true
@@ -44,6 +55,7 @@ app.get('/api/v1', (req: Request, res: Response) => {
         version: '1.0.0',
         endpoints: {
             health: '/health',
+            auth: '/api/v1/auth',
             users: '/api/v1/users',
             devices: '/api/v1/devices',
             telemetry: '/api/v1/telemetry'
@@ -52,14 +64,39 @@ app.get('/api/v1', (req: Request, res: Response) => {
 });
 
 // Import routes
+import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import deviceRoutes from './routes/devices';
+// import deviceModelRoutes from './routes/device-models';
 import telemetryRoutes from './routes/telemetry';
+import settingsRoutes from './routes/settings';
+import organizationRoutes from './routes/organizations';
+import eventRoutes from './routes/events';
+import departmentRoutes from './routes/departments';
+import serviceRoutes from './routes/services';
+import path from 'path';
+
+// ... (imports)
+import uploadRoutes from './routes/upload';
+import imagesRoutes from './routes/images';
+import rbacRoutes from './routes/rbac';
+
+// ...
 
 // Register API routes
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/devices', deviceRoutes);
+// app.use('/api/v1/device-models', deviceModelRoutes);
 app.use('/api/v1/telemetry', telemetryRoutes);
+app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/v1/organizations', organizationRoutes);
+app.use('/api/v1/events', eventRoutes);
+app.use('/api/v1/departments', departmentRoutes);
+app.use('/api/v1/services', serviceRoutes);
+app.use('/api/v1/upload', uploadRoutes);
+app.use('/api/v1/images', imagesRoutes);
+app.use('/api/v1/rbac', rbacRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -74,11 +111,11 @@ app.use((err: Error, req: Request, res: Response, next: any) => {
         message: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
 });
-
-// Start server
-const server = app.listen(PORT, () => {
+const server = httpServer.listen(PORT, '0.0.0.0', () => { // Bind to 0.0.0.0
     console.log(`🚀 SustainPro API Server running on port ${PORT}`);
+    console.log(`📡 Listening on all network interfaces (0.0.0.0)`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔌 Socket.IO initialized`);
 });
 
 // Graceful shutdown
