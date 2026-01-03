@@ -1,15 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+// ... imports
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import SearchBar from '@/components/SearchBar';
 import Modal from '@/components/Modal';
 import TimeDisplay from '@/components/TimeDisplay';
 import { usersApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Trash2, Shield, ShieldAlert, User as UserIcon, Users, MoreVertical, X, AlertTriangle, Pencil, Crown, UserCog, Eye, CheckCircle2, XCircle } from 'lucide-react';
+
+import { RichSelect } from '@/components/ui/RichSelect';
+import {
+    Plus, Search, Trash2, Shield, ShieldAlert, User as UserIcon, Users,
+    MoreVertical, X, AlertTriangle, Pencil, Crown, UserCog, Eye,
+    CheckCircle2, XCircle, Building2, Filter, LayoutList, ListTree,
+    ChevronRight, ChevronDown, Activity, Settings, Calendar
+} from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
+import { cn } from '../../lib/utils';
 
 interface User {
     id: string;
@@ -18,7 +26,25 @@ interface User {
     is_active: boolean;
     created_at: string;
     last_login_at?: string;
+    org_name?: string; // For Super Admin view
+    org_logo?: string;
+    org_id?: string; // Ideally we have this
 }
+
+type ViewMode = 'table' | 'tree';
+
+// Role Hierarchy Definition for Sorting/Grouping
+const ROLE_PRIORITY: Record<string, number> = {
+    'SUPER_ADMIN': 0,
+    'ORG_ADMIN': 1,
+    'EVENT_MANAGER': 2,
+    'DEPT_HEAD': 3,
+    'SERVICE_SUPERVISOR': 4,
+    'TECHNICIAN': 5,
+    'VIEWER': 6
+};
+
+const getRolePriority = (role?: string) => ROLE_PRIORITY[role || 'VIEWER'] ?? 99;
 
 export default function UsersPage() {
     const { user, isLoading: authLoading } = useAuth();
@@ -26,13 +52,23 @@ export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+
+    // View State
+    const [viewMode, setViewMode] = useState<ViewMode>('table');
+    // We can persist viewMode in localStorage later if needed
+
+    // Filters
+    const [roleFilter, setRoleFilter] = useState('ALL');
+    const [orgFilter, setOrgFilter] = useState('ALL');
+
+    // Create Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newUser, setNewUser] = useState({
         email: '',
         id: '',
         password: '',
         confirmPassword: '',
-        role: 'viewer', // This remains for the form state
+        role: 'viewer',
         timezone: 'Asia/Colombo',
         adminPassword: ''
     });
@@ -46,20 +82,18 @@ export default function UsersPage() {
     const [passwordError, setPasswordError] = useState('');
     const [passwordStrength, setPasswordStrength] = useState(0);
 
-    // Permission Check: Prevent flash of content
+    // Permission Check: Allow Super Admin OR Org Admin
     useEffect(() => {
         if (!authLoading && user) {
-            const isAdmin = user.roles?.some(r => r.role === 'ORG_ADMIN');
-            if (!isAdmin) {
+            const hasAccess = user.is_super_admin || user.roles?.some(r => r.role === 'ORG_ADMIN');
+            if (!hasAccess) {
                 router.replace('/not-found');
             }
         }
     }, [user, authLoading, router]);
 
     useEffect(() => {
-        // Only fetch if admin
-        const isAdmin = user?.roles?.some(r => r.role === 'ORG_ADMIN');
-        if (isAdmin) {
+        if (user) {
             fetchUsers();
         }
     }, [user]);
@@ -67,19 +101,14 @@ export default function UsersPage() {
     // Auto-generate User ID when modal opens
     useEffect(() => {
         if (isModalOpen) {
-            const randomId = 'U_' + Math.floor(1000 + Math.random() * 9000); // Simple 4-digit ID
+            const randomId = 'U_' + Math.floor(1000 + Math.random() * 9000);
             setNewUser(prev => ({ ...prev, id: randomId }));
             setPasswordStrength(0);
             setPasswordError('');
         }
     }, [isModalOpen]);
 
-    // Render loading state or null while checking permissions
-    // MOVED: strict check after all hooks to prevent "Rendered fewer hooks than expected"
-    const isAdmin = user?.roles?.some(r => r.role === 'ORG_ADMIN');
-    if (authLoading || (user && !isAdmin)) {
-        return null;
-    }
+
 
     const fetchUsers = async () => {
         try {
@@ -88,7 +117,6 @@ export default function UsersPage() {
                 setUsers(data.data);
             }
         } catch (error) {
-            // console.error('Failed to fetch users:', error);
             toast.error('Failed to load users');
         } finally {
             setIsLoading(false);
@@ -101,17 +129,17 @@ export default function UsersPage() {
 
     const checkPasswordStrength = (pass: string) => {
         let score = 0;
-        if (pass.length >= 8) score++; // Length
-        if (/[A-Z]/.test(pass)) score++; // Uppercase
-        if (/[a-z]/.test(pass)) score++; // Lowercase
-        if (/[0-9]/.test(pass)) score++; // Number
-        if (/[^A-Za-z0-9]/.test(pass)) score++; // Special char
+        if (pass.length >= 8) score++;
+        if (/[A-Z]/.test(pass)) score++;
+        if (/[a-z]/.test(pass)) score++;
+        if (/[0-9]/.test(pass)) score++;
+        if (/[^A-Za-z0-9]/.test(pass)) score++;
 
         setPasswordStrength(score);
 
         if (pass.length === 0) setPasswordError('');
         else if (pass.length < 8) setPasswordError('Min 8 chars required');
-        else if (score < 5) setPasswordError('Weak password (needs Upper, Lower, Number, Special)');
+        else if (score < 5) setPasswordError('Weak password');
         else setPasswordError('');
 
         return score >= 5;
@@ -119,12 +147,10 @@ export default function UsersPage() {
 
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!validateEmail(newUser.email)) {
             toast.error('Invalid email address');
             return;
         }
-
         if (!checkPasswordStrength(newUser.password)) {
             toast.error('Password is too weak');
             return;
@@ -159,16 +185,227 @@ export default function UsersPage() {
             setIsDeleteModalOpen(false);
             fetchUsers();
         } catch (error: any) {
-            // console.error('Delete error', error);
             const errorMessage = error.response?.data?.error || 'Failed to delete user';
             toast.error(errorMessage);
         }
     };
 
-    const filteredUsers = users.filter(user =>
-        user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.id.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // --- Filtering Logic ---
+    const uniqueOrgsMap = new Map();
+    users.forEach(u => {
+        if (u.org_name && !uniqueOrgsMap.has(u.org_name)) {
+            uniqueOrgsMap.set(u.org_name, u.org_logo);
+        }
+    });
+
+    const uniqueOrgOptions = Array.from(uniqueOrgsMap.entries()).map(([name, logo]) => ({
+        value: name,
+        label: name,
+        image: logo // This might be undefined depending on earlier fix, but let's assume valid
+    }));
+
+    // Role Options with Icons
+    const roleOptions = [
+        { value: 'ALL', label: 'All Roles', icon: Users },
+        { value: 'ORG_ADMIN', label: 'Org Admin', icon: Crown },
+        { value: 'EVENT_MANAGER', label: 'Event Manager', icon: UserCog },
+        { value: 'DEPT_HEAD', label: 'Dept Head', icon: UserIcon },
+        { value: 'SERVICE_SUPERVISOR', label: 'Supervisor', icon: Eye },
+        { value: 'TECHNICIAN', label: 'Technician', icon: Shield },
+        { value: 'VIEWER', label: 'Viewer', icon: Eye }
+    ];
+
+    const filteredUsers = users.filter(user => {
+        // Text Search
+        const matchesSearch =
+            user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            user.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (user.org_name && user.org_name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+        // Role Filter
+        const matchesRole = roleFilter === 'ALL' || user.roles.some(r => r.role === roleFilter);
+
+        // Org Filter (Super Admin only)
+        const matchesOrg = orgFilter === 'ALL' || user.org_name === orgFilter;
+
+        return matchesSearch && matchesRole && matchesOrg;
+    });
+
+    const isSuperAdmin = user?.is_super_admin;
+
+
+    // --- Tree View Logic ---
+    // Structure: Organization -> Role Group -> Users
+    const treeData = useMemo(() => {
+        const grouped = new Map<string, { logo?: string, roles: Map<string, User[]> }>();
+
+        filteredUsers.forEach(u => {
+            const orgName = u.org_name || 'Global / Unassigned';
+
+            if (!grouped.has(orgName)) {
+                grouped.set(orgName, { logo: u.org_logo, roles: new Map() });
+            }
+
+            const orgGroup = grouped.get(orgName)!;
+            // Assuming simplified single role for grouping, or primary role
+            const primaryRole = u.roles?.[0]?.role || 'NO_ROLE';
+
+            if (!orgGroup.roles.has(primaryRole)) {
+                orgGroup.roles.set(primaryRole, []);
+            }
+            orgGroup.roles.get(primaryRole)!.push(u);
+        });
+
+        // Sort Orgs? Maybe by name
+        // Sort Roles by priority
+        return Array.from(grouped.entries()).map(([orgName, data]) => {
+            const sortedRoles = Array.from(data.roles.entries()).sort((a, b) => {
+                return getRolePriority(a[0]) - getRolePriority(b[0]);
+            });
+            return { orgName, logo: data.logo, roles: sortedRoles };
+        });
+    }, [filteredUsers]);
+
+
+    const renderTreeView = () => {
+        if (filteredUsers.length === 0) {
+            return (
+                <div className="text-center py-12 text-muted-foreground bg-card border border-border rounded-lg">
+                    <div className="flex flex-col items-center gap-2 opacity-60">
+                        <Search className="w-8 h-8" />
+                        <p className="text-sm font-medium">No users found</p>
+                        <p className="text-xs">Try adjusting your filters or search query.</p>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="space-y-4 animate-in fade-in duration-300">
+                {treeData.map((org) => (
+                    <div key={org.orgName} className="border border-border rounded-xl bg-card overflow-hidden">
+                        <details className="group/org">
+                            <summary className="bg-muted/40 p-4 flex items-center justify-between border-b border-border/50 cursor-pointer hover:bg-muted/60 transition-colors list-none">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-8 h-8 flex items-center justify-center rounded-md border border-border/50 bg-background group-open/org:rotate-90 transition-transform mr-1">
+                                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                                    </div>
+                                    {org.logo ? (
+                                        <img src={org.logo} alt="" className="w-10 h-10 rounded-lg object-cover bg-white border border-border/50" />
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                                            <Building2 className="w-5 h-5" />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <h3 className="font-semibold text-base text-foreground">{org.orgName}</h3>
+                                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Organization</p>
+                                    </div>
+                                </div>
+                                <div className="text-sm font-medium text-muted-foreground bg-background px-3 py-1.5 rounded-md border border-border/50">
+                                    {org.roles.reduce((acc, [_, users]) => acc + users.length, 0)} Users
+                                </div>
+                            </summary>
+
+                            {/* Roles List */}
+                            <div className="relative pt-4 pb-4 pl-8">
+                                {/* Vertical connection line from Org to Roles */}
+                                <div className="absolute left-[20px] top-0 bottom-0 w-[2px] bg-gray-300" />
+
+                                {org.roles.map(([role, users], roleIndex, roleArr) => {
+                                    const isLastRole = roleIndex === roleArr.length - 1;
+
+                                    // Determine Role Icon/Color
+                                    const RoleIcon =
+                                        role === 'ORG_ADMIN' ? Crown :
+                                            role === 'EVENT_MANAGER' ? UserCog :
+                                                role === 'TECHNICIAN' ? Settings :
+                                                    role === 'DEPT_HEAD' ? UserIcon :
+                                                        role === 'SERVICE_SUPERVISOR' ? Activity :
+                                                            Eye; // Viewer/Default
+
+                                    return (
+                                        <div key={role} className="relative mb-3 last:mb-0">
+                                            {/* Horizontal connector from main vertical line to role */}
+                                            <div className="absolute left-[-12px] top-[18px] w-3 h-[2px] bg-gray-300" />
+                                            {/* Cover bottom vertical for last role */}
+                                            {isLastRole && <div className="absolute left-[-12px] top-[20px] bottom-0 w-[2px] bg-background" />}
+
+                                            <details className="group">
+                                                <summary className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer list-none select-none relative bg-background">
+                                                    <div className="w-6 h-6 flex items-center justify-center rounded-md border border-border/50 bg-background group-open:rotate-90 transition-transform">
+                                                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                                                    </div>
+                                                    <RoleIcon className="w-5 h-5 text-primary/70" />
+                                                    <span className="text-sm font-medium text-foreground/90">{role.replace(/_/g, ' ')}</span>
+                                                    <span className="text-xs text-muted-foreground ml-auto bg-muted px-2 py-0.5 rounded-full">{users.length}</span>
+                                                </summary>
+
+                                                <div className="relative pl-8 pt-2 pb-2">
+                                                    {/* Vertical connection line from Role to Users */}
+                                                    <div className="absolute left-[12px] top-0 bottom-0 w-[2px] bg-gray-300" />
+
+                                                    {users.map((user, userIndex, userArr) => {
+                                                        const isLastUser = userIndex === userArr.length - 1;
+                                                        return (
+                                                            <div key={user.id} className="relative mb-2 last:mb-0">
+                                                                {/* Horizontal connector from role line to user */}
+                                                                <div className="absolute left-[-20px] top-[26px] w-5 h-[2px] bg-gray-300" />
+                                                                {/* Cover bottom vertical for last user */}
+                                                                {isLastUser && <div className="absolute left-[-20px] top-[28px] bottom-0 w-[2px] bg-background" />}
+
+                                                                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-transparent hover:border-border hover:bg-muted/40 transition-all group/user">
+                                                                    <div className="flex items-center gap-4">
+                                                                        <div className="w-8 h-8 rounded-full bg-primary/5 text-primary text-xs font-bold flex items-center justify-center border border-primary/10 relative z-10 bg-background">
+                                                                            {user.email[0].toUpperCase()}
+                                                                        </div>
+                                                                        <div className="flex flex-col">
+                                                                            <span className="text-sm font-medium text-foreground">{user.email}</span>
+                                                                            <span className="text-xs text-muted-foreground font-mono opacity-0 group-hover/user:opacity-100 transition-opacity">
+                                                                                ID: {user.id} • Last Login: <TimeDisplay timestamp={user.last_login_at} format="relative" fallback="Never" />
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className={cn("w-2.5 h-2.5 rounded-full", user.is_active ? "bg-emerald-500" : "bg-rose-500")} title={user.is_active ? "Active" : "Inactive"} />
+
+                                                                        <div className="flex opacity-0 group-hover/user:opacity-100 transition-opacity gap-1">
+                                                                            <button
+                                                                                onClick={() => toast('Edit coming soon', { icon: '🚧' })}
+                                                                                className="p-2 hover:bg-background rounded-md text-muted-foreground hover:text-primary transition-all"
+                                                                            >
+                                                                                <Pencil className="w-4 h-4" />
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleDeleteUser(user)}
+                                                                                className="p-2 hover:bg-background rounded-md text-muted-foreground hover:text-destructive transition-all"
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </details>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </details>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    const hasAccess = user?.is_super_admin || user?.roles?.some(r => r.role === 'ORG_ADMIN');
+    if (authLoading || (user && !hasAccess)) {
+        return null;
+    }
 
     return (
         <DashboardLayout>
@@ -180,372 +417,225 @@ export default function UsersPage() {
                     <div>
                         <h1 className="page-header-title">
                             <Users className="w-6 h-6 text-primary" />
-                            User Management
+                            {isSuperAdmin ? 'Global User Management' : 'User Management'}
                         </h1>
                         <p className="page-header-subtext">
-                            Manage user access, roles, and permissions securely.
+                            {isSuperAdmin
+                                ? 'View and manage users across all organizations and hierarchies.'
+                                : 'Manage user access, roles, and permissions securely.'}
                         </p>
                     </div>
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="btn-primary"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Add User
-                    </button>
+
+                    <div className="flex items-center gap-3">
+                        {/* View Toggle */}
+                        <div className="flex items-center p-1 bg-muted rounded-lg border border-border">
+                            <button
+                                onClick={() => setViewMode('table')}
+                                className={cn(
+                                    "p-1.5 rounded-md transition-all",
+                                    viewMode === 'table' ? "bg-background shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                                )}
+                                title="Table View"
+                            >
+                                <LayoutList className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('tree')}
+                                className={cn(
+                                    "p-1.5 rounded-md transition-all",
+                                    viewMode === 'tree' ? "bg-background shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                                )}
+                                title="Smart Tree View"
+                            >
+                                <ListTree className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => router.push('/users/new')}
+                            className="btn-primary"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add User
+                        </button>
+                    </div>
                 </div>
 
-                {/* Search */}
-                <SearchBar
-                    value={searchQuery}
-                    onChange={setSearchQuery}
-                    placeholder="Search users..."
-                />
-
-                {/* Users Table */}
-                <div className="bg-card border border-border rounded-sm overflow-hidden text-sm">
-                    {/* Mobile Card View (Visible < md) */}
-                    <div className="md:hidden space-y-3">
-                        {isLoading ? (
-                            <div className="p-8 text-center text-muted-foreground text-xs bg-muted/20 rounded-sm border border-border animate-pulse">
-                                Loading system data...
-                            </div>
-                        ) : filteredUsers.length === 0 ? (
-                            <div className="p-8 text-center text-muted-foreground text-xs bg-muted/20 rounded-sm border border-border">
-                                No users found matching "{searchQuery}"
-                            </div>
-                        ) : (
-                            filteredUsers.map((user) => (
-                                <div key={user.id} className="bg-card border border-border rounded-sm p-4 space-y-3 hover:border-primary/30 transition-colors">
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-sm bg-primary/10 text-primary flex items-center justify-center font-bold text-sm border border-primary/20">
-                                                {user.email[0].toUpperCase()}
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-foreground tracking-tight">{user.email}</span>
-                                                <span className="text-xs text-muted-foreground/80 font-mono">{user.id}</span>
-                                            </div>
-                                        </div>
-                                        <div className="relative group flex items-center gap-2">
-                                            <button
-                                                onClick={() => toast('Edit functionality coming soon', { icon: '🚧' })}
-                                                className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-transparent hover:border-primary/20"
-                                                title="Edit User"
-                                            >
-                                                <Pencil className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteUser(user)}
-                                                className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-sm transition-colors border border-transparent hover:border-destructive/20"
-                                                title="Delete User"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between gap-2 pt-3 border-t border-border/50">
-                                        <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
-                                            {/* Role */}
-                                            <div className="flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-muted/40">
-                                                {user.roles?.[0]?.role === 'ORG_ADMIN' && <Crown className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />}
-                                                {user.roles?.[0]?.role === 'EVENT_MANAGER' && <UserCog className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />}
-                                                {user.roles?.[0]?.role === 'VIEWER' && <Eye className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />}
-                                                <span className="text-xs font-medium text-foreground capitalize">{user.roles?.[0]?.role?.replace('_', ' ') || 'User'}</span>
-                                            </div>
-
-                                            {/* Status */}
-                                            <div className="flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-muted/40">
-                                                {user.is_active
-                                                    ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-                                                    : <XCircle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-                                                }
-                                                <span className="text-xs font-medium text-foreground">
-                                                    {user.is_active ? 'Active' : 'Inactive'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                            <TimeDisplay
-                                                timestamp={user.created_at}
-                                                format="short"
-                                                className="text-[10px] font-medium text-muted-foreground whitespace-nowrap"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
+                {/* Filters & Search Toolbar */}
+                <div className="flex flex-col md:flex-row gap-4 items-center justify-between p-1">
+                    <div className="relative w-full md:w-96">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <input
+                            type="text"
+                            placeholder={isSuperAdmin ? "Search users, emails, or orgs..." : "Search users..."}
+                            className="block w-full pl-10 pr-3 py-3 border border-border/40 rounded-xl leading-5 bg-muted/30 placeholder-muted-foreground/60 focus:outline-none focus:bg-card focus:ring-1 focus:ring-primary/20 focus:border-primary/50 transition-all save-autofill text-sm"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
                     </div>
 
-                    {/* Desktop Table View (Hidden < md) */}
-                    <div className="overflow-x-auto custom-scrollbar">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>User Info</th>
-                                    <th>Role</th>
-                                    <th>Status</th>
-                                    <th>Created Date</th>
-                                    <th>Last Login</th>
-                                    <th className="text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border/50">
-                                {isLoading ? (
+                    <div className="flex gap-2 w-full md:w-auto flex-wrap items-center">
+                        {/* Role Filter */}
+                        <div className="min-w-[180px]">
+                            <RichSelect
+                                value={roleFilter}
+                                onChange={setRoleFilter}
+                                icon={UserCog}
+                                className="h-[46px]"
+                                options={roleOptions}
+                            />
+                        </div>
+
+                        {/* Org Filter (Super Admin Only) */}
+                        {isSuperAdmin && (
+                            <div className="min-w-[200px]">
+                                <RichSelect
+                                    value={orgFilter}
+                                    onChange={setOrgFilter}
+                                    icon={Building2}
+                                    className="h-[46px]"
+                                    options={[
+                                        { value: 'ALL', label: 'All Organizations', icon: Building2 },
+                                        ...uniqueOrgOptions
+                                    ]}
+                                />
+                            </div>
+                        )}
+
+                        {(roleFilter !== 'ALL' || orgFilter !== 'ALL' || searchQuery) && (
+                            <button
+                                onClick={() => {
+                                    setRoleFilter('ALL');
+                                    setOrgFilter('ALL');
+                                    setSearchQuery('');
+                                }}
+                                className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors whitespace-nowrap"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Content View */}
+                {viewMode === 'tree' ? renderTreeView() : (
+                    <div className="bg-card border border-border rounded-lg overflow-hidden text-sm shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="data-table w-full text-left">
+                                <thead className="bg-muted/40 text-xs uppercase text-muted-foreground font-semibold">
                                     <tr>
-                                        <td colSpan={6} className="text-center py-8 text-muted-foreground text-xs italic">
-                                            Loading users...
-                                        </td>
+                                        <th className="px-4 py-3">User Info</th>
+                                        {isSuperAdmin && <th className="px-4 py-3">Organization</th>}
+                                        <th className="px-4 py-3">Role</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Created</th>
+                                        <th className="px-4 py-3">Last Login</th>
+                                        <th className="px-4 py-3 text-right">Actions</th>
                                     </tr>
-                                ) : filteredUsers.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="text-center py-8 text-muted-foreground text-xs italic">
-                                            No users found matching "{searchQuery}"
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredUsers.map((user) => (
-                                        <tr key={user.id}>
-                                            <td>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-sm bg-primary/10 text-primary flex items-center justify-center font-bold text-xs border border-primary/20">
-                                                        {user.email[0].toUpperCase()}
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-semibold text-foreground tracking-tight leading-none">{user.email}</span>
-                                                        <span className="text-xs text-muted-foreground/80 leading-tight mt-1">{user.id}</span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-muted/40 transition-colors hover:bg-muted/60">
-                                                    {user.roles?.[0]?.role === 'ORG_ADMIN' && <Crown className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />}
-                                                    {user.roles?.[0]?.role === 'EVENT_MANAGER' && <UserCog className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />}
-                                                    {user.roles?.[0]?.role === 'VIEWER' && <Eye className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />}
-                                                    <span className="text-xs font-medium text-foreground capitalize">{user.roles?.[0]?.role?.replace('_', ' ') || 'User'}</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-muted/40 transition-colors hover:bg-muted/60">
-                                                    {user.is_active
-                                                        ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-                                                        : <XCircle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-                                                    }
-                                                    <span className="text-xs font-medium text-foreground">
-                                                        {user.is_active ? 'Active' : 'Inactive'}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="text-xs text-muted-foreground font-medium">
-                                                <TimeDisplay timestamp={user.created_at} format="short" />
-                                            </td>
-                                            <td className="text-xs text-muted-foreground font-medium">
-                                                <TimeDisplay
-                                                    timestamp={user.last_login_at}
-                                                    format="full"
-                                                    fallback="Never"
-                                                    className="text-muted-foreground/50"
-                                                />
-                                            </td>
-                                            <td className="text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <button
-                                                        onClick={() => toast('Edit functionality coming soon', { icon: '🚧' })}
-                                                        className="p-1 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-transparent hover:border-primary/20"
-                                                        title="Edit User"
-                                                    >
-                                                        <Pencil className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteUser(user)}
-                                                        className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-sm transition-colors border border-transparent hover:border-destructive/20"
-                                                        title="Delete User"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
+                                </thead>
+                                <tbody className="divide-y divide-border/50">
+                                    {isLoading ? (
+                                        <tr>
+                                            <td colSpan={isSuperAdmin ? 6 : 5} className="text-center py-12 text-muted-foreground">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                                    <span className="text-xs">Loading users...</span>
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                    ) : filteredUsers.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={isSuperAdmin ? 6 : 5} className="text-center py-12 text-muted-foreground">
+                                                <div className="flex flex-col items-center gap-2 opacity-60">
+                                                    <Search className="w-8 h-8" />
+                                                    <p className="text-sm font-medium">No users found</p>
+                                                    <p className="text-xs">Try adjusting your filters or search query.</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredUsers.map((user) => (
+                                            <tr key={user.id} className="hover:bg-muted/30 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs border border-primary/20 shrink-0">
+                                                            {user.email[0].toUpperCase()}
+                                                        </div>
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="text-sm font-semibold text-foreground truncate max-w-[200px]" title={user.email}>{user.email}</span>
+                                                            <span className="text-[10px] text-muted-foreground font-mono">{user.id}</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                {isSuperAdmin && (
+                                                    <td className="px-4 py-3">
+                                                        {user.org_name ? (
+                                                            <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+                                                                <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                                                                {user.org_name}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground italic">Global / None</span>
+                                                        )}
+                                                    </td>
+                                                )}
+                                                <td className="px-4 py-3">
+                                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-background/50 text-xs font-medium">
+                                                        {user.roles?.[0]?.role === 'ORG_ADMIN' && <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500/10" />}
+                                                        {user.roles?.[0]?.role === 'EVENT_MANAGER' && <UserCog className="w-3.5 h-3.5 text-blue-500" />}
+                                                        {user.roles?.[0]?.role === 'TECHNICIAN' && <Settings className="w-3.5 h-3.5 text-purple-500" />}
+                                                        <span className="capitalize text-foreground/90">{user.roles?.[0]?.role?.replace(/_/g, ' ') || 'User'}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${user.is_active
+                                                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                                        : 'bg-rose-500/10 text-rose-600 border-rose-500/20'}`}>
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                                        {user.is_active ? 'Active' : 'Inactive'}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs text-muted-foreground">
+                                                    <TimeDisplay timestamp={user.created_at} format="short" />
+                                                </td>
+                                                <td className="px-4 py-3 text-xs text-muted-foreground">
+                                                    <TimeDisplay
+                                                        timestamp={user.last_login_at}
+                                                        format="relative"
+                                                        fallback="Never"
+                                                        className="font-medium"
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button
+                                                            onClick={() => toast('Edit functionality coming soon', { icon: '🚧' })}
+                                                            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-all"
+                                                            title="Edit User"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteUser(user)}
+                                                            className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-all"
+                                                            title="Delete User"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
+                )}
 
-                {/* Add User Modal */}
-                <Modal
-                    isOpen={isModalOpen}
-                    onClose={() => setIsModalOpen(false)}
-                    title={
-                        <div className="flex items-center gap-2">
-                            <Plus className="w-5 h-5 text-primary" />
-                            Create New Account
-                        </div>
-                    }
-                    size="md"
-                    footer={
-                        <>
-                            <button
-                                type="button"
-                                onClick={() => setIsModalOpen(false)}
-                                className="btn-secondary"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                form="add-user-form"
-                                disabled={
-                                    isSubmitting ||
-                                    !!passwordError ||
-                                    !validateEmail(newUser.email) ||
-                                    newUser.password !== newUser.confirmPassword ||
-                                    ((newUser.role === 'admin' || newUser.role === 'moderator') && !newUser.adminPassword)
-                                }
-                                className="btn-primary"
-                            >
-                                {isSubmitting ? 'Provisioning...' : 'Create Account'}
-                            </button>
-                        </>
-                    }
-                >
-                    <form id="add-user-form" onSubmit={handleCreateUser} className="space-y-4">
-                        {/* User ID (Read Only) */}
-                        <div>
-                            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">User ID</label>
-                            <input
-                                type="text"
-                                readOnly
-                                value={newUser.id}
-                                className="w-full px-3 py-2 bg-muted/40 border border-input rounded-md text-sm font-mono text-muted-foreground focus:outline-none cursor-not-allowed"
-                            />
-                            <p className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
-                                <Shield className="w-3 h-3" /> Auto-generated System ID
-                            </p>
-                        </div>
-
-                        {/* Email */}
-                        <div>
-                            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Email Address</label>
-                            <input
-                                type="email"
-                                required
-                                value={newUser.email}
-                                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                                placeholder="user@example.com"
-                                className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/50"
-                            />
-                        </div>
-
-                        {/* Password */}
-                        <div>
-                            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Password</label>
-                            <input
-                                type="password"
-                                required
-                                value={newUser.password}
-                                onChange={(e) => {
-                                    setNewUser({ ...newUser, password: e.target.value });
-                                    checkPasswordStrength(e.target.value);
-                                }}
-                                placeholder="••••••••"
-                                className={`w-full px-3 py-2 bg-background border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 transition-all placeholder:text-muted-foreground/50 ${passwordError
-                                    ? 'border-destructive/50 focus:ring-destructive/20 focus:border-destructive'
-                                    : 'border-border focus:ring-primary/20 focus:border-primary'
-                                    }`}
-                            />
-
-                            {/* Password Strength Meter (Below Input) */}
-                            <div className="mt-2 text-[10px] text-muted-foreground font-medium flex items-center justify-between">
-                                <span>Strength:</span>
-                                <div className="flex gap-1">
-                                    {[...Array(5)].map((_, i) => (
-                                        <div
-                                            key={i}
-                                            className={`w-4 h-1 rounded-full transition-colors ${i < passwordStrength
-                                                ? (passwordStrength < 3 ? 'bg-destructive' : passwordStrength < 5 ? 'bg-yellow-500' : 'bg-green-500')
-                                                : 'bg-muted-foreground/20'
-                                                }`}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-
-                            {passwordError ? (
-                                <p className="text-[10px] text-destructive mt-1.5 font-medium flex items-center gap-1">
-                                    <ShieldAlert className="w-3 h-3" /> {passwordError}
-                                </p>
-                            ) : (
-                                <p className="text-[10px] text-muted-foreground mt-1.5">
-                                    Must include Upper, Lower, Number & Special char
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Confirm Password */}
-                        <div>
-                            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Confirm Password</label>
-                            <input
-                                type="password"
-                                required
-                                value={newUser.confirmPassword}
-                                onChange={(e) => setNewUser({ ...newUser, confirmPassword: e.target.value })}
-                                placeholder="••••••••"
-                                className={`w-full px-3 py-2 bg-background border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 transition-all placeholder:text-muted-foreground/50 ${newUser.confirmPassword && newUser.password !== newUser.confirmPassword
-                                    ? 'border-destructive/50 focus:ring-destructive/20 focus:border-destructive'
-                                    : 'border-border focus:ring-primary/20 focus:border-primary'
-                                    }`}
-                            />
-                            {newUser.confirmPassword && newUser.password !== newUser.confirmPassword && (
-                                <p className="text-[10px] text-destructive mt-1.5 font-medium">Passwords do not match</p>
-                            )}
-                        </div>
-
-                        {/* Role Selection */}
-                        <div>
-                            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Role Authorization</label>
-                            <div className="relative">
-                                <select
-                                    value={newUser.role}
-                                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value as any })}
-                                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none cursor-pointer"
-                                >
-                                    <option value="viewer">Viewer (Read Only)</option>
-                                    <option value="moderator">Moderator (Manage Content)</option>
-                                    <option value="admin">Administrator (Full Access)</option>
-                                </select>
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
-                                    <MoreVertical className="w-4 h-4 rotate-90" />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Admin Authorization (Conditional) */}
-                        {(newUser.role === 'admin' || newUser.role === 'moderator') && (
-                            <div className="p-3 bg-primary/5 rounded-md border border-primary/10 animate-in fade-in slide-in-from-top-2">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-primary mb-1.5 flex items-center gap-1.5">
-                                    <ShieldAlert className="w-3.5 h-3.5" /> Your Admin Password
-                                </label>
-                                <input
-                                    type="password"
-                                    required
-                                    value={newUser.adminPassword}
-                                    onChange={(e) => setNewUser({ ...newUser, adminPassword: e.target.value })}
-                                    placeholder="Confirm your identity..."
-                                    className="w-full px-3 py-2 bg-background border border-primary/20 rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/50"
-                                />
-                                <p className="text-[10px] text-primary/80 mt-1.5">
-                                    Required to create privileged accounts.
-                                </p>
-                            </div>
-                        )}
-                    </form>
-                </Modal>
-
-                {/* Delete User Confirmation Modal */}
+                {/* Keeping the Delete Modal as is for now */}
                 <Modal
                     isOpen={isDeleteModalOpen && userToDelete !== null}
                     onClose={() => {
@@ -593,7 +683,7 @@ export default function UsersPage() {
                             </p>
 
                             {/* Conditional Admin Password Field */}
-                            {(userToDelete.role === 'admin' || userToDelete.role === 'moderator') && (
+                            {(userToDelete.roles?.some((r: any) => r.role === 'ORG_ADMIN' || r.role === 'SUPER_ADMIN')) && (
                                 <div className="p-3 bg-primary/5 rounded-md border border-primary/10 animate-in fade-in slide-in-from-top-2">
                                     <label className="block text-xs font-bold uppercase tracking-wider text-primary mb-1.5 flex items-center gap-1.5">
                                         <ShieldAlert className="w-3.5 h-3.5" /> Your Admin Password

@@ -5,23 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/Navbar';
 import { getRoleLabel, hasRole, isAdmin, ROLES } from '@/lib/roles';
-import {
-    LayoutDashboard,
-    Smartphone,
-    BarChart3,
-    Bell,
-    Calendar,
-    Settings,
-    LogOut,
-    ChevronLeft,
-    ChevronRight,
-    User,
-    Users,
-    FileText,
-    Component,
-    Building2,
-    Shield,
-} from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User } from 'lucide-react';
 import { applyOrganizationTheme } from '@/lib/theme-utils';
 
 interface MenuItem {
@@ -80,24 +64,27 @@ export default function DashboardLayout({ children }: SidebarProps) {
             ]
         },
         {
-            name: 'Global User Management',
-            icon: Users,
-            path: '/admin/users',
-            submenu: [
-                { name: 'Overview', path: '/admin/users' },
-                { name: 'Create User', path: '/users/new' }
-            ]
-        },
-        {
             name: 'Event Management',
             icon: Calendar,
-            path: '/admin/events', // Placeholder for now, or just rely on submenu
+            path: '/admin/events',
             submenu: [
-                { name: 'Overview', path: '/events' }, // Assuming this exists or will exist
+                { name: 'Overview', path: '/events' },
                 { name: 'Create Event', path: '/events/new' }
             ]
         },
+        {
+            name: 'Global User Management',
+            icon: Users,
+            path: '/users',
+            submenu: [
+                { name: 'Overview', path: '/users' },
+                { name: 'Create User', path: '/users/new' }
+            ]
+        },
         { name: 'Device Inventory', icon: Smartphone, path: '/admin/devices' },
+        { name: 'Department Templates', icon: Layers, path: '/admin/department-templates' },
+        { name: 'Services', icon: Layers, path: '/admin/services' }, // Added Services menu item
+        { name: 'Device Models', icon: Component, path: '/admin/device-models' },
         { name: 'Global Reports', icon: FileText, path: '/admin/reports' },
         { name: 'System Settings', icon: Settings, path: '/admin/settings' },
         { name: 'Access Control (RBAC)', icon: Shield, path: '/admin/rbac' },
@@ -144,6 +131,12 @@ export default function DashboardLayout({ children }: SidebarProps) {
                         return false;
                     }
                 }
+
+                // HIDE Dashboard for Event Managers
+                if (item.path === '/dashboard' && hasRole(user, ROLES.EVENT_MANAGER)) {
+                    return false;
+                }
+
                 if (item.requiredRole) {
                     return hasRole(user, item.requiredRole);
                 }

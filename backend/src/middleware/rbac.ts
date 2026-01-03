@@ -101,3 +101,34 @@ export const requireRole = (...allowedRoles: string[]) => {
         }
     };
 };
+
+/**
+ * Middleware to require super admin access
+ * Strictly checks the is_super_admin flag
+ */
+export const requireSuperAdmin = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        console.log('🔐 Super Admin Check:', {
+            hasUser: !!req.user,
+            isSuperAdmin: req.user?.isSuperAdmin,
+            userId: req.user?.id,
+            email: req.user?.email
+        });
+
+        if (!req.user) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
+
+        if (!req.user.isSuperAdmin) {
+            return res.status(403).json({
+                success: false,
+                error: 'Super admin access required'
+            });
+        }
+
+        return next();
+    } catch (err) {
+        console.error('Super Admin Check Error:', err);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

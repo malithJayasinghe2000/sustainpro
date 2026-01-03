@@ -167,9 +167,6 @@ router.post('/', authenticateToken, validSuperAdmin, async (req: Request, res: R
     }
 });
 
-// ============================================
-// GET /api/v1/organizations/:id_or_code - Get details
-// ============================================
 router.get('/:id_or_code', authenticateToken, validSuperAdmin, async (req: Request, res: Response) => {
     try {
         const { id_or_code } = req.params;
@@ -207,6 +204,66 @@ router.get('/:id_or_code', authenticateToken, validSuperAdmin, async (req: Reque
     } catch (error) {
         console.error('Get Org Error:', error);
         res.status(500).json({ error: 'Failed to fetch organization' });
+    }
+});
+
+// ============================================
+// GET /api/v1/organizations/:id/structure - Get full hierarchy
+// Returns events, depts, and services associated with an org
+// ============================================
+router.get('/:id/structure', authenticateToken, async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        // Finalized implementation for structure fetching
+        // 1. Fetch Events
+        const eventsRes = await query(`
+            SELECT id, name, image_url 
+            FROM sps_events 
+            WHERE organization_id = $1
+            ORDER BY name ASC
+        `, [id]);
+
+        // 2. Fetch Departments (via events)
+        const deptsRes = await query(`
+            SELECT d.id, d.name, d.event_id
+            FROM sps_departments d
+            JOIN sps_events e ON d.event_id = e.id
+            WHERE e.organization_id = $1
+            ORDER BY d.name ASC
+        `, [id]);
+
+        // 3. Fetch Services (via depts -> events)
+        const servicesRes = await query(`
+            SELECT s.id, s.name, s.department_id, sd.name as definition_name
+            FROM sps_services s
+            JOIN sps_service_definitions sd ON s.definition_id = sd.id
+            JOIN sps_departments d ON s.department_id = d.id
+            JOIN sps_events e ON d.event_id = e.id
+            WHERE e.organization_id = $1
+            ORDER BY s.name ASC
+        `, [id]);
+
+        // 4. Fetch User Count
+        const userCountRes = await query(`
+            SELECT COUNT(*)::int as count FROM sps_users WHERE organization_id = $1
+        `, [id]);
+
+        // 5. Fetch Device Count
+        const deviceCountRes = await query(`
+            SELECT COUNT(*)::int as count FROM sps_devices WHERE organization_id = $1
+        `, [id]);
+
+        res.json({
+            events: eventsRes.rows,
+            departments: deptsRes.rows,
+            services: servicesRes.rows,
+            user_count: userCountRes.rows[0].count,
+            device_count: deviceCountRes.rows[0].count
+        });
+    } catch (error) {
+        console.error('Get Org Structure Error:', error);
+        res.status(500).json({ error: 'Failed to fetch organization structure' });
     }
 });
 

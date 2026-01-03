@@ -6,7 +6,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import InactivityTimer from "@/components/InactivityTimer";
-import { Toaster } from "sonner";
+import ThemeAwareToaster from "@/components/ThemeAwareToaster";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -50,7 +50,7 @@ export default function RootLayout({
             <InactivityTimer>
               {children}
             </InactivityTimer>
-            <Toaster richColors position="top-right" />
+            <ThemeAwareToaster />
           </AuthProvider>
         </ThemeProvider>
       </body>

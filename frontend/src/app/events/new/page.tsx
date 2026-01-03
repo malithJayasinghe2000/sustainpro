@@ -6,13 +6,14 @@ import DashboardLayout from '@/components/DashboardLayout';
 import {
     Calendar, Building2, MapPin, Check, AlertCircle,
     Save, Image as ImageIcon, ShieldCheck, Crown, Zap, Thermometer, Ticket,
-    User, Mail, Lock, UserPlus, X, CheckCircle2, UserCog, Globe
+    User, Mail, Lock, UserPlus, X, CheckCircle2, UserCog, Globe,
+    Trophy, Music, Mic2, Briefcase, PartyPopper, Snowflake, Sun, Tent, Layers
 } from 'lucide-react';
 import { organizationsApi, eventsApi, uploadApi, usersApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import SetupWizard from '@/components/SetupWizard';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { RichSelect } from '@/components/ui/RichSelect';
 import { Textarea } from '@/components/ui/Textarea';
 import { PasswordInput, PasswordStrength } from '@/components/ui/PasswordInput';
 import dynamic from 'next/dynamic';
@@ -57,7 +58,25 @@ export default function NewEventPage() {
     });
 
     // Manager Form Data
-    const [createManager, setCreateManager] = useState(true);
+    const [createManager, setCreateManager] = useState(true); // Toggle logic: true = New, false = Existing
+    const [existingManagerId, setExistingManagerId] = useState(''); // Selected existing manager
+    const [managerCandidates, setManagerCandidates] = useState<any[]>([]); // List of potential managers
+    const [searchTerm, setSearchTerm] = useState(''); // Local search filter
+
+    useEffect(() => {
+        // Fetch candidate managers when organization is selected or on mount
+        if (formData.organization_id) {
+            usersApi.getManagerCandidates(formData.organization_id).then((response) => {
+                if (response.success) {
+                    setManagerCandidates(response.data);
+                }
+            }).catch(err => console.error("Failed to fetch manager candidates", err));
+        } else {
+            // Clear if no org selected
+            setManagerCandidates([]);
+        }
+    }, [formData.organization_id]);
+
     const [managerData, setManagerData] = useState({
         full_name: '',
         email: '',
@@ -121,6 +140,15 @@ export default function NewEventPage() {
             if (!formData.organization_id) errors.organization_id = "Organization is required";
             if (!formData.start_date) errors.start_date = "Start date is required";
             if (!formData.end_date) errors.end_date = "End date is required";
+
+            // Date Logic Check
+            if (formData.start_date && formData.end_date) {
+                const start = new Date(formData.start_date);
+                const end = new Date(formData.end_date);
+                if (end < start) {
+                    errors.end_date = "End date cannot be before start date";
+                }
+            }
         }
 
         if (currentStep === 2 && createManager) {
@@ -152,33 +180,57 @@ export default function NewEventPage() {
             setIsLoading(true);
             setFieldErrors({});
 
-            // 1. Create Event
-            const eventRes = await eventsApi.create(formData);
-            const newEventId = eventRes.id; // Adjust based on actual API response structure (usually returns the object)
+            // 1. Prepare Event Payload
+            const eventPayload: any = {
+                ...formData,
+                start_date: new Date(formData.start_date).toISOString(),
+                end_date: new Date(formData.end_date).toISOString(),
+            };
 
-            // 2. Create Manager (if requested)
-            if (createManager && newEventId) {
-                await usersApi.create({
-                    ...managerData,
-                    role: 'EVENT_MANAGER',
-                    organization_id: formData.organization_id,
-                    event_id: newEventId, // Link to the new event
-                    dept_id: '',
-                    service_id: ''
-                });
+            // If selecting existing manager, attach ID
+            if (!createManager && existingManagerId) {
+                eventPayload.managed_by_id = existingManagerId;
+            }
+
+            // 2. Create Event
+            const createdEvent = await eventsApi.create(eventPayload);
+            const newEventId = createdEvent.id;
+
+            // 3. Create NEW Manager (only if requested)
+            if (createManager && managerData.email) {
+                try {
+                    await usersApi.create({
+                        email: managerData.email,
+                        password: managerData.password,
+                        full_name: managerData.full_name,
+                        organization_id: formData.organization_id,
+                        role: 'EVENT_MANAGER',
+                        context_id: newEventId // Link to the new event
+                    });
+                } catch (userError: any) {
+                    console.error("User creation failed:", userError);
+                    setFieldErrors(prev => ({
+                        ...prev,
+                        submit: `Event created, but manager creation failed: ${userError.response?.data?.error || userError.message}`
+                    }));
+                    setIsLoading(false);
+                    return; // Stop here, don't redirect
+                }
             }
 
             // Success
             router.push('/events');
-        } catch (err: any) {
-            console.error(err);
-            setFieldErrors({ submit: err.response?.data?.error || err.message || 'Failed to create event or manager' });
+        } catch (error: any) {
+            console.error('Submit Error:', error);
+            setFieldErrors(prev => ({
+                ...prev,
+                submit: error.response?.data?.error || 'Failed to create event'
+            }));
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- Renderers ---
 
     const renderOverview = () => (
         <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
@@ -187,15 +239,16 @@ export default function NewEventPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                     {currentUser?.is_super_admin && (
-                        <Select
+                        <RichSelect
                             label="Organization"
                             value={formData.organization_id}
-                            onChange={e => { setFormData({ ...formData, organization_id: e.target.value }); setFieldErrors(prev => ({ ...prev, organization_id: '' })); }}
+                            onChange={val => { setFormData({ ...formData, organization_id: val }); setFieldErrors(prev => ({ ...prev, organization_id: '' })); }}
                             options={[
-                                { value: '', label: 'Select Organization' },
-                                ...orgs.map(org => ({ value: org.id, label: org.name }))
+                                { value: '', label: 'Select Organization', icon: Building2 },
+                                ...orgs.map(org => ({ value: org.id, label: org.name, image: org.logo_url }))
                             ]}
                             error={fieldErrors.organization_id}
+                            icon={Building2}
                         />
                     )}
                     <Input
@@ -206,17 +259,17 @@ export default function NewEventPage() {
                         error={fieldErrors.name}
                     />
 
-                    <Select
+                    <RichSelect
                         label="Mega-Event Category"
                         value={formData.event_type}
-                        onChange={e => setFormData({ ...formData, event_type: e.target.value })}
+                        onChange={val => setFormData({ ...formData, event_type: val })}
                         options={[
-                            { value: 'MEGA_SPORTING', label: 'Mega-Sporting Event' },
-                            { value: 'CULTURAL_FESTIVAL', label: 'Cultural & Heritage Festival' },
-                            { value: 'CONCERT', label: 'Live Entertainment / Concert' },
-                            { value: 'MICE', label: 'MICE & Trade Show' },
-                            { value: 'ROYAL_SUMMIT', label: 'Royal / Sovereign Event' },
-                            { value: 'SEASONAL_FESTIVAL', label: 'Seasonal Festival' }
+                            { value: 'MEGA_SPORTING', label: 'Mega-Sporting Event', icon: Trophy },
+                            { value: 'CULTURAL_FESTIVAL', label: 'Cultural & Heritage Festival', icon: Globe },
+                            { value: 'CONCERT', label: 'Live Entertainment / Concert', icon: Music },
+                            { value: 'MICE', label: 'MICE & Trade Show', icon: Briefcase },
+                            { value: 'ROYAL_SUMMIT', label: 'Royal / Sovereign Event', icon: Crown },
+                            { value: 'SEASONAL_FESTIVAL', label: 'Seasonal Festival', icon: PartyPopper }
                         ]}
                     />
 
@@ -229,10 +282,12 @@ export default function NewEventPage() {
                             error={fieldErrors.start_date}
                             icon={Calendar}
                         />
+
                         <Input
                             type="datetime-local"
                             label="End Date *"
                             value={formData.end_date}
+                            min={formData.start_date} // UI Constraint: Cannot select date before start
                             onChange={e => { setFormData({ ...formData, end_date: e.target.value }); setFieldErrors(prev => ({ ...prev, end_date: '' })); }}
                             error={fieldErrors.end_date}
                             icon={Calendar}
@@ -290,7 +345,12 @@ export default function NewEventPage() {
             <h2 className="header-section">Location & Logistics</h2>
 
             <div className="rounded-xl overflow-hidden border border-border h-[400px]">
-                <LeafletMap lat={formData.coordinates?.lat} lng={formData.coordinates?.lng} onLocationSelect={handleLocationSelect} />
+                <LeafletMap
+                    key={`location-map-${currentStep}`}
+                    lat={formData.coordinates?.lat}
+                    lng={formData.coordinates?.lng}
+                    onLocationSelect={handleLocationSelect}
+                />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -301,15 +361,15 @@ export default function NewEventPage() {
                     onChange={e => setFormData({ ...formData, location: e.target.value })}
                     icon={MapPin}
                 />
-                <Select
+                <RichSelect
                     label="Climate Control"
                     value={formData.climate_control}
-                    onChange={e => setFormData({ ...formData, climate_control: e.target.value })}
+                    onChange={val => setFormData({ ...formData, climate_control: val })}
                     options={[
-                        { value: 'INDOOR', label: 'Indoors (AC)' },
-                        { value: 'OUTDOOR_OPEN', label: 'Outdoors - Open Air' },
-                        { value: 'OUTDOOR_TENT', label: 'Outdoors - AC Tent' },
-                        { value: 'HYBRID', label: 'Hybrid' }
+                        { value: 'INDOOR', label: 'Indoors (AC)', icon: Snowflake },
+                        { value: 'OUTDOOR_OPEN', label: 'Outdoors - Open Air', icon: Sun },
+                        { value: 'OUTDOOR_TENT', label: 'Outdoors - AC Tent', icon: Tent },
+                        { value: 'HYBRID', label: 'Hybrid', icon: Layers }
                     ]}
                 />
             </div>
@@ -324,6 +384,101 @@ export default function NewEventPage() {
             </div>
 
 
+
+            {/* Manager Selection Toggle */}
+            <div className="flex bg-muted/50 p-1 rounded-lg w-fit mb-6">
+                <button
+                    type="button"
+                    onClick={() => setCreateManager(true)}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${createManager ? 'bg-background shadow text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                    Create New Manager
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setCreateManager(false)}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${!createManager ? 'bg-background shadow text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                    Select Existing
+                </button>
+            </div>
+
+            {/* Candidate Dropdown for Existing Manager */}
+            {!createManager && (
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in fade-in duration-300">
+                    <div className="lg:col-span-4 space-y-4">
+                        <div className="relative">
+                            <Input
+                                label="Search Managers"
+                                placeholder="Search by name, email or status..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-10"
+                            />
+                        </div>
+
+                        <div className="bg-white border border-border rounded-lg overflow-hidden shadow-sm">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-muted/50 text-muted-foreground font-medium">
+                                    <tr>
+                                        <th className="p-3">Name</th>
+                                        <th className="p-3">Status</th>
+                                        <th className="p-3 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    {managerCandidates
+                                        .filter(m =>
+                                            m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            m.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            (m.is_active ? 'active' : 'inactive').includes(searchTerm.toLowerCase())
+                                        )
+                                        .map((m) => (
+                                            <tr key={m.id} className={`hover:bg-muted/30 transition-colors ${existingManagerId === m.id ? 'bg-primary/5' : ''}`}>
+                                                <td className="p-3">
+                                                    <div className="font-medium text-foreground">{m.full_name}</div>
+                                                    <div className="text-xs text-muted-foreground">{m.email}</div>
+                                                </td>
+                                                <td className="p-3">
+                                                    {m.is_active ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-700">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                                            Active ({m.active_event_count})
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-700">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                                            Inactive
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="p-3 text-right">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setExistingManagerId(m.id)}
+                                                        className={`px-3 py-1.5 rounded text-xs font-medium transition-colors border ${existingManagerId === m.id
+                                                            ? 'bg-primary text-primary-foreground border-primary'
+                                                            : 'bg-background hover:bg-muted border-border text-foreground'
+                                                            }`}
+                                                    >
+                                                        {existingManagerId === m.id ? 'Selected' : 'Select'}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    {managerCandidates.length === 0 && (
+                                        <tr>
+                                            <td colSpan={3} className="p-6 text-center text-muted-foreground">
+                                                No existing managers found in this organization.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {createManager && (
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in fade-in duration-300">

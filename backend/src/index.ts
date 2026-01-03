@@ -7,6 +7,13 @@ import pool, { closePool } from './db';
 // Load environment variables
 dotenv.config();
 
+// SECURITY: Validate critical environment variables at startup
+if (!process.env.JWT_SECRET) {
+    console.error('FATAL ERROR: JWT_SECRET environment variable is not set!');
+    console.error('The application cannot start without a secure JWT secret.');
+    process.exit(1);
+}
+
 import http from 'http';
 import { initSocket } from './socket';
 
@@ -22,12 +29,37 @@ const io = initSocket(httpServer);
 
 // Middleware
 app.use(cookieParser());
+
+// SECURITY: CORS Configuration with explicit allowlist
+const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+    ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    : ['http://localhost:3000', 'http://localhost:3001']; // Default for development
+
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, Postman, server-to-server)
+        if (!origin) {
+            return callback(null, true);
+        }
+
+        // Check if origin is in allowlist
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.warn(`🚫 CORS blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Debug Logging Middleware
+app.use((req, res, next) => {
+    console.log(`📡 ${req.method} ${req.path}`);
+    next();
+});
 
 // Health check endpoint
 app.get('/health', async (req: Request, res: Response) => {
@@ -67,12 +99,13 @@ app.get('/api/v1', (req: Request, res: Response) => {
 import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import deviceRoutes from './routes/devices';
-// import deviceModelRoutes from './routes/device-models';
+import deviceModelRoutes from './routes/device-models';
 import telemetryRoutes from './routes/telemetry';
 import settingsRoutes from './routes/settings';
 import organizationRoutes from './routes/organizations';
 import eventRoutes from './routes/events';
 import departmentRoutes from './routes/departments';
+import departmentServicesRoutes from './routes/department-services';
 import serviceRoutes from './routes/services';
 import path from 'path';
 
@@ -80,6 +113,7 @@ import path from 'path';
 import uploadRoutes from './routes/upload';
 import imagesRoutes from './routes/images';
 import rbacRoutes from './routes/rbac';
+import departmentTemplatesRoutes from './routes/department-templates';
 
 // ...
 
@@ -87,13 +121,15 @@ import rbacRoutes from './routes/rbac';
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/devices', deviceRoutes);
-// app.use('/api/v1/device-models', deviceModelRoutes);
+app.use('/api/v1/device-models', deviceModelRoutes);
 app.use('/api/v1/telemetry', telemetryRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/organizations', organizationRoutes);
 app.use('/api/v1/events', eventRoutes);
 app.use('/api/v1/departments', departmentRoutes);
+app.use('/api/v1/department-services', departmentServicesRoutes);
 app.use('/api/v1/services', serviceRoutes);
+app.use('/api/v1/department-templates', departmentTemplatesRoutes);
 app.use('/api/v1/upload', uploadRoutes);
 app.use('/api/v1/images', imagesRoutes);
 app.use('/api/v1/rbac', rbacRoutes);

@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Calendar, Plus, Search, LayoutGrid, List, MapPin, Clock, ChevronRight, Activity, Archive, CheckCircle, Filter } from 'lucide-react';
+import { Calendar, Plus, Search, LayoutGrid, List, MapPin, Clock, ChevronRight, Activity, Archive, CheckCircle, Filter, Building2 } from 'lucide-react';
 import StatsCard from '@/components/StatsCard';
 import { eventsApi, organizationsApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { Select } from '@/components/ui/Select';
+import { RichSelect } from '@/components/ui/RichSelect';
 
 export default function EventsPage() {
     const { user } = useAuth();
@@ -74,9 +74,12 @@ export default function EventsPage() {
         );
     });
 
+    // Check Permissions
+    const canCreateEvent = user?.is_super_admin || user?.permissions?.includes('events:create');
+
     // Combined Items for Grid
     const allItems = [
-        { type: 'ADD_NEW' },
+        ...(canCreateEvent ? [{ type: 'ADD_NEW' }] : []),
         ...filteredEvents.map(evt => ({ type: 'EVENT', data: evt }))
     ];
 
@@ -158,14 +161,15 @@ export default function EventsPage() {
                         {/* Org Filter (Super Admin) */}
                         {user?.is_super_admin && (
                             <div className="w-full md:w-[300px]">
-                                <Select
+                                <RichSelect
                                     value={selectedOrg}
-                                    onChange={(e) => setSelectedOrg(e.target.value)}
+                                    onChange={setSelectedOrg}
                                     className="h-[50px]" // Match height of search input roughly
                                     options={[
-                                        { value: '', label: 'All Organizations' },
-                                        ...orgs.map(org => ({ value: org.id, label: org.name }))
+                                        { value: '', label: 'All Organizations', icon: LayoutGrid },
+                                        ...orgs.map(org => ({ value: org.id, label: org.name, image: org.logo_url }))
                                     ]}
+                                    icon={Building2}
                                 />
                             </div>
                         )}
@@ -232,69 +236,72 @@ export default function EventsPage() {
                             const event = (item as { data: any }).data;
 
                             return (
-                                <div key={event.id} className="group relative flex flex-col h-full min-h-[320px] bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl hover:translate-y-[-2px] transition-all duration-300">
-                                    {/* Banner Header - Gradient based on status or ID */}
+                                <div
+                                    key={event.id}
+                                    className="group relative flex flex-col h-full min-h-[320px] bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl hover:translate-y-[-2px] transition-all duration-300"
+                                    onClick={() => router.push(`/events/${event.id}`)}
+                                >
+                                    {/* Full Background Image */}
                                     <div
-                                        className="h-24 relative overflow-hidden transition-colors duration-300 bg-gradient-to-br from-primary/80 to-black"
-                                    >
-                                        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150"></div>
+                                        className="absolute inset-0 transition-transform duration-700 group-hover:scale-105 bg-cover bg-center"
+                                        style={{
+                                            backgroundImage: event.image_url ? `url(${event.image_url})` : undefined
+                                        }}
+                                    />
 
-                                        {/* Status Badge */}
-                                        <span className={`absolute top-3 right-3 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-white/20 backdrop-blur-sm text-white border border-white/20 shadow-sm`}>
-                                            <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${event.status === 'ACTIVE' ? 'bg-green-400' : event.status === 'PLANNING' ? 'bg-blue-400' : 'bg-gray-400'}`} />
-                                            {event.status}
-                                        </span>
-                                    </div>
+                                    {/* Gradient Overlay for Readability */}
+                                    <div className={`absolute inset-0 transition-opacity duration-300 ${event.image_url ? 'bg-gradient-to-t from-black via-black/60 to-black/30' : 'bg-gradient-to-br from-primary/90 to-black/80'}`} />
 
-                                    {/* Floating Icon */}
-                                    <div className="absolute top-16 left-6">
-                                        <div className="w-16 h-16 rounded-xl bg-background p-1 shadow-lg flex items-center justify-center border border-border z-10 group-hover:scale-105 transition-transform duration-300">
-                                            <div className="w-full h-full rounded-lg bg-background flex items-center justify-center overflow-hidden text-primary">
-                                                <Calendar className="w-8 h-8" />
+                                    {/* Noise Texture */}
+                                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150 mix-blend-overlay"></div>
+
+                                    {/* Status Badge */}
+                                    <span className={`absolute top-4 right-4 inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-black/40 backdrop-blur-md text-white border border-white/10 shadow-lg z-10`}>
+                                        <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${event.status === 'ACTIVE' ? 'bg-green-400' : event.status === 'PLANNING' ? 'bg-blue-400' : 'bg-gray-400'}`} />
+                                        {event.status}
+                                    </span>
+
+                                    {/* Content Container (Pushed to bottom) */}
+                                    <div className="relative z-10 flex flex-col h-full justify-end p-6 text-white">
+
+                                        {/* Floating Icon (Now aligned with text) */}
+                                        <div className="mb-4">
+                                            <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-lg">
+                                                <Calendar className="w-6 h-6" />
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* Body */}
-                                    <div className="flex-1 flex flex-col pt-10 px-6 pb-6">
-                                        <h3 className="font-bold text-lg text-foreground truncate mt-1" title={event.name}>{event.name}</h3>
+                                        <h3 className="font-bold text-xl leading-tight mb-2 text-white text-shadow-sm line-clamp-2" title={event.name}>
+                                            {event.name}
+                                        </h3>
 
-                                        <div className="mt-2 text-sm text-muted-foreground space-y-3">
+                                        <div className="space-y-2 text-sm text-gray-200">
                                             {event.location && (
-                                                <div className="flex items-center gap-2 text-xs">
-                                                    <MapPin className="w-3 h-3" />
-                                                    {event.location}
+                                                <div className="flex items-center gap-2 text-xs font-medium">
+                                                    <MapPin className="w-3.5 h-3.5 text-primary-foreground/80" />
+                                                    <span className="line-clamp-1">{event.location}</span>
                                                 </div>
                                             )}
 
                                             {event.start_date && (
-                                                <div className="flex items-center gap-2 text-xs">
-                                                    <Clock className="w-3 h-3" />
-                                                    <span>{format(new Date(event.start_date), 'MMM d, yyyy')}</span>
+                                                <div className="flex items-center gap-2 text-xs font-medium">
+                                                    <Clock className="w-3.5 h-3.5 text-primary-foreground/80" />
+                                                    <span>{format(new Date(event.start_date), 'MMM d, yyyy • h:mm a')}</span>
                                                 </div>
                                             )}
-
-                                            <div className="flex flex-wrap gap-2 mt-3">
-                                                {/* Event Code */}
-                                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/5 border border-primary/20 text-[10px] font-semibold text-primary font-mono">
-                                                    {event.code || 'Pending'}
-                                                </span>
-                                            </div>
                                         </div>
-                                    </div>
 
-                                    {/* Footer */}
-                                    <div className="px-6 py-4 bg-muted/30 border-t border-border flex items-center justify-between">
-                                        <span className="text-[10px] text-muted-foreground font-medium">
-                                            {/* Subtext like "3 Depts" */}
-                                        </span>
-                                        <button
-                                            onClick={() => router.push(`/events/${event.id}`)}
-                                            className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors uppercase tracking-wider flex items-center gap-1"
-                                        >
-                                            Manage
-                                            <ChevronRight className="w-3 h-3" />
-                                        </button>
+                                        {/* Footer / Manage Button */}
+                                        <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-white/10 border border-white/10 text-white/80">
+                                                {event.code || 'Pending'}
+                                            </span>
+
+                                            <button className="text-xs font-bold text-white hover:text-primary-foreground transition-all uppercase tracking-wider flex items-center gap-1.5 group-hover:gap-2">
+                                                Manage
+                                                <ChevronRight className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             );

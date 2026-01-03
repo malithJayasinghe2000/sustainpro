@@ -11,6 +11,54 @@ router.use(authenticateToken);
 router.use(requireRole('ORG_ADMIN')); // Requires Org Admin or higher (SUPER_ADMIN has auto-access)
 
 // ============================================
+// GET /api/v1/users/managers/candidates - Get candidate managers (Active or Inactive)
+// ============================================
+router.get('/managers/candidates', async (req: Request, res: Response) => {
+    try {
+        const user = req.user as any;
+        let targetOrgId = user.organization_id;
+
+        // If Super Admin, allow overriding org via query param
+        console.log('DEBUG: Manager Candidates Request', {
+            isSuperAdmin: user.is_super_admin,
+            queryOrg: req.query.organization_id,
+            userOrg: user.organization_id
+        });
+
+        if (user.is_super_admin && req.query.organization_id) {
+            targetOrgId = req.query.organization_id;
+        }
+
+        if (!targetOrgId) {
+            return res.json({ success: true, data: [] });
+        }
+
+        // Fetch users who are:
+        // 1. Active 'EVENT_MANAGER' (Strict)
+        // 2. OR Any Inactive User (Permissive - allows reactivating old staff even if role was lost)
+        const sql = `
+            SELECT DISTINCT u.id, u.full_name, u.email, u.is_active, u.code,
+                   (SELECT COUNT(*) FROM sps_role_assignments ra2 WHERE ra2.user_id = u.id AND ra2.role = 'EVENT_MANAGER' AND ra2.event_id IS NOT NULL) as active_event_count
+            FROM sps_users u
+            LEFT JOIN sps_role_assignments ra ON u.id = ra.user_id
+            WHERE u.organization_id = $1
+            AND (
+                (u.is_active = true AND ra.role = 'EVENT_MANAGER')
+                OR
+                (u.is_active = false)
+            )
+            ORDER BY u.full_name ASC
+        `;
+
+        const result = await query(sql, [targetOrgId]);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('Error fetching manager candidates:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch manager candidates' });
+    }
+});
+
+// ============================================
 // GET /api/v1/users - Get all users
 // ============================================
 router.get('/', async (req: Request, res: Response) => {
@@ -27,6 +75,7 @@ router.get('/', async (req: Request, res: Response) => {
                 u.id, u.email, u.code, u.is_active, u.organization_id,
                 u.created_at, u.last_login as last_login_at,
                 o.name as org_name,
+                o.logo_url as org_logo,
                 (
                     SELECT json_agg(json_build_object('role', ra.role, 'org_id', ra.org_id))
                     FROM sps_role_assignments ra
@@ -173,7 +222,7 @@ router.post('/', async (req: Request, res: Response) => {
 
         // Basic Validation
         if (!email || !password || !organization_id || !role) {
-            return res.status(400).json({ success: false, error: 'Missing fields: email, password, organization_id, role' });
+            return res.status(400).json({ success: false, error: 'Missing required fields: email, password, organization_id, role' });
         }
 
         await client.query('BEGIN');
@@ -185,6 +234,36 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(409).json({ success: false, error: 'Email already exists' });
         }
 
+        // Auto-generate code if not provided
+        let userCode = code;
+        if (!userCode || userCode.trim() === '') {
+            let isUnique = false;
+            let attempt = 0;
+
+            // Get initial count from global table to start
+            const countResult = await client.query('SELECT COUNT(*) as count FROM sps_users');
+            let nextNum = parseInt(countResult.rows[0].count) + 1;
+
+            while (!isUnique && attempt < 5) {
+                userCode = `USR-${String(nextNum).padStart(3, '0')}`;
+
+                // Check if this specific code exists globally
+                const checkRes = await client.query('SELECT id FROM sps_users WHERE code = $1', [userCode]);
+                if (checkRes.rows.length === 0) {
+                    isUnique = true;
+                } else {
+                    nextNum++; // Increment and try again
+                    attempt++;
+                }
+            }
+
+            // Fallback if loop fails (highly unlikely)
+            if (!isUnique) {
+                const randomSuffix = Math.floor(1000 + Math.random() * 9000); // 4 digit random
+                userCode = `USR-${String(nextNum)}-${randomSuffix}`;
+            }
+        }
+
         // Hash Password
         const hash = await argon2.hash(password);
 
@@ -192,8 +271,8 @@ router.post('/', async (req: Request, res: Response) => {
         const userRes = await client.query(
             `INSERT INTO sps_users (email, password_hash, full_name, organization_id, code, is_active, created_at)
              VALUES ($1, $2, $3, $4, $5, true, NOW())
-             RETURNING id, email, organization_id`,
-            [email, hash, full_name || '', organization_id, code || null]
+             RETURNING id, email, organization_id, code`,
+            [email, hash, full_name || '', organization_id, userCode]
         );
         const newUser = userRes.rows[0];
 

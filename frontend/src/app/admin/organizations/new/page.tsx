@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Building2, Globe, MapPin, Phone, Mail, Upload, Loader2, X, User, UserCog, CheckCircle2 } from 'lucide-react';
+import { Building2, Globe, MapPin, Phone, Mail, Upload, Loader2, X, User, UserCog, CheckCircle2, Clock, Briefcase, Shield } from 'lucide-react';
 import { organizationsApi, uploadApi } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { RichSelect } from '@/components/ui/RichSelect';
 import { Textarea } from '@/components/ui/Textarea';
 import SetupWizard from '@/components/SetupWizard';
 import { PasswordInput, PasswordStrength } from '@/components/ui/PasswordInput';
@@ -171,14 +171,14 @@ export default function NewOrganizationPage() {
                     readOnly
                     className="bg-muted/50 font-mono text-xs"
                 />
-                <Select
+                <RichSelect
                     label="Organization Type"
                     value={newOrg.type}
-                    onChange={e => setNewOrg({ ...newOrg, type: e.target.value })}
+                    onChange={val => setNewOrg({ ...newOrg, type: val })}
                     options={[
-                        { value: 'CLIENT', label: 'Client' },
-                        { value: 'PARTNER', label: 'Partner' },
-                        { value: 'PROVIDER', label: 'SustainPro' }
+                        { value: 'CLIENT', label: 'Client', icon: Briefcase },
+                        { value: 'PARTNER', label: 'Partner', icon: Globe },
+                        { value: 'PROVIDER', label: 'SustainPro', icon: Shield }
                     ]}
                 />
                 <Input
@@ -282,19 +282,19 @@ export default function NewOrganizationPage() {
                 </div>
 
                 <div className="space-y-6">
-                    <Select
+                    <RichSelect
                         label="Timezone"
                         value={newOrg.timezone}
-                        onChange={e => setNewOrg({ ...newOrg, timezone: e.target.value })}
+                        onChange={val => setNewOrg({ ...newOrg, timezone: val })}
                         options={[
-                            { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
-                            { value: 'America/New_York', label: 'America/New_York (Eastern Time)' },
-                            { value: 'America/Chicago', label: 'America/Chicago (Central Time)' },
-                            { value: 'America/Los_Angeles', label: 'America/Los_Angeles (Pacific Time)' },
-                            { value: 'Europe/London', label: 'Europe/London (GMT/BST)' },
-                            { value: 'Asia/Dubai', label: 'Asia/Dubai (GST)' },
-                            { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)' },
-                            { value: 'Asia/Singapore', label: 'Asia/Singapore (SGT)' }
+                            { value: 'UTC', label: 'UTC (Coordinated Universal Time)', icon: Clock },
+                            { value: 'America/New_York', label: 'America/New_York (Eastern Time)', icon: Globe },
+                            { value: 'America/Chicago', label: 'America/Chicago (Central Time)', icon: Globe },
+                            { value: 'America/Los_Angeles', label: 'America/Los_Angeles (Pacific Time)', icon: Globe },
+                            { value: 'Europe/London', label: 'Europe/London (GMT/BST)', icon: Globe },
+                            { value: 'Asia/Dubai', label: 'Asia/Dubai (GST)', icon: Globe },
+                            { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)', icon: Globe },
+                            { value: 'Asia/Singapore', label: 'Asia/Singapore (SGT)', icon: Globe }
                         ]}
                     />
                     <div>

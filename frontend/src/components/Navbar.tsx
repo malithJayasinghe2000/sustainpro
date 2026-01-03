@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import { getUserTimezone } from '@/lib/timezone';
 import { settingsApi } from '@/lib/api';
+import UniversalCreator from './UniversalCreator';
+import { Plus } from 'lucide-react';
 
 export default function Navbar() {
     const { theme, toggleTheme } = useTheme();
@@ -16,6 +18,7 @@ export default function Navbar() {
     const [showAlerts, setShowAlerts] = useState(false);
     const [siteTitle, setSiteTitle] = useState('SPS IoT');
     const [logo, setLogo] = useState<string | null>('/logo.png');
+    const [showUniversalCreator, setShowUniversalCreator] = useState(false);
     const alertsRef = useRef<HTMLDivElement>(null);
 
     // Dummy alerts data
@@ -66,8 +69,23 @@ export default function Navbar() {
             }
         };
 
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Open on 'c' if not typing in input
+            if (e.key.toLowerCase() === 'c' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+                setShowUniversalCreator(true);
+            }
+            // Close on 'Escape'
+            if (e.key === 'Escape') {
+                setShowUniversalCreator(false);
+            }
+        };
+
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
     }, []);
 
     const formatTime = (date: Date) => {
@@ -117,6 +135,17 @@ export default function Navbar() {
 
                     {/* Right Side - Time, Alerts, Theme Toggle */}
                     <div className="flex items-center gap-3">
+                        {/* Universal Create Button */}
+                        <button
+                            onClick={() => setShowUniversalCreator(true)}
+                            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
+                            title="Create New (Press 'C')"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span className="hidden lg:inline">Create</span>
+                        </button>
+
+
                         {/* Time & Date */}
                         <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-muted/50 border border-border/50 rounded-full">
                             <Clock className="w-3.5 h-3.5 text-muted-foreground" />
@@ -196,6 +225,11 @@ export default function Navbar() {
                     </div>
                 </div>
             </div>
+            {/* Universal Creator Modal */}
+            <UniversalCreator
+                isOpen={showUniversalCreator}
+                onClose={() => setShowUniversalCreator(false)}
+            />
         </nav >
     );
 }

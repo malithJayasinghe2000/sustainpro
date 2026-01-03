@@ -3,20 +3,32 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { hasRole, ROLES } from '@/lib/roles';
 
 export default function HomePage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   useEffect(() => {
     if (!isLoading) {
       if (isAuthenticated) {
-        router.push('/dashboard');
+        if (user?.is_super_admin) {
+          router.push('/admin/dashboard');
+          // Redirect to specific event if assigned
+          const eventRole = user?.roles?.find((r: any) => r.role === ROLES.EVENT_MANAGER && r.event_id);
+          if (eventRole?.event_id) {
+            router.push(`/events/${eventRole.event_id}`);
+          } else {
+            router.push('/events'); // Fallback
+          }
+        } else {
+          router.push('/dashboard');
+        }
       } else {
         router.push('/login');
       }
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router, user]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

@@ -18,13 +18,23 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                 )}
                 <div className="relative">
                     {Icon && (
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
                             <Icon className="w-4 h-4" />
                         </div>
                     )}
                     <input
                         className={`flex h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 hover:border-primary/50 ${Icon ? 'pl-9' : ''} ${error ? 'border-destructive focus-visible:ring-destructive' : ''} ${className}`}
                         ref={ref}
+                        onClick={(e) => {
+                            if (props.type === 'date' || props.type === 'datetime-local') {
+                                try {
+                                    (e.target as HTMLInputElement).showPicker();
+                                } catch (err) {
+                                    // Browser doesn't support showPicker
+                                }
+                            }
+                            props.onClick?.(e);
+                        }}
                         {...props}
                     />
                 </div>

@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus, Trash2, X, Save, Activity, Zap, Droplet, Thermometer, Wind, Gauge, Battery, Clock, Pencil, Leaf, Sun, Cloud, Factory, Recycle, Flame, ChevronDown, Cpu, Wifi, Waves, Component } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
-import SearchBar from '@/components/SearchBar';
 import Modal from '@/components/Modal';
 import TimeDisplay from '@/components/TimeDisplay';
 import { deviceModelsApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
+import StatsCard from '@/components/StatsCard';
 
 
 interface DeviceModel {
@@ -73,6 +74,7 @@ const AVAILABLE_ICONS = [
 
 export default function DeviceModelsPage() {
     const { user } = useAuth();
+    const router = useRouter();
     const [models, setModels] = useState<DeviceModel[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -93,9 +95,6 @@ export default function DeviceModelsPage() {
         description: '',
         parameters: []
     });
-
-    const canEdit = user?.roles?.some(r => r.role === 'ORG_ADMIN' || r.role === 'EVENT_MANAGER') ?? false;
-    const canDelete = user?.roles?.some(r => r.role === 'ORG_ADMIN') ?? false;
 
     useEffect(() => {
         fetchModels();
@@ -119,21 +118,23 @@ export default function DeviceModelsPage() {
         }
     };
 
+    // Restrict to Super Admin Only
+    if (!user?.is_super_admin) {
+        return null;
+    }
+
+    const canEdit = true; // Super admins have full access
+    const canDelete = true;
+
     const handleOpenModal = (model?: DeviceModel) => {
-        setOpenIconSelector(null);
         if (model) {
-            setFormData(model);
-            setIsEditing(true);
+            // For edit, we'll implement later or keep modal
+            // For now, just show a toast
+            toast.error('Edit functionality coming soon!');
         } else {
-            setFormData({
-                id: '',
-                name: '',
-                description: '',
-                parameters: []
-            });
-            setIsEditing(false);
+            // Navigate to creation wizard
+            router.push('/admin/device-models/new');
         }
-        setIsModalOpen(true);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -237,89 +238,221 @@ export default function DeviceModelsPage() {
                     )}
                 </div>
 
-                {/* Search */}
-                <SearchBar
-                    value={searchQuery}
-                    onChange={setSearchQuery}
-                    placeholder="Search models..."
-                />
-
-                {/* List View */}
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
-                    <div className="overflow-x-auto custom-scrollbar">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Model ID</th>
-                                    <th>Name</th>
-                                    <th>Parameters</th>
-                                    <th>Last Updated</th>
-                                    <th className="text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border/50">
-                                {isLoading ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
-                                ) : filteredModels.length === 0 ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">No models found.</td></tr>
-                                ) : (
-                                    filteredModels.map(model => (
-                                        <tr key={model.id}>
-                                            <td className="text-sm font-medium">{model.id}</td>
-                                            <td>
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-medium text-foreground">{model.name}</span>
-                                                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">{model.description}</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {model.parameters?.slice(0, 3).map((p, i) => (
-                                                        <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-secondary text-secondary-foreground border border-border">
-                                                            {p.key}
-                                                        </span>
-                                                    ))}
-                                                    {model.parameters?.length > 3 && (
-                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] text-muted-foreground">
-                                                            +{model.parameters.length - 3} more
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="text-xs text-muted-foreground">
-                                                <div className="flex flex-col">
-                                                    <TimeDisplay
-                                                        timestamp={model.updated_at}
-                                                        format="short"
-                                                    />
-                                                    <TimeDisplay
-                                                        timestamp={model.updated_at}
-                                                        format="long"
-                                                        className="text-[10px] opacity-70 truncate max-w-[120px]"
-                                                    />
-                                                </div>
-                                            </td>
-                                            <td className="text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    {canEdit && (
-                                                        <button onClick={() => handleOpenModal(model)} className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground">
-                                                            <Pencil className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                    {canDelete && (
-                                                        <button onClick={() => handleDelete(model.id)} className="p-1.5 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive">
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                {/* Search - Organizations Style */}
+                <div className="relative w-full max-w-2xl">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Component className="h-5 w-5 text-muted-foreground" />
                     </div>
+                    <input
+                        type="text"
+                        placeholder="Global Search Engine... (Name, ID, Parameters)"
+                        className="block w-full pl-10 pr-3 py-3 border border-border/40 rounded-xl leading-5 bg-muted/30 placeholder-muted-foreground/60 focus:outline-none focus:bg-card focus:ring-1 focus:ring-primary/20 focus:border-primary/50 transition-all"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                 </div>
+
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatsCard
+                        title="Total Models"
+                        value={models.length}
+                        subtext="Device templates"
+                        icon={Component}
+                        intent="primary"
+                    />
+                    <StatsCard
+                        title="Total Parameters"
+                        value={models.reduce((acc, m) => acc + (m.parameters?.length || 0), 0)}
+                        subtext="Sensor data points"
+                        icon={Activity}
+                        intent="default"
+                    />
+                    <StatsCard
+                        title="Recent Updates"
+                        value={models.filter(m => {
+                            const dayAgo = new Date();
+                            dayAgo.setDate(dayAgo.getDate() - 1);
+                            return new Date(m.updated_at) > dayAgo;
+                        }).length}
+                        subtext="Last 24 hours"
+                        icon={Clock}
+                        intent="success"
+                    />
+                    <StatsCard
+                        title="Avg Parameters"
+                        value={models.length > 0
+                            ? Math.round(models.reduce((acc, m) => acc + (m.parameters?.length || 0), 0) / models.length)
+                            : 0}
+                        subtext="Per model"
+                        icon={Gauge}
+                        intent="warning"
+                    />
+                </div>
+
+                {/* Section Separator */}
+                <div className="w-full h-px bg-gradient-to-r from-transparent via-border to-transparent my-8 opacity-60" />
+
+                {/* Card Grid View */}
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-20">
+                        <div className="text-center">
+                            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <p className="text-muted-foreground">Loading device models...</p>
+                        </div>
+                    </div>
+                ) : filteredModels.length === 0 ? (
+                    <div className="bg-card border-2 border-dashed border-border rounded-xl p-12 text-center">
+                        <div className="max-w-md mx-auto">
+                            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Component className="w-8 h-8 text-muted-foreground opacity-50" />
+                            </div>
+                            <h3 className="text-lg font-semibold mb-2">No Device Models Found</h3>
+                            <p className="text-sm text-muted-foreground mb-6">
+                                {searchQuery
+                                    ? "No models match your search. Try adjusting your filters."
+                                    : "Get started by creating your first device model template."}
+                            </p>
+                            {canEdit && !searchQuery && (
+                                <button onClick={() => handleOpenModal()} className="btn-primary">
+                                    <Plus className="w-4 h-4" />
+                                    Create First Model
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {/* Add New Model Card - First Item */}
+                        {canEdit && (
+                            <button
+                                onClick={() => handleOpenModal()}
+                                className="group relative flex flex-col items-center justify-center h-full min-h-[320px] rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/50 transition-all duration-300 gap-4"
+                            >
+                                <div className="w-16 h-16 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+                                    <Plus className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                                </div>
+                                <div className="text-center">
+                                    <h3 className="font-semibold text-foreground">Add New Model</h3>
+                                    <p className="text-sm text-muted-foreground mt-1">Create a device template</p>
+                                </div>
+                            </button>
+                        )}
+
+                        {/* Model Cards */}
+                        {filteredModels.map(model => {
+                            const IconComponent = model.parameters?.[0]?.icon
+                                ? AVAILABLE_ICONS.find(i => i.name === model.parameters[0].icon)?.component
+                                : Component;
+                            const Icon = IconComponent || Component;
+
+                            return (
+                                <div
+                                    key={model.id}
+                                    className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg hover:border-primary/50 transition-all group"
+                                >
+                                    {/* Card Header */}
+                                    <div className="bg-gradient-to-br from-primary/5 via-primary/3 to-transparent p-6 border-b border-border">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <div className="p-2 bg-background rounded-lg border border-border">
+                                                        <Icon className="w-5 h-5 text-primary" />
+                                                    </div>
+                                                    <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-1 rounded">
+                                                        {model.id}
+                                                    </span>
+                                                </div>
+                                                <h3 className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors">
+                                                    {model.name}
+                                                </h3>
+                                                {model.description && (
+                                                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                                                        {model.description}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                            <div className="flex items-center gap-1">
+                                                <Activity className="w-3.5 h-3.5" />
+                                                <span>{model.parameters?.length || 0} parameters</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Clock className="w-3.5 h-3.5" />
+                                                <TimeDisplay timestamp={model.updated_at} format="relative" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Parameters Preview */}
+                                    <div className="p-4 bg-muted/30">
+                                        {model.parameters && model.parameters.length > 0 ? (
+                                            <div className="space-y-2">
+                                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                    Parameters
+                                                </p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {model.parameters.slice(0, 6).map((param, idx) => {
+                                                        const ParamIcon = AVAILABLE_ICONS.find(i => i.name === param.icon)?.component || Activity;
+                                                        return (
+                                                            <div
+                                                                key={idx}
+                                                                className="flex items-center gap-1.5 bg-background border border-border rounded-md px-2.5 py-1.5 text-xs"
+                                                                title={`${param.name} (${param.unit})`}
+                                                            >
+                                                                <ParamIcon className="w-3.5 h-3.5 text-primary" />
+                                                                <span className="font-medium text-foreground">{param.key}</span>
+                                                                {param.unit && (
+                                                                    <span className="text-muted-foreground">· {param.unit}</span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {model.parameters.length > 6 && (
+                                                        <div className="flex items-center px-2.5 py-1.5 text-xs text-muted-foreground">
+                                                            +{model.parameters.length - 6} more
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-muted-foreground italic">No parameters defined</p>
+                                        )}
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="p-4 bg-card border-t border-border flex items-center justify-between">
+                                        <div className="text-xs text-muted-foreground">
+                                            <TimeDisplay timestamp={model.updated_at} format="long" />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {canEdit && (
+                                                <button
+                                                    onClick={() => handleOpenModal(model)}
+                                                    className="p-2 hover:bg-muted rounded-md text-muted-foreground hover:text-primary transition-all"
+                                                    title="Edit Model"
+                                                >
+                                                    <Pencil className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            {canDelete && (
+                                                <button
+                                                    onClick={() => handleDelete(model.id)}
+                                                    className="p-2 hover:bg-destructive/10 rounded-md text-muted-foreground hover:text-destructive transition-all"
+                                                    title="Delete Model"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Create/Edit Modal */}
                 <Modal

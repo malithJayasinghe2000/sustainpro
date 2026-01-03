@@ -71,31 +71,53 @@ export default function LeafletMap({ lat, lng, onLocationSelect }: LeafletMapPro
     };
 
     useEffect(() => {
-        if (scriptsLoaded && mapRef.current && !mapInstance.current && (window as any).L) {
-            const L = (window as any).L;
+        if (!scriptsLoaded || !mapRef.current || !(window as any).L) return;
 
+        // Prevent duplicate initialization
+        if (mapInstance.current) {
+            // Map already exists, just ensure it's visible
+            setTimeout(() => {
+                if (mapInstance.current) {
+                    mapInstance.current.invalidateSize();
+                }
+            }, 100);
+            return;
+        }
+
+        const L = (window as any).L;
+
+        try {
             // Initialize Map
             mapInstance.current = L.map(mapRef.current).setView([initialLat, initialLng], 13);
 
             // Add Tile Layer (OpenStreetMap)
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19,
             }).addTo(mapInstance.current);
 
-            // Add Click Handler
+            // Initial Marker
+            markerInstance.current = L.marker([initialLat, initialLng]).addTo(mapInstance.current);
+
+            // Click Event on Map to Add/Move Marker
             mapInstance.current.on('click', (e: any) => {
                 const { lat, lng } = e.latlng;
                 updateMarker(lat, lng);
                 onLocationSelect(lat, lng);
-                setShowSuggestions(false);
             });
-
-            // Initial Marker
-            if (lat && lng) {
-                updateMarker(lat, lng);
-            }
+        } catch (error) {
+            console.error('Map initialization failed:', error);
         }
-    }, [scriptsLoaded]);
+
+        // Cleanup function
+        return () => {
+            if (mapInstance.current) {
+                mapInstance.current.remove();
+                mapInstance.current = null;
+                markerInstance.current = null;
+            }
+        };
+    }, [scriptsLoaded, initialLat, initialLng]);
 
     // Update marker when props change
     useEffect(() => {
@@ -119,6 +141,12 @@ export default function LeafletMap({ lat, lng, onLocationSelect }: LeafletMapPro
     const handleSelectLocation = (result: any) => {
         const newLat = parseFloat(result.lat);
         const newLng = parseFloat(result.lon);
+
+        // Guard: Ensure map is loaded before proceeding
+        if (!mapInstance.current) {
+            console.warn('Map not yet initialized');
+            return;
+        }
 
         updateMarker(newLat, newLng);
         mapInstance.current.setView([newLat, newLng], 15);
@@ -150,13 +178,14 @@ export default function LeafletMap({ lat, lng, onLocationSelect }: LeafletMapPro
                 <div className="relative shadow-lg rounded-lg bg-white">
                     <input
                         type="text"
-                        placeholder="Search location (e.g. Dubai Marina)"
-                        className="w-full pl-10 pr-4 py-2 text-sm bg-transparent border border-gray-200 rounded-lg hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all"
+                        placeholder={!mapInstance.current ? "Loading map..." : "Search location (e.g. Dubai Marina)"}
+                        className="w-full pl-10 pr-4 py-2 text-sm bg-transparent border border-gray-200 rounded-lg hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all save-autofill disabled:opacity-50 disabled:cursor-not-allowed"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onFocus={() => {
                             if (suggestions.length > 0) setShowSuggestions(true);
                         }}
+                        disabled={!mapInstance.current}
                     />
                     <div className="absolute left-3 top-2.5 text-gray-400">
                         {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}

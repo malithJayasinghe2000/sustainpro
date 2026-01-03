@@ -1,7 +1,7 @@
 import express from 'express';
 import pool, { query } from '../db';
 import { authenticateToken } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requireSuperAdmin } from '../middleware/rbac';
 import { getCurrentSystemTime } from '../utils/timezone';
 
 const router = express.Router();
@@ -32,9 +32,9 @@ router.get('/', async (req, res) => {
 /**
  * @route POST /api/v1/device-models
  * @desc Create a new device model
- * @access Private (Admin, Moderator)
+ * @access Private (Super Admin Only)
  */
-router.post('/', requireRole('admin', 'moderator'), async (req, res) => {
+router.post('/', requireSuperAdmin, async (req, res) => {
     const { id, name, description, parameters } = req.body;
 
     // Basic Validation
@@ -78,9 +78,9 @@ router.post('/', requireRole('admin', 'moderator'), async (req, res) => {
 /**
  * @route PUT /api/v1/device-models/:id
  * @desc Update a device model
- * @access Private (Admin, Moderator)
+ * @access Private (Super Admin Only)
  */
-router.put('/:id', requireRole('admin', 'moderator'), async (req, res) => {
+router.put('/:id', requireSuperAdmin, async (req, res) => {
     const { id } = req.params;
     const { name, description, parameters } = req.body;
 
@@ -126,9 +126,9 @@ router.put('/:id', requireRole('admin', 'moderator'), async (req, res) => {
 /**
  * @route DELETE /api/v1/device-models/:id
  * @desc Delete a device model
- * @access Private (Admin Only)
+ * @access Private (Super Admin Only)
  */
-router.delete('/:id', requireRole('admin'), async (req, res) => {
+router.delete('/:id', requireSuperAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {

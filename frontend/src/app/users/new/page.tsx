@@ -6,7 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight } from 'lucide-react';
 import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Select } from '@/components/ui/Select';
+import { RichSelect } from '@/components/ui/RichSelect';
 import { hasRole } from '@/lib/roles';
 import SetupWizard from '@/components/SetupWizard';
 
@@ -60,32 +60,27 @@ export default function NewUserPage() {
         }
     }, [currentUser]);
 
-    // Fetch Events when Org selected
+    // Unified Fetching for Org Structure (Events, Depts, Services)
     useEffect(() => {
-        if (formData.organization_id && ['EVENT_MANAGER', 'DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role)) {
-            eventsApi.getByOrg(formData.organization_id).then(setEvents).catch(console.error);
+        if (formData.organization_id) {
+            setIsLoading(true);
+            organizationsApi.getStructure(formData.organization_id)
+                .then(data => {
+                    setEvents(data.events || []);
+                    setDepts(data.departments || []);
+                    setServices(data.services || []);
+                })
+                .catch(err => {
+                    console.error('Failed to fetch org structure:', err);
+                    setError('Failed to load organization hierarchy');
+                })
+                .finally(() => setIsLoading(false));
         } else {
             setEvents([]);
-        }
-    }, [formData.organization_id, formData.role]);
-
-    // Fetch Departments when Event selected
-    useEffect(() => {
-        if (formData.event_id && ['DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role)) {
-            departmentsApi.getByEvent(formData.event_id).then(setDepts).catch(console.error);
-        } else {
             setDepts([]);
-        }
-    }, [formData.event_id, formData.role]);
-
-    // Fetch Services when Dept selected
-    useEffect(() => {
-        if (formData.dept_id && ['SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role)) {
-            servicesApi.getByDept(formData.dept_id).then(setServices).catch(console.error);
-        } else {
             setServices([]);
         }
-    }, [formData.dept_id, formData.role]);
+    }, [formData.organization_id]);
 
 
     // --- Role Visibility Logic ---
@@ -235,7 +230,7 @@ export default function NewUserPage() {
                 {/* Org Selection (Only for Super Admins) */}
                 {currentUser?.is_super_admin && (
                     <div>
-                        <label className="label-compact">Organization</label>
+
                         {orgs.length === 0 ? (
                             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 flex flex-col gap-3">
                                 <div className="flex items-center gap-2 text-yellow-600">
@@ -254,18 +249,22 @@ export default function NewUserPage() {
                                 </button>
                             </div>
                         ) : (
-                            <div className="flex gap-2">
-                                <select
-                                    className="input-compact"
-                                    value={formData.organization_id}
-                                    onChange={(e) => setFormData({ ...formData, organization_id: e.target.value, event_id: '', dept_id: '', service_id: '' })}
-                                >
-                                    <option value="">Select Organization</option>
-                                    {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                                </select>
+                            <div className="flex gap-2 w-full">
+                                <div className="flex-1">
+                                    <RichSelect
+                                        label="Organization"
+                                        value={formData.organization_id}
+                                        onChange={(val) => setFormData({ ...formData, organization_id: val, event_id: '', dept_id: '', service_id: '' })}
+                                        options={[
+                                            { value: '', label: 'Select Organization', icon: Building2 },
+                                            ...orgs.map(org => ({ value: org.id, label: org.name, image: org.logo_url }))
+                                        ]}
+                                        icon={Building2}
+                                    />
+                                </div>
                                 <button
                                     onClick={() => router.push('/admin/organizations/new')}
-                                    className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg"
+                                    className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg mt-6 h-[42px]"
                                     title="Create New Organization"
                                 >
                                     +
@@ -278,20 +277,24 @@ export default function NewUserPage() {
                 {/* Event Selection */}
                 {['EVENT_MANAGER', 'DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
                     <div>
-                        <label className="label-compact">Event</label>
+
                         <div className="flex gap-2">
-                            <select
-                                className="input-compact disabled:opacity-50"
-                                value={formData.event_id}
-                                disabled={!formData.organization_id}
-                                onChange={(e) => setFormData({ ...formData, event_id: e.target.value, dept_id: '', service_id: '' })}
-                            >
-                                <option value="">Select Event</option>
-                                {events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                            </select>
+                            <div className="flex-1">
+                                <RichSelect
+                                    value={formData.event_id}
+                                    onChange={(val) => setFormData({ ...formData, event_id: val, dept_id: '', service_id: '' })}
+                                    options={[
+                                        { value: '', label: 'Select Event', icon: Calendar },
+                                        ...events.map(e => ({ value: e.id, label: e.name, image: e.image_url }))
+                                    ]}
+                                    icon={Calendar}
+                                // disabled={!formData.organization_id} // RichSelect needs disabled prop support if we want to disable it. 
+                                // For now, if no org, events list is empty, so it acts disabled effectively or just empty.
+                                />
+                            </div>
                             <button
                                 onClick={() => router.push('/events/new')}
-                                className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg"
+                                className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]"
                                 title="Create New Event"
                             >
                                 +
@@ -303,18 +306,22 @@ export default function NewUserPage() {
                 {/* Department Selection */}
                 {['DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
                     <div>
-                        <label className="label-compact">Department</label>
+
                         <div className="flex gap-2">
-                            <select
-                                className="w-full bg-background border border-border rounded-lg p-3 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none disabled:opacity-50"
-                                value={formData.dept_id}
-                                disabled={!formData.event_id}
-                                onChange={(e) => setFormData({ ...formData, dept_id: e.target.value, service_id: '' })}
-                            >
-                                <option value="">Select Department</option>
-                                {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
-                            <button className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg" title="Create New Department">+</button>
+                            <div className="flex-1">
+                                <RichSelect
+                                    value={formData.dept_id}
+                                    onChange={(val) => setFormData({ ...formData, dept_id: val, service_id: '' })}
+                                    options={[
+                                        { value: '', label: 'Select Department', icon: Users },
+                                        ...depts
+                                            .filter(d => !formData.event_id || d.event_id === formData.event_id)
+                                            .map(d => ({ value: d.id, label: d.name }))
+                                    ]}
+                                    icon={Users}
+                                />
+                            </div>
+                            <button className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]" title="Create New Department">+</button>
                         </div>
                     </div>
                 )}
@@ -322,18 +329,22 @@ export default function NewUserPage() {
                 {/* Service Selection */}
                 {['SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
                     <div>
-                        <label className="label-compact">Service Unit</label>
+
                         <div className="flex gap-2">
-                            <select
-                                className="w-full bg-background border border-border rounded-lg p-3 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none disabled:opacity-50"
-                                value={formData.service_id}
-                                disabled={!formData.dept_id}
-                                onChange={(e) => setFormData({ ...formData, service_id: e.target.value })}
-                            >
-                                <option value="">Select Service Unit</option>
-                                {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.definition_name})</option>)}
-                            </select>
-                            <button className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg" title="Create New Service">+</button>
+                            <div className="flex-1">
+                                <RichSelect
+                                    value={formData.service_id}
+                                    onChange={(val) => setFormData({ ...formData, service_id: val })}
+                                    options={[
+                                        { value: '', label: 'Select Service Unit', icon: Activity },
+                                        ...services
+                                            .filter(s => !formData.dept_id || s.department_id === formData.dept_id)
+                                            .map(s => ({ value: s.id, label: `${s.name} (${s.definition_name})` }))
+                                    ]}
+                                    icon={Activity}
+                                />
+                            </div>
+                            <button className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]" title="Create New Service">+</button>
                         </div>
                     </div>
                 )}
@@ -418,7 +429,7 @@ export default function NewUserPage() {
 
             // Redirect based on role? Or just standard users page?
             // "it showld be that current user link" -> Likely /users
-            router.push(currentUser?.is_super_admin ? '/admin/users' : '/users');
+            router.push('/users');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to create user');
         } finally {
@@ -445,7 +456,7 @@ export default function NewUserPage() {
                 title="Create New User"
                 description="Configure access levels and assign operational contexts."
                 breadcrumbs={[
-                    { label: 'Back to Users', href: '/admin/users' },
+                    { label: 'Back to Users', href: '/users' },
                     { label: 'Create User', href: '#' }
                 ]}
                 steps={STEPS}

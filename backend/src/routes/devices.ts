@@ -11,26 +11,33 @@ router.use(authenticateToken);
 
 // ============================================
 // GET /api/v1/devices
-// Fetch devices for the current User's Organization
+// Fetch devices for the User's Organization (or ALL for Super Admin)
 // ============================================
 router.get('/', async (req: Request, res: Response) => {
     try {
         const orgId = req.user?.organization_id;
+        const params: any[] = [];
 
-        const sql = `
+        let sql = `
             SELECT 
                 d.id, d.device_code, d.name, d.type, d.status, 
                 d.last_seen, d.metadata, d.created_at,
                 s.name as service_name,
                 dept.name as dept_name
             FROM sps_devices d
-            LEFT JOIN sps_services s ON d.service_id = s.id
-            LEFT JOIN sps_departments dept ON s.department_id = dept.id
-            WHERE d.organization_id = $1
-            ORDER BY d.created_at DESC
+            LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+            LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+            LEFT JOIN sps_departments dept ON ds.department_id = dept.id
         `;
 
-        const result = await query(sql, [orgId]);
+        if (orgId) {
+            sql += ` WHERE d.organization_id = $1`;
+            params.push(orgId);
+        }
+
+        sql += ` ORDER BY d.created_at DESC`;
+
+        const result = await query(sql, params);
         res.json({
             success: true,
             count: result.rowCount,
@@ -43,26 +50,92 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // ============================================
+// GET /api/v1/devices/:id
+// Fetch single device details
+// ============================================
+router.get('/:id', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const orgId = req.user?.organization_id;
+
+        let sql = `
+            SELECT 
+                d.*,
+                s.name as service_name,
+                dept.name as dept_name
+            FROM sps_devices d
+            LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+            LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+            LEFT JOIN sps_departments dept ON ds.department_id = dept.id
+            WHERE d.id = $1
+        `;
+
+        const params: any[] = [id];
+
+        if (orgId) {
+            sql += ` AND d.organization_id = $2`;
+            params.push(orgId);
+        }
+
+        const result = await query(sql, params);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Device not found' });
+        }
+
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error fetching device:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch device' });
+    }
+});
+
+// ============================================
 // POST /api/v1/devices (Manual Creation)
 // Requires ORG_ADMIN or TECHNICIAN
 // ============================================
 router.post('/', requireRole('TECHNICIAN'), async (req: Request, res: Response) => {
     try {
         const { name, type, service_id, device_code } = req.body;
-        const orgId = req.user?.organization_id;
+        let orgId = req.user?.organization_id;
 
-        // Basic validation
+        // Validation
         if (!device_code) return res.status(400).json({ error: 'Device Code is required' });
+
+        // If Super Admin (no orgId) and service_id is present, fetch Org ID from Service->Dept->Event->Org
+        if (!orgId && service_id) {
+            const orgResult = await query(`
+                SELECT e.organization_id 
+                FROM sps_department_services ds
+                JOIN sps_departments d ON ds.department_id = d.id
+                JOIN sps_events e ON d.event_id = e.id
+                WHERE ds.id = $1
+            `, [service_id]);
+
+            if (orgResult.rows.length > 0) {
+                orgId = orgResult.rows[0].organization_id;
+            } else {
+                return res.status(400).json({ error: 'Invalid service_id or Organization context missing' });
+            }
+        }
+
+        if (!orgId) return res.status(400).json({ error: 'Organization ID is required' });
+
+        // Generate API Key
+        const apiKey = require('crypto').randomBytes(32).toString('hex');
 
         const sql = `
             INSERT INTO sps_devices (
-                organization_id, service_id, device_code, name, type, status
+                organization_id, service_id, device_code, api_key, name, type, status
             )
-            VALUES ($1, $2, $3, $4, $5, 'OFFLINE')
+            VALUES ($1, $2, $3, $4, $5, $6, 'OFFLINE')
             RETURNING *
         `;
 
-        const result = await query(sql, [orgId, service_id, device_code, name, type]);
+        const result = await query(sql, [orgId, service_id, device_code, apiKey, name, type]);
         res.status(201).json({ success: true, data: result.rows[0] });
 
     } catch (error) {
@@ -73,7 +146,7 @@ router.post('/', requireRole('TECHNICIAN'), async (req: Request, res: Response) 
 
 // ============================================
 // POST /api/v1/devices/provision
-// Provisioning Logic (Simplified for brevity)
+// Provisioning Logic
 // ============================================
 router.post('/provision', async (req: Request, res: Response) => {
     try {
@@ -82,10 +155,6 @@ router.post('/provision', async (req: Request, res: Response) => {
 
         if (!serial_number) return res.status(400).json({ error: 'Serial Number required' });
 
-        // 1. Check uniqueness in Org? Or Globally? Serial is usually global unique.
-        // sps_devices.serial_unique constraint?
-
-        // For now, simple insert
         const deviceCode = `SPS-${Date.now().toString().slice(-6)}`;
         const apiKey = require('crypto').randomBytes(32).toString('hex');
 

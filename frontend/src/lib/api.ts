@@ -130,6 +130,14 @@ export const usersApi = {
         return response.data;
     },
 
+    getManagerCandidates: async (organizationId?: string) => {
+        const url = organizationId
+            ? `/users/managers/candidates?organization_id=${organizationId}`
+            : '/users/managers/candidates';
+        const response = await apiClient.get(url);
+        return response.data;
+    },
+
     getById: async (id: string) => {
         const response = await apiClient.get(`/users/${id}`);
         return response.data;
@@ -223,6 +231,98 @@ export const devicesApi = {
     delete: async (id: string) => {
         const response = await apiClient.delete(`/devices/${id}`);
         return response.data;
+    },
+};
+
+// Department Templates API functions
+export const departmentTemplatesApi = {
+    getAll: async (organizationId?: string) => {
+        const url = organizationId
+            ? `/department-templates?organization_id=${organizationId}`
+            : '/department-templates';
+        const response = await apiClient.get(url);
+        return response.data;
+    },
+
+    getById: async (id: string) => {
+        const response = await apiClient.get(`/department-templates/${id}`);
+        return response.data;
+    },
+
+    create: async (data: any) => {
+        const response = await apiClient.post('/department-templates', data);
+        return response.data;
+    },
+
+    update: async (id: string, data: any) => {
+        const response = await apiClient.put(`/department-templates/${id}`, data);
+        return response.data;
+    },
+
+    delete: async (id: string) => {
+        const response = await apiClient.delete(`/department-templates/${id}`);
+        return response.data;
+    },
+};
+
+// Departments API functions (Instances)
+export const departmentsApi = {
+    getByEvent: async (eventId: string) => {
+        const response = await apiClient.get(`/departments/by-event/${eventId}`);
+        return response.data;
+    },
+
+    getById: async (id: string) => {
+        const response = await apiClient.get(`/departments/${id}`);
+        return response.data;
+    },
+
+    create: async (data: any) => {
+        const response = await apiClient.post('/departments', data);
+        return response.data;
+    },
+
+    addService: async (departmentId: string, serviceId: string, config?: any) => {
+        const response = await apiClient.post(`/departments/${departmentId}/services`, {
+            service_id: serviceId,
+            config: config || {}
+        });
+        return response.data;
+    },
+
+    removeService: async (departmentId: string, serviceId: string) => {
+        const response = await apiClient.delete(`/departments/${departmentId}/services/${serviceId}`);
+        return response.data;
+    },
+
+    getServices: async (departmentId: string) => {
+        const response = await apiClient.get(`/departments/${departmentId}/services`);
+        return response.data;
+    }
+};
+
+export const departmentServicesApi = {
+    getById: async (id: string) => {
+        const response = await apiClient.get(`/department-services/${id}`);
+        return response.data;
+    },
+
+    getDevices: async (id: string) => {
+        const response = await apiClient.get(`/department-services/${id}/devices`);
+        return response.data;
+    },
+
+    addDevice: async (serviceId: string, deviceId: number, role?: string) => {
+        const response = await apiClient.post(`/department-services/${serviceId}/devices`, {
+            device_id: deviceId,
+            role: role || 'primary'
+        });
+        return response.data;
+    },
+
+    removeDevice: async (serviceId: string, deviceId: number) => {
+        const response = await apiClient.delete(`/department-services/${serviceId}/devices/${deviceId}`);
+        return response.data;
     }
 };
 
@@ -237,6 +337,10 @@ export const organizationsApi = {
     },
     getOne: async (id: string) => {
         const response = await apiClient.get(`/organizations/${id}`);
+        return response.data;
+    },
+    getStructure: async (id: string) => {
+        const response = await apiClient.get(`/organizations/${id}/structure`);
         return response.data;
     },
     create: async (data: any) => {
@@ -294,28 +398,32 @@ export const eventsApi = {
     }
 };
 
-export const departmentsApi = {
-    getByEvent: async (eventId: string) => {
-        const response = await apiClient.get(`/departments/by-event/${eventId}`);
-        return response.data;
-    },
-    create: async (data: any) => {
-        const response = await apiClient.post('/departments', data);
-        return response.data;
-    }
-};
+
 
 export const servicesApi = {
-    getDefinitions: async () => {
-        const response = await apiClient.get('/services/definitions');
+    getAll: async (scope?: string) => {
+        const response = await apiClient.get('/services', { params: { scope } });
         return response.data;
     },
-    getByDept: async (deptId: string) => {
-        const response = await apiClient.get(`/services/by-dept/${deptId}`);
+    getById: async (id: string) => {
+        console.log('API Requesting Service ID:', id);
+        const response = await apiClient.get(`/services/${id}`);
         return response.data;
     },
     create: async (data: any) => {
         const response = await apiClient.post('/services', data);
+        return response.data;
+    },
+    update: async (id: string, data: any) => {
+        const response = await apiClient.put(`/services/${id}`, data);
+        return response.data;
+    },
+    delete: async (id: string) => {
+        const response = await apiClient.delete(`/services/${id}`);
+        return response.data;
+    },
+    assign: async (id: string, data: any) => {
+        const response = await apiClient.post(`/services/${id}/assign`, data);
         return response.data;
     }
 };
@@ -344,6 +452,17 @@ export const rbacApi = {
     },
     updateMapping: async (role: string, permissions: string[]) => {
         const response = await apiClient.post('/rbac/mappings', { role, permissions });
+        return response.data;
+    }
+};
+
+export const telemetryApi = {
+    getDashboardStats: async () => {
+        const response = await apiClient.get('/telemetry/stats/dashboard');
+        return response.data;
+    },
+    getSystemStats: async () => {
+        const response = await apiClient.get('/telemetry/stats/system');
         return response.data;
     }
 };

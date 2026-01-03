@@ -98,6 +98,76 @@
   /* emerald-900 */
   --secondary-foreground: #ecfdf5;
 
+  /* ==================== Toast Notifications ==================== */
+  [data-sonner-toaster] {
+    font-family: var(--font-inter), system-ui, sans-serif !important;
+  }
+
+  [data-sonner-toast] {
+    background: hsl(var(--card)) !important;
+    border: 1px solid hsl(var(--border)) !important;
+    color: hsl(var(--foreground)) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    border-radius: 0.75rem !important;
+    padding: 1rem !important;
+  }
+
+  [data-sonner-toast][data-type="success"] {
+    border-color: hsl(var(--primary)) !important;
+    background: hsl(var(--card)) !important;
+  }
+
+  [data-sonner-toast][data-type="error"] {
+    border-color: hsl(var(--destructive)) !important;
+    background: hsl(var(--card)) !important;
+  }
+
+  [data-sonner-toast][data-type="warning"] {
+    border-color: hsl(43 96% 56%) !important;
+    background: hsl(var(--card)) !important;
+  }
+
+  [data-sonner-toast][data-type="info"] {
+    border-color: hsl(221 83% 53%) !important;
+    background: hsl(var(--card)) !important;
+  }
+
+  /* Toast title */
+  [data-sonner-toast] [data-title] {
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* Toast description */
+  [data-sonner-toast] [data-description] {
+    font-size: 0.8125rem !important;
+    color: hsl(var(--muted-foreground)) !important;
+    margin-top: 0.25rem !important;
+  }
+
+  /* Toast icons */
+  [data-sonner-toast] [data-icon] {
+    margin-right: 0.75rem !important;
+  }
+
+  /* Close button */
+  [data-sonner-toast] [data-close-button] {
+    background: hsl(var(--muted)) !important;
+    border: 1px solid hsl(var(--border)) !important;
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  [data-sonner-toast] [data-close-button]:hover {
+    background: hsl(var(--accent)) !important;
+    color: hsl(var(--accent-foreground)) !important;
+  }
+
+  /* Dark mode adjustments */
+  .dark [data-sonner-toast] {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  }
+
   --muted: #064e3b;
   /* emerald-900 */
   --muted-foreground: #6ee7b7;
@@ -495,4 +565,25 @@ body,
 .tab-compact-active {
   border-color: var(--primary);
   color: var(--primary);
+}
+
+/* Bubble animation for tank gauge */
+@keyframes bubble {
+  0% {
+    bottom: 0;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    bottom: 100%;
+    opacity: 0;
+  }
 }

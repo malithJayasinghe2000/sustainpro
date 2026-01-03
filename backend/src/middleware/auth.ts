@@ -25,7 +25,13 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
         return res.status(401).json({ error: 'Access token required' });
     }
 
-    const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
+    // SECURITY: No fallback - JWT_SECRET must be set in environment
+    const jwtSecret = process.env.JWT_SECRET;
+
+    if (!jwtSecret) {
+        console.error('FATAL: JWT_SECRET environment variable is not set');
+        return res.status(500).json({ error: 'Server configuration error' });
+    }
 
     jwt.verify(token, jwtSecret, (err, decoded) => {
         if (err) {

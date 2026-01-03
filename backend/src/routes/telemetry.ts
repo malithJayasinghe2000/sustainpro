@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../db';
 import { authenticateDevice } from '../middleware/deviceAuth';
+import { authenticateToken } from '../middleware/auth';
 import { getIO } from '../socket';
 
 const router = Router();
@@ -154,14 +155,26 @@ router.get('/live/:device_code', async (req: Request, res: Response) => {
 // ============================================
 // GET /api/v1/telemetry/stats - Dashboard Statistics
 // ============================================
-router.get('/stats/dashboard', async (req: Request, res: Response) => {
+router.get('/stats/dashboard', authenticateToken, async (req: Request, res: Response) => {
     try {
-        // Get all devices from database
-        const devicesResult = await query(`
-            SELECT id, device_code, name, status, type, last_seen
+        const orgId = (req.user as any)?.organization_id;
+        const isSuperAdmin = (req.user as any)?.is_super_admin;
+
+        // Get all devices from database, filtered by organization if not super admin
+        let devicesQuery = `
+            SELECT id, device_code, name, status, type, last_seen, organization_id
             FROM sps_devices
-            ORDER BY last_seen DESC NULLS LAST
-        `);
+        `;
+        const params: any[] = [];
+
+        if (!isSuperAdmin && orgId) {
+            devicesQuery += ` WHERE organization_id = $1`;
+            params.push(orgId);
+        }
+
+        devicesQuery += ` ORDER BY last_seen DESC NULLS LAST`;
+
+        const devicesResult = await query(devicesQuery, params);
 
         const devices = devicesResult.rows;
         const totalDevices = devices.length;
@@ -218,6 +231,64 @@ router.get('/stats/dashboard', async (req: Request, res: Response) => {
         res.status(500).json({
             success: false,
             error: 'Failed to fetch dashboard stats'
+        });
+    }
+});
+
+// ============================================
+// GET /api/v1/telemetry/stats/system - System-Wide Statistics (Super Admin Only)
+// ============================================
+router.get('/stats/system', authenticateToken, async (req: Request, res: Response) => {
+    try {
+        // Debug logging
+        console.log('🔐 /stats/system - User data:', {
+            hasUser: !!req.user,
+            isSuperAdmin: (req.user as any)?.isSuperAdmin,
+            userId: (req.user as any)?.id,
+            email: (req.user as any)?.email
+        });
+
+        const isSuperAdmin = (req.user as any)?.isSuperAdmin;
+
+        // Only Super Admins can access system-wide stats
+        if (!isSuperAdmin) {
+            console.log('❌ Access denied - user is not super admin');
+            return res.status(403).json({
+                success: false,
+                error: 'Unauthorized: Super Admin access required'
+            });
+        }
+
+        // Get total organizations count
+        const orgsResult = await query('SELECT COUNT(*) as total FROM sps_organizations');
+        const totalOrganizations = parseInt(orgsResult.rows[0]?.total || '0');
+
+        // Get total events count across all organizations
+        const eventsResult = await query('SELECT COUNT(*) as total FROM sps_events');
+        const totalEvents = parseInt(eventsResult.rows[0]?.total || '0');
+
+        // Get total users count across all organizations
+        const usersResult = await query('SELECT COUNT(*) as total FROM sps_users');
+        const totalUsers = parseInt(usersResult.rows[0]?.total || '0');
+
+        // Get total devices count
+        const devicesResult = await query('SELECT COUNT(*) as total FROM sps_devices');
+        const totalDevices = parseInt(devicesResult.rows[0]?.total || '0');
+
+        res.json({
+            success: true,
+            stats: {
+                total_organizations: totalOrganizations,
+                total_events: totalEvents,
+                total_users: totalUsers,
+                total_devices: totalDevices
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching system stats:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch system stats'
         });
     }
 });
@@ -280,8 +351,17 @@ router.get('/:device_id/hourly', async (req: Request, res: Response) => {
         const { device_id } = req.params;
         const { hours = '24' } = req.query;
 
-        // TODO: Add your TimescaleDB query here
-        // Use time_bucket for aggregation
+        // SECURITY: Validate hours parameter to prevent SQL injection
+        const hoursNum = parseInt(hours as string, 10);
+
+        if (isNaN(hoursNum) || hoursNum < 1 || hoursNum > 168) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid hours parameter. Must be between 1 and 168 (1 week)'
+            });
+        }
+
+        // SECURITY: Use parameterized query with validated numeric value
         const sql = `
         SELECT
         time_bucket('1 hour', timestamp) AS hour,
@@ -290,17 +370,18 @@ router.get('/:device_id/hourly', async (req: Request, res: Response) => {
             MAX(timestamp) as last_reading
       FROM sps_telemetry
       WHERE device_id = $1
-        AND timestamp > NOW() - INTERVAL '${hours} hours'
+        AND timestamp > NOW() - INTERVAL '1 hour' * $2
       GROUP BY hour
       ORDER BY hour DESC
             `;
 
-        const result = await query(sql, [device_id]);
+        const result = await query(sql, [device_id, hoursNum]);
 
         res.json({
             success: true,
             device_id: parseInt(device_id),
             interval: '1 hour',
+            hours: hoursNum,
             count: result.rowCount,
             data: result.rows
         });

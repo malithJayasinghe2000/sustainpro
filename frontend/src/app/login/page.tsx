@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Sun, Moon } from 'lucide-react';
-import { isAdmin } from '@/lib/roles';
+import { isAdmin, hasRole, ROLES } from '@/lib/roles';
 import toast, { Toaster, Toast } from 'react-hot-toast';
 
 
@@ -25,10 +25,21 @@ export default function LoginPage() {
     const [countdown, setCountdown] = useState(0);
 
     // Redirect if already authenticated
-    // Redirect if already authenticated
     useEffect(() => {
         if (!isLoading && isAuthenticated && user) {
-            router.push(user.is_super_admin ? '/admin/dashboard' : '/dashboard');
+            if (user.is_super_admin) {
+                router.push('/admin/dashboard');
+            } else if (hasRole(user, ROLES.EVENT_MANAGER)) {
+                // Find the event ID this user is assigned to
+                const eventRole = user?.roles?.find((r: any) => r.role === ROLES.EVENT_MANAGER && r.event_id);
+                if (eventRole?.event_id) {
+                    router.push(`/events/${eventRole.event_id}`);
+                } else {
+                    router.push('/events'); // Fallback if no specific event found (unlikely)
+                }
+            } else {
+                router.push('/dashboard');
+            }
         }
     }, [isAuthenticated, isLoading, router, user]);
 
@@ -164,10 +175,10 @@ export default function LoginPage() {
                             <h1 className="text-3xl font-bold text-primary">SustainPro</h1>
                         )}
                     </div>
-                    <h2 className="text-2xl font-normal text-card-foreground">
+                    <h2 className="text-xl font-bold text-card-foreground">
                         IoT Cloud Platform
                     </h2>
-                    <p className="mt-2 text-sm text-muted-foreground">
+                    <p className="mt-0.5 text-sm text-muted-foreground">
                         Sign in to your account
                     </p>
                 </div>

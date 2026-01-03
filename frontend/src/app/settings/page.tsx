@@ -5,6 +5,7 @@ import {
     Shield, Save, AlertTriangle, Mail, Globe, Clock, Lock, Key,
     RefreshCw, User, Image as ImageIcon, Terminal, Server, Settings
 } from 'lucide-react';
+import { RichSelect } from '@/components/ui/RichSelect';
 import { getAllTimezones } from '@/lib/timezone';
 import DashboardLayout from '@/components/DashboardLayout';
 import { settingsApi, SystemSettings, authApi } from '@/lib/api';
@@ -410,16 +411,14 @@ export default function SettingsPage() {
                                                     </div>
                                                     <div className="flex justify-between items-center text-sm">
                                                         <span className="text-muted-foreground">Timezone</span>
-                                                        <select
-                                                            value={selectedTimezone}
-                                                            onChange={(e) => setSelectedTimezone(e.target.value)}
-                                                            className="bg-transparent border-none text-right font-medium text-primary focus:ring-0 cursor-pointer max-w-[200px]"
-                                                            style={{ backgroundImage: 'none' }}
-                                                        >
-                                                            {getAllTimezones().map(tz => (
-                                                                <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
-                                                            ))}
-                                                        </select>
+                                                        <div className="w-[300px]">
+                                                            <RichSelect
+                                                                value={selectedTimezone}
+                                                                onChange={setSelectedTimezone}
+                                                                options={getAllTimezones().map(tz => ({ value: tz, label: tz.replace(/_/g, ' '), icon: Clock }))}
+                                                                className="h-9"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>

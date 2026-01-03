@@ -1,5 +1,5 @@
-
 import { LucideIcon } from 'lucide-react';
+import Link from 'next/link';
 
 interface StatsCardProps {
     title: string;
@@ -8,6 +8,7 @@ interface StatsCardProps {
     icon: LucideIcon;
     intent?: 'default' | 'primary' | 'success' | 'warning' | 'danger';
     className?: string;
+    href?: string;
 }
 
 export default function StatsCard({
@@ -16,7 +17,8 @@ export default function StatsCard({
     subtext,
     icon: Icon,
     intent = 'primary',
-    className = ''
+    className = '',
+    href
 }: StatsCardProps) {
     const iconColorMap = {
         default: 'bg-muted text-muted-foreground',
@@ -26,8 +28,8 @@ export default function StatsCard({
         danger: 'bg-red-500 text-white'
     };
 
-    return (
-        <div className={`bg-card border border-border rounded-lg px-3 py-4 transition-colors ${className}`}>
+    const CardContent = (
+        <div className={`bg-card border border-border rounded-lg px-3 py-4 transition-all ${href ? 'hover:shadow-md hover:border-primary/30 cursor-pointer' : ''} ${className}`}>
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                     <p className="text-sm font-medium text-foreground">
@@ -44,4 +46,10 @@ export default function StatsCard({
             </div>
         </div>
     );
+
+    if (href) {
+        return <Link href={href}>{CardContent}</Link>;
+    }
+
+    return CardContent;
 }
