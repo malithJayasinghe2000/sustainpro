@@ -31,7 +31,7 @@ import {
     Calendar
 } from 'lucide-react';
 import { getSocket } from '@/lib/socket';
-import { telemetryApi } from '@/lib/api';
+import { telemetryApi, adminApi } from '@/lib/api';
 
 interface DashboardStats {
     total_devices: number;
@@ -79,6 +79,7 @@ export default function AdminDashboardPage() {
     const { user, isLoading: authLoading } = useAuth();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+    const [serverStats, setServerStats] = useState<any | null>(null);
     const [recentDevices, setRecentDevices] = useState<RecentDevice[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -165,12 +166,14 @@ export default function AdminDashboardPage() {
                             return result.stats;
                         });
                     }
+
+                    // Polling logic removed as moved to Navbar
                 } catch (error) {
                     console.error('Error polling stats:', error);
                 }
             };
 
-            const statsInterval = setInterval(pollStats, 3000);
+            const statsInterval = setInterval(pollStats, 5000);
 
             return () => {
                 socket.off('dashboard:telemetry', handleTelemetry);
@@ -224,6 +227,8 @@ export default function AdminDashboardPage() {
             if (systemResult.success) {
                 setSystemStats(systemResult.stats);
             }
+
+            // Server Health logic moved to Global Navbar
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
         } finally {
@@ -266,6 +271,8 @@ export default function AdminDashboardPage() {
                     <>
                         {/* Stats Cards */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* Server Health (New) */}
+                            {/* Server Health moved to Navbar */}
                             <StatsCard
                                 title="Total Organizations"
                                 value={systemStats?.total_organizations || 0}

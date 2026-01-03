@@ -466,3 +466,10 @@ export const telemetryApi = {
         return response.data;
     }
 };
+
+export const adminApi = {
+    getSystemHealth: async () => {
+        const response = await apiClient.get('/admin/system-health');
+        return response.data;
+    }
+};

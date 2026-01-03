@@ -12,7 +12,7 @@ router.use(authenticateToken);
 
 // Create a new Service Template
 router.post('/', requireSuperAdmin, async (req: Request, res: Response) => {
-    const { name, description, scope, config, is_public_dashboard_supported, device_models, dashboard_template } = req.body;
+    const { name, description, scope, config, is_public_dashboard_supported, device_models, dashboard_template, main_dashboard_layout, public_dashboard_layout } = req.body;
     console.log('🔥 CREATE SERVICE REQUEST RECEIVED:', { name, scope, device_models_count: device_models?.length });
     const client = await pool.connect();
 
@@ -23,10 +23,10 @@ router.post('/', requireSuperAdmin, async (req: Request, res: Response) => {
         console.log('DEBUG: Inserting into sps_service_templates...');
         const serviceRes = await client.query(
             `INSERT INTO sps_service_templates 
-            (name, description, scope, config, is_public_dashboard_supported, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            (name, description, scope, config, is_public_dashboard_supported, created_by, main_dashboard_layout, public_dashboard_layout)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id`,
-            [name, description, scope, config || {}, is_public_dashboard_supported || false, (req.user as any).id]
+            [name, description, scope, config || {}, is_public_dashboard_supported || false, (req.user as any).id, main_dashboard_layout || [], public_dashboard_layout || []]
         );
         const serviceId = serviceRes.rows[0].id;
 
@@ -123,7 +123,7 @@ router.get('/:id', requireSuperAdmin, async (req: Request, res: Response) => {
 // Update Service Template
 router.put('/:id', requireSuperAdmin, async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, description, scope, config, dashboard_template } = req.body;
+    const { name, description, scope, config, is_public_dashboard_supported, dashboard_template, main_dashboard_layout, public_dashboard_layout } = req.body;
 
     const client = await pool.connect();
 
@@ -132,14 +132,17 @@ router.put('/:id', requireSuperAdmin, async (req: Request, res: Response) => {
 
         // 1. Update Service Template
         await client.query(
-            `UPDATE sps_service_templates 
-            SET name = COALESCE($1, name), 
-                description = COALESCE($2, description),
-                scope = COALESCE($3, scope),
-                config = COALESCE($4, config),
-                updated_at = NOW()
-            WHERE id = $5`,
-            [name, description, scope, config, id]
+            `UPDATE sps_service_templates SET
+            name = COALESCE($1, name),
+            description = COALESCE($2, description),
+            scope = COALESCE($3, scope),
+            config = COALESCE($4, config),
+            is_public_dashboard_supported = COALESCE($5, is_public_dashboard_supported),
+            main_dashboard_layout = COALESCE($7, main_dashboard_layout),
+            public_dashboard_layout = COALESCE($8, public_dashboard_layout),
+            updated_at = NOW()
+            WHERE id = $6`,
+            [name, description, scope, config, is_public_dashboard_supported, id, main_dashboard_layout, public_dashboard_layout]
         );
 
         // 2. Update Dashboard Template if provided

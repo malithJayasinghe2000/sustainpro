@@ -113,30 +113,63 @@ import path from 'path';
 import uploadRoutes from './routes/upload';
 import imagesRoutes from './routes/images';
 import rbacRoutes from './routes/rbac';
+import adminRoutes from './routes/admin'; // New Admin Routes
 import departmentTemplatesRoutes from './routes/department-templates';
+// import deviceProvisioningRoutes from './routes/device-provisioning';
+import awsIotWebhookRoutes from './routes/aws-iot-webhook';
 
 // ...
 
-// Register API routes
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/devices', deviceRoutes);
-app.use('/api/v1/device-models', deviceModelRoutes);
-app.use('/api/v1/telemetry', telemetryRoutes);
-app.use('/api/v1/settings', settingsRoutes);
-app.use('/api/v1/organizations', organizationRoutes);
-app.use('/api/v1/events', eventRoutes);
-app.use('/api/v1/departments', departmentRoutes);
-app.use('/api/v1/department-services', departmentServicesRoutes);
-app.use('/api/v1/services', serviceRoutes);
-app.use('/api/v1/department-templates', departmentTemplatesRoutes);
-app.use('/api/v1/upload', uploadRoutes);
-app.use('/api/v1/images', imagesRoutes);
-app.use('/api/v1/rbac', rbacRoutes);
+// ==========================================
+// ROUTE REGISTRATION BASED ON SERVICE ROLE
+// ==========================================
+const SERVICE_ROLE = process.env.SERVICE_ROLE || 'ALL'; // Default to ALL for dev mode
+
+console.log(`🚀 Starting Service: ${SERVICE_ROLE}`);
+
+// --- IOT WORKER (Priority 2) ---
+if (SERVICE_ROLE === 'IOT' || SERVICE_ROLE === 'ALL') {
+    console.log('✅ Mounting IoT Routes');
+    // Minimal Middleware for high performance
+    app.use('/api/v1/aws-iot', awsIotWebhookRoutes);
+    // Telemetry might be shared or strictly IoT. For now, we allow IOT worker to ingest.
+    // If telemetry.ts handles POST ingestion, we include it.
+    app.use('/api/v1/telemetry', telemetryRoutes);
+}
+
+// --- CORE & MOBILE APIs (Priority 1 & 3) ---
+// Currently they share most logic, but are separated for traffic isolation.
+if (SERVICE_ROLE === 'CORE' || SERVICE_ROLE === 'MOBILE' || SERVICE_ROLE === 'ALL') {
+    console.log('✅ Mounting Core & Mobile Routes');
+
+    app.use('/api/v1/auth', authRoutes);
+    app.use('/api/v1/users', userRoutes);
+    app.use('/api/v1/devices', deviceRoutes);
+    app.use('/api/v1/device-models', deviceModelRoutes);
+    app.use('/api/v1/settings', settingsRoutes);
+    app.use('/api/v1/organizations', organizationRoutes);
+    app.use('/api/v1/events', eventRoutes);
+    app.use('/api/v1/departments', departmentRoutes);
+    app.use('/api/v1/department-services', departmentServicesRoutes);
+    app.use('/api/v1/services', serviceRoutes);
+    app.use('/api/v1/department-templates', departmentTemplatesRoutes);
+    app.use('/api/v1/upload', uploadRoutes);
+    app.use('/api/v1/images', imagesRoutes);
+    app.use('/api/v1/rbac', rbacRoutes);
+    app.use('/api/v1/admin', adminRoutes); // Super Admin System Stats
+
+    // Core also needs to VIEW telemetry (GET stats)
+    // If not ALREADY mounted by IOT (in case of ALL), mount telemetry for read access
+    // For 'ALL' case (Dev), we mounted it above.
+    // For 'CORE' case, we mount it here.
+    if (SERVICE_ROLE === 'CORE' || SERVICE_ROLE === 'MOBILE') {
+        app.use('/api/v1/telemetry', telemetryRoutes);
+    }
+}
 
 // 404 handler
 app.use((req: Request, res: Response) => {
-    res.status(404).json({ error: 'Route not found' });
+    res.status(404).json({ error: 'Route not found', service: SERVICE_ROLE });
 });
 
 // Error handling middleware

@@ -14,8 +14,14 @@ export default function ServiceDashboardPage() {
     const serviceId = params?.id as string;
 
     const [service, setService] = useState<any>(null);
+    const [activeTab, setActiveTab] = useState<'device' | 'main' | 'public'>('device');
     const [availableParameters, setAvailableParameters] = useState<any[]>([]);
-    const [dashboardTemplate, setDashboardTemplate] = useState<any>({ widgets: [] });
+
+    // Separate templates for each view
+    const [deviceTemplate, setDeviceTemplate] = useState<any>({ widgets: [] });
+    const [mainTemplate, setMainTemplate] = useState<any>({ widgets: [] });
+    const [publicTemplate, setPublicTemplate] = useState<any>({ widgets: [] });
+
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -58,12 +64,10 @@ export default function ServiceDashboardPage() {
             console.log('🔍 DEBUG: Final Parameters:', params);
             setAvailableParameters(params);
 
-            // Load existing dashboard template
-            if (currentService.dashboard_template && currentService.dashboard_template.widgets) {
-                setDashboardTemplate(currentService.dashboard_template);
-            } else {
-                setDashboardTemplate({ widgets: [] });
-            }
+            // Load dashboards
+            setDeviceTemplate(currentService.dashboard_template || { widgets: [] });
+            setMainTemplate(currentService.main_dashboard_layout || { widgets: [] });
+            setPublicTemplate(currentService.public_dashboard_layout || { widgets: [] });
         } catch (error) {
             console.error('Failed to load service:', error);
             toast.error('Failed to load service');
@@ -73,15 +77,23 @@ export default function ServiceDashboardPage() {
     };
 
     const handleSave = async (template: any) => {
-        console.log('Saving dashboard template...', template);
+        console.log(`Saving ${activeTab} dashboard template...`, template);
         setIsSaving(true);
         try {
-            const result = await servicesApi.update(serviceId, {
-                dashboard_template: template
-            });
+            const updatePayload: any = {};
+            if (activeTab === 'device') updatePayload.dashboard_template = template;
+            if (activeTab === 'main') updatePayload.main_dashboard_layout = template;
+            if (activeTab === 'public') updatePayload.public_dashboard_layout = template;
+
+            const result = await servicesApi.update(serviceId, updatePayload);
+
             console.log('Save result:', result);
-            setDashboardTemplate(template);
-            toast.success('Dashboard saved successfully!');
+
+            if (activeTab === 'device') setDeviceTemplate(template);
+            if (activeTab === 'main') setMainTemplate(template);
+            if (activeTab === 'public') setPublicTemplate(template);
+
+            toast.success(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Dashboard saved!`);
         } catch (error) {
             console.error('Save error details:', error);
             toast.error('Failed to save dashboard');
@@ -103,33 +115,58 @@ export default function ServiceDashboardPage() {
         );
     }
 
+    const getCurrentTemplate = () => {
+        if (activeTab === 'main') return mainTemplate;
+        if (activeTab === 'public') return publicTemplate;
+        return deviceTemplate;
+    };
+
     return (
         <DashboardLayout>
-            <div className="h-screen flex flex-col">
+            <div className="flex flex-col h-full overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-border bg-card">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => router.push('/admin/services')}
-                            className="p-2 hover:bg-muted rounded-lg transition-colors"
-                        >
+                <div className="flex items-center justify-between p-4 border-b bg-background z-10">
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => router.back()} className="p-2 hover:bg-muted rounded-full">
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                         <div>
-                            <h1 className="text-xl font-semibold">{service?.name} - Dashboard Builder</h1>
-                            <p className="text-sm text-muted-foreground">
-                                Design the dashboard template for this service
-                            </p>
+                            <h1 className="text-xl font-bold flex items-center gap-2">
+                                {service?.name || 'Loading...'}
+                                <span className="text-muted-foreground font-normal text-sm">/ Dashboard Builder</span>
+                            </h1>
+                            <div className="flex gap-2 mt-1">
+                                <button
+                                    onClick={() => setActiveTab('device')}
+                                    className={`text-xs px-3 py-1 rounded-full border ${activeTab === 'device' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted hover:bg-muted/80'}`}
+                                >
+                                    Device Detail
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('main')}
+                                    className={`text-xs px-3 py-1 rounded-full border ${activeTab === 'main' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted hover:bg-muted/80'}`}
+                                >
+                                    Main Service View
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('public')}
+                                    className={`text-xs px-3 py-1 rounded-full border ${activeTab === 'public' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted hover:bg-muted/80'}`}
+                                >
+                                    Public Widget
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Builder */}
-                <div className="flex-1 overflow-hidden">
+                {/* Builder Content - Key ensures re-mount on tab change to reset builder state */}
+                <div className="flex-1 overflow-hidden relative">
                     <DashboardBuilderDragDrop
+                        key={activeTab} // Force re-render on tab switch
                         availableParameters={availableParameters}
-                        initialTemplate={dashboardTemplate}
+                        initialTemplate={getCurrentTemplate()}
                         onSave={handleSave}
+                        onCancel={() => router.back()}
                     />
                 </div>
             </div>

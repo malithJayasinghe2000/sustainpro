@@ -6,9 +6,9 @@ import { Sun, Moon, Bell, Clock, Building2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 import { getUserTimezone } from '@/lib/timezone';
-import { settingsApi } from '@/lib/api';
+import { settingsApi, adminApi } from '@/lib/api';
 import UniversalCreator from './UniversalCreator';
-import { Plus } from 'lucide-react';
+import { Plus, Activity, Cpu } from 'lucide-react';
 
 export default function Navbar() {
     const { theme, toggleTheme } = useTheme();
@@ -19,6 +19,7 @@ export default function Navbar() {
     const [siteTitle, setSiteTitle] = useState('SPS IoT');
     const [logo, setLogo] = useState<string | null>('/logo.png');
     const [showUniversalCreator, setShowUniversalCreator] = useState(false);
+    const [serverStats, setServerStats] = useState<any>(null); // State for server stats
     const alertsRef = useRef<HTMLDivElement>(null);
 
     // Dummy alerts data
@@ -60,6 +61,25 @@ export default function Navbar() {
         if (user?.org_logo) setLogo(user.org_logo);
 
         return () => clearInterval(timer);
+    }, [user]);
+
+    // Poll Server Stats (Super Admin Only)
+    useEffect(() => {
+        if (!user?.is_super_admin) return;
+
+        const pollStats = async () => {
+            try {
+                const stats = await adminApi.getSystemHealth();
+                setServerStats(stats);
+            } catch (err) {
+                // Silent fail
+            }
+        };
+
+        pollStats(); // Initial fetch
+        const interval = setInterval(pollStats, 5000); // Poll every 5s
+
+        return () => clearInterval(interval);
     }, [user]);
 
     useEffect(() => {
@@ -135,7 +155,26 @@ export default function Navbar() {
 
                     {/* Right Side - Time, Alerts, Theme Toggle */}
                     <div className="flex items-center gap-3">
-                        {/* Universal Create Button */}
+
+                        {/* Server Stats (Super Admin Only) */}
+                        {user?.is_super_admin && serverStats && (
+                            <div className="hidden lg:flex items-center gap-4 mr-2">
+                                {/* CPU */}
+                                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/30 px-2 py-1 rounded-md border border-border/50">
+                                    <Cpu className="w-3.5 h-3.5 text-primary" />
+                                    <span>{serverStats.cpu.load_avg_1m}%</span>
+                                </div>
+                                {/* RAM */}
+                                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/30 px-2 py-1 rounded-md border border-border/50">
+                                    <Activity className="w-3.5 h-3.5 text-blue-500" />
+                                    <span>{serverStats.memory.percent_used}%</span>
+                                    {/* <span className="text-[10px] opacity-70">({serverStats.memory.used_mb}MB)</span> */}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Universal Create Button - REMOVED per user request */}
+                        {/* 
                         <button
                             onClick={() => setShowUniversalCreator(true)}
                             className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
@@ -144,6 +183,7 @@ export default function Navbar() {
                             <Plus className="w-4 h-4" />
                             <span className="hidden lg:inline">Create</span>
                         </button>
+                        */}
 
 
                         {/* Time & Date */}
