@@ -33,7 +33,7 @@ app.use(cookieParser());
 // SECURITY: CORS Configuration with explicit allowlist
 const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
     ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-    : ['http://localhost:3000', 'http://localhost:3001']; // Default for development
+    : ['http://localhost:3000', 'http://localhost:3001', 'https://sustainpro-wcii.vercel.app']; // Default for development
 
 app.use(cors({
     origin: (origin, callback) => {
