@@ -1,4 +1,6 @@
 
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { useWebSerial, SerialDeviceIdentity } from '../../hooks/useWebSerial';
 import { Button, Modal, Input, message, Steps, Spin, Alert } from 'antd';
