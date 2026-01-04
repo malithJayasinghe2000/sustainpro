@@ -39,7 +39,7 @@ export default function DeviceDashboardPage({ params }: DeviceDashboardPageProps
             console.log('📡 [Device Detail] Telemetry received:', payload);
 
             // Update device with new telemetry data
-            setDevice(prev => {
+            setDevice((prev: any) => {
                 if (!prev) return prev;
 
                 // Match by hardware_id or device_code
@@ -62,7 +62,7 @@ export default function DeviceDashboardPage({ params }: DeviceDashboardPageProps
 
         // Offline detection: Check every 5 seconds if device is silent > 10s
         const offlineCheckInterval = setInterval(() => {
-            setDevice(prev => {
+            setDevice((prev: any) => {
                 if (!prev || prev.status !== 'ONLINE') return prev;
 
                 if (prev.last_seen) {
@@ -108,7 +108,7 @@ export default function DeviceDashboardPage({ params }: DeviceDashboardPageProps
                 const timeSinceLastSeen = Date.now() - new Date(deviceRes.last_seen).getTime();
                 if (timeSinceLastSeen > 10000) {
                     // Device is offline
-                    setDevice(prev => prev ? { ...prev, status: 'OFFLINE' } : prev);
+                    setDevice((prev: any) => prev ? { ...prev, status: 'OFFLINE' } : prev);
                 }
             }
 

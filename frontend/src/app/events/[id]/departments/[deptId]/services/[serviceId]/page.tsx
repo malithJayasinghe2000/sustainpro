@@ -50,7 +50,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             console.log('📡 Telemetry received:', payload);
 
             // Update assigned devices with new telemetry data
-            setAssignedDevices(prev => prev.map(device => {
+            setAssignedDevices((prev: any[]) => prev.map(device => {
                 if (device.hardware_id === payload.hardware_id || device.device_code === payload.device_code) {
                     return {
                         ...device,
@@ -70,7 +70,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
 
         // Offline detection: Check every 5 seconds if device is silent > 10s
         const offlineCheckInterval = setInterval(() => {
-            setAssignedDevices(prev => prev.map(device => {
+            setAssignedDevices((prev: any[]) => prev.map(device => {
                 if (device.status === 'ONLINE' && device.last_seen) {
                     const timeSinceLastSeen = Date.now() - new Date(device.last_seen).getTime();
                     if (timeSinceLastSeen > 10000) { // 10 seconds timeout
