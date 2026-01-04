@@ -1,45 +1,45 @@
-# SustainPro - IoT Event Management Platform
+# SustainPro - IoT Event Management & Provisioning Platform
 
-Enterprise-grade platform for managing IoT-enabled events with real-time monitoring, RBAC, and comprehensive analytics.
+Enterprise-grade platform for managing IoT-enabled events with real-time monitoring, RBAC, and streamlined device provisioning.
 
 ## 🚀 Features
 
 ### Core Capabilities
 - **Multi-tenant Architecture** - Organizations, events, departments, and services
-- **Role-Based Access Control (RBAC)** - Granular permissions system
-- **Real-time IoT Monitoring** - WebSocket-based device telemetry
-- **Event Management** - Complete lifecycle from planning to archival
-- **User Management** - Hierarchical roles with custom permissions
-- **Advanced Analytics** - Reports and insights dashboard
+- **Role-Based Access Control (RBAC)** - Granular permissions system with dynamic policies
+- **Real-time IoT Monitoring** - Live telemetry dashboard with AWS IoT Core integration
+- **Event Lifecycle Management** - Complete flow from planning to archival
+- **Device Provisioning** - Browser-based WebSerial provisioning for ESP32 devices
 
 ### Technical Highlights
 - **Frontend**: Next.js 15, React, TypeScript, TailwindCSS
 - **Backend**: Node.js, Express, PostgreSQL, Socket.IO
-- **Authentication**: JWT with refresh tokens, password hashing (Argon2)
-- **Security**: Rate limiting, account lockout, CORS protection
-- **Real-time**: WebSocket connections for live device data
+- **IoT Infrastructure**: AWS IoT Core, MQTT, ngrok (dev), ESP32 Firmware
+- **Authentication**: JWT access/refresh tokens, Argon2 password hashing
+- **Security**: Rate limiting, account lockout, CORS protection, Input validation
 
 ## 📂 Project Structure
 
 ```
 SustainPro/
-├── frontend/           # Next.js application
+├── frontend/           # Next.js 15 application (App Router)
 │   ├── src/
-│   │   ├── app/       # App Router pages
-│   │   ├── components/# Reusable UI components
-│   │   ├── contexts/  # React contexts (Auth, etc.)
-│   │   └── lib/       # Utilities and API client
+│   │   ├── app/       # Pages and layouts
+│   │   ├── components/# Reusable UI components & Widgets
+│   │   ├── contexts/  # React contexts (Auth, Theme)
+│   │   └── lib/       # API clients and utilities
 │   └── package.json
 │
 ├── backend/           # Express API server
 │   ├── src/
-│   │   ├── routes/   # API endpoints
-│   │   ├── middleware/# Auth, RBAC, etc.
-│   │   └── scripts/  # Admin tools
+│   │   ├── routes/    # API endpoints (inc. AWS IoT Webhook)
+│   │   ├── middleware/# Auth, RBAC, Validation
+│   │   └── scripts/   # Admin and maintenance tools
 │   ├── migrations/    # Database migrations
-│   └── sql/          # Schema definitions
+│   └── sql/           # Schema definitions
 │
-└── firmware/         # ESP32 IoT device code
+├── firmware/          # IoT Device Firmware
+│   └── SustainPro_AWS_Firmware.ino  # ESP32 AWS MQTT Client
 ```
 
 ## 🛠️ Local Development
@@ -47,107 +47,66 @@ SustainPro/
 ### Prerequisites
 - Node.js 18+
 - PostgreSQL 14+
+- AWS IoT Core Account (for IoT features)
 - npm or yarn
 
-### Frontend Setup
+### Quick Start
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+1. **Frontend**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   Runs on: `http://localhost:3000`
 
-Runs on: `http://localhost:3000`
+2. **Backend**
+   ```bash
+   cd backend
+   npm install
+   
+   # Setup Environment
+   cp .env.example .env
+   # Update .env with DB credentials and AWS IoT secrets
+   
+   # Database Setup
+   npm run migrate       # Run migrations
+   npm run create-admin  # Create initial admin user
+   
+   # Start Server
+   npm run dev
+   ```
+   Runs on: `http://localhost:5000`
 
-### Backend Setup
-
-```bash
-cd backend
-
-# Install dependencies
-npm install
-
-# Create .env file
-cp .env.example .env
-
-# Edit .env with your database credentials
-# DATABASE_URL=postgresql://user:password@localhost:5432/sustainpro
-# JWT_SECRET=your-secret-key
-# JWT_REFRESH_SECRET=your-refresh-secret
-
-# Run database migrations
-psql -U postgres -d sustainpro -f sql/schema.sql
-psql -U postgres -d sustainpro -f migrations/rbac_setup_pgadmin.sql
-
-# Create admin user
-npm run create-admin
-
-# Start server
-npm run dev
-```
-
-Runs on: `http://localhost:5000`
+3. **IoT Development (Data Flow)**
+   - Start ngrok: `ngrok http 5000` (Use fixed domain if available)
+   - Update AWS IoT Rule endpoint to ngrok URL
+   - Flash firmware to ESP32
 
 ## 🌐 Deployment
 
-See [deployment_guide.md](./deployment_guide.md) for complete instructions on deploying to:
-- Frontend: Vercel
-- Backend: Railway / Render / Heroku
-- Database: PostgreSQL (Heroku, Supabase, etc.)
+See [deployment_guide.md](./docs/deployment_guide.md) for complete instructions.
 
 ## 📖 Key Concepts
 
-### Roles Hierarchy
-```
-Super Admin (Platform)
-  └── Organization Admin
-      ├── Event Manager
-      │   ├── Department Head
-      │   │   └── Service Supervisor
-      │   │       └── Onsite Technician
-      │   └── Viewer (Read-only)
-```
+- **Roles & Permissions**: Hierarchical structure from Super Admin down to Onsite Technician.
+- **Telemetry Flow**: Device -> AWS IoT Core -> Backend Webhook -> Socket.IO -> Dashboard.
+- **Provisioning**: Connect ESP32 via USB and use the "Add Device" modal to flash WiFi credentials.
 
-### Permissions System
-- Dynamic RBAC with permission codes (e.g., `events:create`, `users:delete`)
-- Super Admin configurable via UI
-- Granular control over features and submenu items
+## 🔐 Security
 
-## 🔐 Security Features
-
-- Argon2 password hashing
-- JWT access + refresh token pattern
-- Rate limiting on authentication endpoints
-- Account lockout after failed attempts
-- CORS protection
-- Input validation and sanitization
-
-## 📱 IoT Integration
-
-- ESP32-based devices
-- Real-time telemetry via WebSocket
-- Device provisioning workflow
-- Custom device models support
-- Historical data tracking
-
-## 🎨 UI/UX
-
-- Dark/Light mode support
-- Responsive design (mobile-first)
-- Global theme system
-- Toast notifications
-- Loading states and error handling
+- **Strict RBAC**: Dynamic permission checks on every route.
+- **Secure Provisioning**: WebSerial reduces manual credential handling.
+- **Data Integrity**: Validation schemas for all inputs and telemetry.
 
 ## 🧪 Testing
 
 ```bash
-# Frontend
-cd frontend
-npm run test
+# Frontend Tests
+cd frontend && npm run test
 
-# Backend
-cd backend
-npm run test
+# Backend Tests
+cd backend && npm run test
 ```
 
 ## 📄 License
@@ -156,8 +115,8 @@ Proprietary - All rights reserved
 
 ## 👥 Team
 
-Developed by elcoanlanka team
+Developed by **Elcoan Lanka** team
 
 ## 🆘 Support
 
-For issues and questions, please contact [support@elcoanlanka.com](mailto:support@elcoanlanka.com)
+For issues and questions, please contact **[support@elcoanlanka.lk](mailto:support@elcoanlanka.lk)**
