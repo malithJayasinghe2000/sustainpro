@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { departmentServicesApi, devicesApi } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 import WidgetRenderer from '@/components/dashboard/WidgetRenderer';
 import { WidgetConfig } from '@/types/dashboard';
 import {
@@ -30,6 +31,55 @@ export default function DeviceDashboardPage({ params }: DeviceDashboardPageProps
 
     useEffect(() => {
         loadData();
+
+        // Socket.IO: Listen for real-time telemetry updates
+        const socket = getSocket();
+
+        const handleTelemetry = (payload: any) => {
+            console.log('📡 [Device Detail] Telemetry received:', payload);
+
+            // Update device with new telemetry data
+            setDevice(prev => {
+                if (!prev) return prev;
+
+                // Match by hardware_id or device_code
+                if (prev.hardware_id === payload.hardware_id || prev.device_code === payload.device_code) {
+                    return {
+                        ...prev,
+                        status: 'ONLINE',
+                        last_seen: payload.timestamp || new Date().toISOString(),
+                        metadata: {
+                            ...(prev.metadata || {}),
+                            ...payload.data  // Merge telemetry data into metadata
+                        }
+                    };
+                }
+                return prev;
+            });
+        };
+
+        socket.on('dashboard:telemetry', handleTelemetry);
+
+        // Offline detection: Check every 5 seconds if device is silent > 10s
+        const offlineCheckInterval = setInterval(() => {
+            setDevice(prev => {
+                if (!prev || prev.status !== 'ONLINE') return prev;
+
+                if (prev.last_seen) {
+                    const timeSinceLastSeen = Date.now() - new Date(prev.last_seen).getTime();
+                    if (timeSinceLastSeen > 10000) { // 10 seconds timeout
+                        console.log('⚠️ Device went offline (no data for 10s)');
+                        return { ...prev, status: 'OFFLINE' };
+                    }
+                }
+                return prev;
+            });
+        }, 5000); // Check every 5 seconds
+
+        return () => {
+            socket.off('dashboard:telemetry', handleTelemetry);
+            clearInterval(offlineCheckInterval);
+        };
     }, [deviceId]);
 
     const loadData = async () => {
@@ -52,6 +102,15 @@ export default function DeviceDashboardPage({ params }: DeviceDashboardPageProps
 
             setDevice(deviceRes);
             setServiceInstance(serviceRes);
+
+            // Check if device should be offline based on last_seen
+            if (deviceRes.last_seen) {
+                const timeSinceLastSeen = Date.now() - new Date(deviceRes.last_seen).getTime();
+                if (timeSinceLastSeen > 10000) {
+                    // Device is offline
+                    setDevice(prev => prev ? { ...prev, status: 'OFFLINE' } : prev);
+                }
+            }
 
             // Load Dashboard Widgets
             // Priority: 

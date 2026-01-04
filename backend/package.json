@@ -18,8 +18,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@aws-sdk/client-iot": "^3.962.0",
-    "@aws-sdk/client-iot-data-plane": "^3.962.0",
     "argon2": "^0.44.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",

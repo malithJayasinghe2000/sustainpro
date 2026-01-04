@@ -91,7 +91,7 @@ export default function Navbar() {
 
         const handleKeyDown = (e: KeyboardEvent) => {
             // Open on 'c' if not typing in input
-            if (e.key.toLowerCase() === 'c' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+            if (e.key?.toLowerCase() === 'c' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
                 setShowUniversalCreator(true);
             }
             // Close on 'Escape'

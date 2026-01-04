@@ -118,7 +118,7 @@ export default function WidgetRenderer({
                     </div>
                     <div className="flex-1 flex flex-col justify-center min-h-0 overflow-hidden">
                         <div className={`${isNested ? 'text-xl sm:text-2xl lg:text-3xl' : 'text-3xl'} font-bold truncate leading-none`}>
-                            {isPreview ? '42' : (data[widget.parameter_key!] !== undefined ? data[widget.parameter_key!] : '--')}
+                            {isPreview ? '42' : (data.status === 'OFFLINE' ? '--' : (data[widget.parameter_key!] !== undefined ? data[widget.parameter_key!] : '--'))}
                         </div>
                         {widget.settings.showUnit && (
                             <div className="text-[10px] sm:text-xs text-muted-foreground mt-1 truncate opacity-80 uppercase tracking-wider">

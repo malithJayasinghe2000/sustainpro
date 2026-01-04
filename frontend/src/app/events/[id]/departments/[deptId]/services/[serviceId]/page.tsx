@@ -4,7 +4,8 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { departmentServicesApi, devicesApi } from '@/lib/api';
-import SerialProvisioner from '@/components/devices/SerialProvisioner';
+import { getSocket } from '@/lib/socket';
+import ProvisioningModal from '@/components/provisioning/ProvisioningModal';
 import {
     ArrowLeft,
     Plus,
@@ -14,7 +15,8 @@ import {
     Activity,
     CheckCircle,
     Copy,
-    Cpu
+    Cpu,
+    Usb
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -30,18 +32,59 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     const [assignedDevices, setAssignedDevices] = useState<any[]>([]);
     const [availableDevices, setAvailableDevices] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Modals
     const [showAddDeviceModal, setShowAddDeviceModal] = useState(false);
+    const [showProvisioningModal, setShowProvisioningModal] = useState(false);
 
     // Modal State
     const [activeTab, setActiveTab] = useState<'existing' | 'create'>('create');
-    const [newDeviceName, setNewDeviceName] = useState('');
-    const [newDeviceCode, setNewDeviceCode] = useState('');
-    const [isCreating, setIsCreating] = useState(false);
-    const [createdCredentials, setCreatedCredentials] = useState<any>(null);
-    const [isProvisioning, setIsProvisioning] = useState(false);
 
     useEffect(() => {
         loadData();
+
+        // Socket.IO: Listen for real-time telemetry updates
+        const socket = getSocket();
+
+        const handleTelemetry = (payload: any) => {
+            console.log('📡 Telemetry received:', payload);
+
+            // Update assigned devices with new telemetry data
+            setAssignedDevices(prev => prev.map(device => {
+                if (device.hardware_id === payload.hardware_id || device.device_code === payload.device_code) {
+                    return {
+                        ...device,
+                        status: 'ONLINE',
+                        last_seen: payload.timestamp || new Date().toISOString(),
+                        metadata: {
+                            ...device.metadata,
+                            ...payload.data
+                        }
+                    };
+                }
+                return device;
+            }));
+        };
+
+        socket.on('dashboard:telemetry', handleTelemetry);
+
+        // Offline detection: Check every 5 seconds if device is silent > 10s
+        const offlineCheckInterval = setInterval(() => {
+            setAssignedDevices(prev => prev.map(device => {
+                if (device.status === 'ONLINE' && device.last_seen) {
+                    const timeSinceLastSeen = Date.now() - new Date(device.last_seen).getTime();
+                    if (timeSinceLastSeen > 10000) { // 10 seconds timeout
+                        return { ...device, status: 'OFFLINE' };
+                    }
+                }
+                return device;
+            }));
+        }, 5000); // Check every 5 seconds
+
+        return () => {
+            socket.off('dashboard:telemetry', handleTelemetry);
+            clearInterval(offlineCheckInterval);
+        };
     }, [serviceId]);
 
     const loadData = async () => {
@@ -77,52 +120,9 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
         }
     };
 
-    const handleCreateDevice = async () => {
-        if (!newDeviceName || !newDeviceCode) {
-            toast.error('Please fill in all fields');
-            return;
-        }
-
-        try {
-            setIsCreating(true);
-            // Create device and assign to this service immediately
-            const newDevice = await devicesApi.create({
-                name: newDeviceName,
-                device_code: newDeviceCode,
-                type: 'generic', // Default type
-                service_id: serviceId // Auto-assign
-            });
-
-            setCreatedCredentials(newDevice);
-            toast.success('Device created successfully');
-
-            // Move to provisioning step
-            setIsProvisioning(true);
-
-            // Refresh main data in background
-            loadData();
-
-        } catch (error: any) {
-            console.error('Failed to create device:', error);
-            toast.error(error.response?.data?.error || 'Failed to create device');
-        } finally {
-            setIsCreating(false);
-        }
-    };
-
-    const handleProvisioningComplete = () => {
-        toast.success('Provisioning complete!');
-        closeModal();
-        loadData();
-    };
-
     const closeModal = () => {
         setShowAddDeviceModal(false);
         setActiveTab('create');
-        setNewDeviceName('');
-        setNewDeviceCode('');
-        setCreatedCredentials(null);
-        setIsProvisioning(false);
     };
 
     const handleRemoveDevice = async (deviceId: number) => {
@@ -136,6 +136,11 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             console.error('Failed to remove device:', error);
             toast.error('Failed to remove device');
         }
+    };
+
+    const startProvisioning = () => {
+        setShowAddDeviceModal(false);
+        setShowProvisioningModal(true);
     };
 
     if (isLoading) {
@@ -308,7 +313,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                     )}
                 </div>
 
-                {/* Add Device Modal */}
+                {/* Add Device Modal - Selection Type */}
                 {showAddDeviceModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                         <div className="bg-card w-full max-w-2xl rounded-xl border border-border shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -324,152 +329,102 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                                 </button>
                             </div>
 
-                            {/* If Provisioning Mode */}
-                            {isProvisioning && createdCredentials ? (
-                                <div className="flex-1 overflow-y-auto bg-background">
-                                    <div className="max-w-xl mx-auto p-6">
-                                        <div className="flex items-center justify-between mb-6 p-4 bg-green-50/50 border border-green-100 dark:bg-green-900/10 dark:border-green-800 rounded-lg">
-                                            <div className="flex items-center gap-3">
-                                                <CheckCircle className="w-5 h-5 text-green-600" />
-                                                <div>
-                                                    <h4 className="font-semibold text-green-900 dark:text-green-300">Device Created Successfully</h4>
-                                                    <p className="text-xs text-green-700 dark:text-green-400">Assigned and ready.</p>
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={closeModal}
-                                                className="text-xs bg-background border border-border px-3 py-1 rounded hover:bg-muted"
-                                            >
-                                                Skip Provisioning
-                                            </button>
+                            {/* Tabs */}
+                            <div className="flex border-b border-border px-6">
+                                <button
+                                    onClick={() => setActiveTab('create')}
+                                    className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'create' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+                                >
+                                    New Device (USB)
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('existing')}
+                                    className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'existing' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+                                >
+                                    Select Existing
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-6">
+                                {activeTab === 'create' ? (
+                                    <div className="text-center py-10 space-y-6">
+                                        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                                            <Usb className="w-10 h-10 text-primary" />
                                         </div>
-
-                                        <SerialProvisioner
-                                            onProvision={async (serial, model, ssid, pass) => {
-                                                // We intentionally ignore the device serial for now and flash the credentials we just created
-                                                // In a real scenario, we might want to update the device record with this serial
-                                                return {
-                                                    device_code: createdCredentials.device_code,
-                                                    api_key: createdCredentials.api_key || 'UNKNOWN_KEY',
-                                                    server_url: window.location.origin
-                                                };
-                                            }}
-                                            onSuccess={handleProvisioningComplete}
-                                        />
-                                    </div>
-                                </div>
-                            ) : (
-                                <>
-                                    {/* Tabs */}
-                                    <div className="flex border-b border-border px-6">
+                                        <div className="space-y-2 max-w-sm mx-auto">
+                                            <h4 className="text-lg font-semibold">USB Provisioning</h4>
+                                            <p className="text-sm text-muted-foreground">
+                                                Connect your device via USB cable to register it and configure WiFi credentials automatically.
+                                            </p>
+                                        </div>
                                         <button
-                                            onClick={() => setActiveTab('create')}
-                                            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'create' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+                                            onClick={startProvisioning}
+                                            className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
                                         >
-                                            Create New Device
-                                        </button>
-                                        <button
-                                            onClick={() => setActiveTab('existing')}
-                                            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'existing' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
-                                        >
-                                            Select Existing
+                                            <Usb className="w-4 h-4" />
+                                            Start Provisioning Wizard
                                         </button>
                                     </div>
-
-                                    <div className="flex-1 overflow-y-auto p-6">
-                                        {activeTab === 'create' ? (
-                                            <div className="space-y-4 max-w-md mx-auto py-4">
-                                                <div className="space-y-2">
-                                                    <label className="text-sm font-medium">Device Name</label>
-                                                    <input
-                                                        type="text"
-                                                        value={newDeviceName}
-                                                        onChange={(e) => setNewDeviceName(e.target.value)}
-                                                        placeholder="e.g. Main Entrance Gate"
-                                                        className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-sm font-medium">Device Code (ID)</label>
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="text"
-                                                            value={newDeviceCode}
-                                                            onChange={(e) => setNewDeviceCode(e.target.value.toUpperCase())}
-                                                            placeholder="e.g. DEV-001"
-                                                            className="w-full px-3 py-2 border border-input rounded-md bg-background font-mono"
-                                                        />
-                                                        <button
-                                                            onClick={() => setNewDeviceCode(`DEV-${Math.floor(Math.random() * 10000)}`)}
-                                                            className="px-3 py-2 bg-secondary text-secondary-foreground rounded-md text-xs whitespace-nowrap"
-                                                        >
-                                                            Generate
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                <div className="pt-4">
+                                ) : (
+                                    <>
+                                        {unassignedDevices.length > 0 ? (
+                                            <div className="grid grid-cols-1 gap-3">
+                                                {unassignedDevices.map((device) => (
                                                     <button
-                                                        onClick={handleCreateDevice}
-                                                        disabled={isCreating}
-                                                        className="w-full py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                                        key={device.id}
+                                                        onClick={() => handleAddExistingDevice(device.id)}
+                                                        className="p-4 border border-border rounded-lg hover:border-primary hover:bg-primary/5 transition-all text-left group"
                                                     >
-                                                        {isCreating ? 'Creating Device...' : 'Create & Provision'}
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                                                                    <Smartphone className="w-5 h-5 text-primary" />
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className="font-semibold group-hover:text-primary transition-colors">
+                                                                        {device.name || device.device_code}
+                                                                    </h4>
+                                                                    <p className="text-sm text-muted-foreground">
+                                                                        {device.device_code} • {device.status || 'OFFLINE'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <Plus className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                                                        </div>
                                                     </button>
-                                                </div>
-
-                                                <div className="text-xs text-muted-foreground text-center">
-                                                    Next step: We'll flash the credentials to your device via USB.
-                                                </div>
+                                                ))}
                                             </div>
                                         ) : (
-                                            <>
-                                                {unassignedDevices.length > 0 ? (
-                                                    <div className="grid grid-cols-1 gap-3">
-                                                        {unassignedDevices.map((device) => (
-                                                            <button
-                                                                key={device.id}
-                                                                onClick={() => handleAddExistingDevice(device.id)}
-                                                                className="p-4 border border-border rounded-lg hover:border-primary hover:bg-primary/5 transition-all text-left group"
-                                                            >
-                                                                <div className="flex items-center justify-between">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                                                                            <Smartphone className="w-5 h-5 text-primary" />
-                                                                        </div>
-                                                                        <div>
-                                                                            <h4 className="font-semibold group-hover:text-primary transition-colors">
-                                                                                {device.name || device.device_code}
-                                                                            </h4>
-                                                                            <p className="text-sm text-muted-foreground">
-                                                                                {device.device_code} • {device.status || 'OFFLINE'}
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
-                                                                    <Plus className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                                                                </div>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-center py-12 text-muted-foreground">
-                                                        <Activity className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                                                        <p className="mb-4">No available devices to assign.</p>
-                                                        <button
-                                                            onClick={() => setActiveTab('create')}
-                                                            className="text-primary hover:underline"
-                                                        >
-                                                            Create a new device instead
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </>
+                                            <div className="text-center py-12 text-muted-foreground">
+                                                <Activity className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                                <p className="mb-4">No available devices to assign.</p>
+                                                <button
+                                                    onClick={() => setActiveTab('create')}
+                                                    className="text-primary hover:underline"
+                                                >
+                                                    Create a new device instead
+                                                </button>
+                                            </div>
                                         )}
-                                    </div>
-                                </>
-                            )}
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
+                )}
+
+                {/* Provisioning Modal */}
+                {showProvisioningModal && (
+                    <ProvisioningModal
+                        visible={showProvisioningModal}
+                        onClose={() => {
+                            setShowProvisioningModal(false);
+                            loadData(); // Refresh list after provisioning
+                        }}
+                        currentServiceId={serviceId}
+                        currentOrganizationId={serviceInstance?.organization_id}
+                        currentServiceType={serviceInstance?.service_type || 'waterwall'}
+                    />
                 )}
             </div>
         </DashboardLayout>
