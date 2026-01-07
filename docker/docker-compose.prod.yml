@@ -1,0 +1,179 @@
+version: '3.8'
+
+# Production Docker Compose for SustainPro Microservices
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+
+services:
+  # ========================================
+  # API Gateway (Nginx)
+  # ========================================
+  gateway:
+    build: ../services/gateway
+    container_name: sustainpro-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      core-service:
+        condition: service_healthy
+      iot-service:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sustainpro-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # Infrastructure Services
+  # ========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: sustainpro-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sustainpro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sustainpro_prod}
+      POSTGRES_DB: ${POSTGRES_DB:-sustainpro}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - sustainpro-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sustainpro}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: sustainpro-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-sustainpro}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-sustainpro_prod}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    networks:
+      - sustainpro-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========================================
+  # Auth Service (Port 5000)
+  # ========================================
+  auth-service:
+    build:
+      context: ..
+      dockerfile: services/auth-service/Dockerfile
+    container_name: sustainpro-auth
+    expose:
+      - "5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sustainpro}:${POSTGRES_PASSWORD:-sustainpro_prod}@postgres:5432/${POSTGRES_DB:-sustainpro}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sustainpro-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # Core Service (Port 5001)
+  # Organizations, Events, Departments, Services, Settings, Devices
+  # ========================================
+  core-service:
+    build:
+      context: ..
+      dockerfile: services/core-service/Dockerfile
+    container_name: sustainpro-core
+    expose:
+      - "5001"
+    environment:
+      - NODE_ENV=production
+      - PORT=5001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sustainpro}:${POSTGRES_PASSWORD:-sustainpro_prod}@postgres:5432/${POSTGRES_DB:-sustainpro}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-sustainpro}:${RABBITMQ_PASSWORD:-sustainpro_prod}@rabbitmq:5672
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_IOT_ENABLED=${AWS_IOT_ENABLED:-false}
+      - AWS_IOT_POLICY_NAME=${AWS_IOT_POLICY_NAME:-SustainProDevicePolicy}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sustainpro-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # IoT Service (Port 5002)
+  # Telemetry, Socket.IO, Real-time streaming
+  # ========================================
+  iot-service:
+    build:
+      context: ..
+      dockerfile: services/iot-service/Dockerfile
+    container_name: sustainpro-iot
+    expose:
+      - "5002"
+    environment:
+      - NODE_ENV=production
+      - PORT=5002
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sustainpro}:${POSTGRES_PASSWORD:-sustainpro_prod}@postgres:5432/${POSTGRES_DB:-sustainpro}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-sustainpro}:${RABBITMQ_PASSWORD:-sustainpro_prod}@rabbitmq:5672
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sustainpro-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  sustainpro-network:
+    name: sustainpro-network
+    driver: bridge

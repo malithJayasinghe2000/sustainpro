@@ -1,7 +1,8 @@
 import { io, Socket } from 'socket.io-client';
 
-// Use backend URL for socket connection
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+// Socket.IO URL - connects through API Gateway
+// Gateway routes /socket.io/* to IoT Service
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8080';
 
 let socket: Socket;
 
@@ -10,10 +11,14 @@ export const getSocket = () => {
         console.log('[Socket] Initializing connection to', SOCKET_URL);
         socket = io(SOCKET_URL, {
             withCredentials: true,
-            transports: ['websocket'], // Prefer WebSocket over polling
+            transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
-            reconnectionAttempts: Infinity
+            reconnectionAttempts: Infinity,
+            // Pass auth token for authenticated connections
+            auth: {
+                token: typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+            }
         });
 
         socket.on('connect', () => {

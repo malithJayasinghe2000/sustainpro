@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # Infrastructure Services
+  # ========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: sustainpro-postgres
+    environment:
+      POSTGRES_USER: sustainpro
+      POSTGRES_PASSWORD: sustainpro_dev
+      POSTGRES_DB: sustainpro
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sustainpro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: sustainpro-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP Protocol
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: sustainpro
+      RABBITMQ_DEFAULT_PASS: sustainpro_dev
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========================================
+  # Microservices (Development Mode)
+  # These run on host for hot-reload
+  # Uncomment when ready to containerize
+  # ========================================
+  
+  # auth-service:
+  #   build:
+  #     context: ..
+  #     dockerfile: services/auth-service/Dockerfile
+  #   container_name: sustainpro-auth
+  #   ports:
+  #     - "5000:5000"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - PORT=5000
+  #     - DATABASE_URL=postgresql://sustainpro:sustainpro_dev@postgres:5432/sustainpro
+  #     - JWT_SECRET=${JWT_SECRET}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  
+  # core-service:
+  #   build:
+  #     context: ..
+  #     dockerfile: services/core-service/Dockerfile
+  #   container_name: sustainpro-core
+  #   ports:
+  #     - "5001:5001"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - PORT=5001
+  #     - DATABASE_URL=postgresql://sustainpro:sustainpro_dev@postgres:5432/sustainpro
+  #     - RABBITMQ_URL=amqp://sustainpro:sustainpro_dev@rabbitmq:5672
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+
+  # iot-service:
+  #   build:
+  #     context: ..
+  #     dockerfile: services/iot-service/Dockerfile
+  #   container_name: sustainpro-iot
+  #   ports:
+  #     - "5002:5002"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - PORT=5002
+  #     - DATABASE_URL=postgresql://sustainpro:sustainpro_dev@postgres:5432/sustainpro
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+
+  # gateway:
+  #   build: ../services/gateway
+  #   container_name: sustainpro-gateway
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - auth-service
+  #     - core-service
+  #     - iot-service
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  default:
+    name: sustainpro-network

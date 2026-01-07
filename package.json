@@ -1,0 +1,28 @@
+{
+    "name": "sustainpro",
+    "version": "1.0.0",
+    "private": true,
+    "description": "SustainPro IoT Event Management Platform - Microservices Architecture",
+    "workspaces": [
+        "packages/*",
+        "services/*",
+        "frontend"
+    ],
+    "scripts": {
+        "dev": "turbo run dev",
+        "build": "turbo run build",
+        "lint": "turbo run lint",
+        "clean": "turbo run clean",
+        "dev:backend": "turbo run dev --filter=@sustainpro/*-service",
+        "dev:frontend": "turbo run dev --filter=frontend",
+        "build:packages": "turbo run build --filter=@sustainpro/shared-*"
+    },
+    "devDependencies": {
+        "turbo": "^2.3.0",
+        "typescript": "^5.7.0"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "packageManager": "npm@10.0.0"
+}

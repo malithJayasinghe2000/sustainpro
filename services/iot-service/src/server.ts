@@ -1,0 +1,59 @@
+import http from 'http';
+import app from './app';
+import { config } from './config';
+import { initSocket, getConnectedClientsCount } from './socket';
+import { closePool } from './db';
+import { createLogger } from '@sustainpro/shared-utils';
+
+const logger = createLogger({ service: 'iot-service' });
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// Initialize Socket.IO
+const io = initSocket(server);
+
+// Start server
+server.listen(config.port, () => {
+    logger.info(`IoT Service running on port ${config.port}`);
+    logger.info(`Environment: ${config.nodeEnv}`);
+    logger.info(`CORS origins: ${config.cors.origins.join(', ')}`);
+    logger.info('Socket.IO ready for connections');
+});
+
+// Graceful shutdown
+const shutdown = async (signal: string) => {
+    logger.info(`${signal} received, shutting down gracefully`);
+
+    // Close Socket.IO
+    io.close(() => {
+        logger.info('Socket.IO connections closed');
+    });
+
+    // Close HTTP server
+    server.close(async () => {
+        logger.info('HTTP server closed');
+
+        // Close database pool
+        await closePool();
+
+        process.exit(0);
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+        logger.error('Forced shutdown after timeout');
+        process.exit(1);
+    }, 10000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Log connected clients periodically
+setInterval(() => {
+    const clientCount = getConnectedClientsCount();
+    if (clientCount > 0) {
+        logger.debug(`Connected Socket.IO clients: ${clientCount}`);
+    }
+}, 60000);

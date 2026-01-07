@@ -1,0 +1,16 @@
+{
+    "name": "@sustainpro/shared-types",
+    "version": "1.0.0",
+    "description": "Shared TypeScript type definitions for SustainPro microservices",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "clean": "rimraf dist"
+    },
+    "devDependencies": {
+        "rimraf": "^6.0.0",
+        "typescript": "^5.7.0"
+    }
+}
