@@ -5,11 +5,11 @@ import { emitDeviceStatus } from '../socket';
 const logger = createLogger({ service: 'live-data' });
 
 export interface LiveDataEntry {
-    device_id: string;
+    device_id: number;  // Changed from string to number to match database
     device_code: string;
     organization_id: string;
     event_id?: string;
-    department_service_id?: string;
+    service_id?: string;  // Changed from department_service_id
     data: Record<string, any>;
     timestamp: Date;
     status: 'online' | 'offline';

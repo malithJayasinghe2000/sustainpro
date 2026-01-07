@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { query } from '../db';
-import crypto from 'crypto';
 import { createLogger } from '@sustainpro/shared-utils';
 
 const logger = createLogger({ service: 'device-auth' });
@@ -10,11 +9,11 @@ declare global {
     namespace Express {
         interface Request {
             device?: {
-                id: string;
+                id: number;
                 device_code: string;
                 organization_id: string;
                 event_id?: string;
-                department_service_id?: string;
+                service_id?: string;
                 name: string;
                 status: string;
             };
@@ -23,14 +22,9 @@ declare global {
 }
 
 /**
- * Hash an API key for comparison
- */
-function hashApiKey(apiKey: string): string {
-    return crypto.createHash('sha256').update(apiKey).digest('hex');
-}
-
-/**
  * Authenticate device by API key
+ * 
+ * The schema stores plain API keys in sps_devices.api_key
  */
 export const authenticateDevice = async (
     req: Request,
@@ -48,19 +42,18 @@ export const authenticateDevice = async (
             return;
         }
 
-        // Hash the provided API key
-        const apiKeyHash = hashApiKey(apiKey);
-
-        // Look up device by API key hash
+        // Look up device by API key (plain text match)
         const result = await query(
-            `SELECT d.id, d.device_code, d.organization_id, d.department_service_id, 
-                    d.name, d.status, ds.department_id,
-                    dep.event_id
-             FROM devices d
-             LEFT JOIN department_services ds ON d.department_service_id = ds.id
-             LEFT JOIN departments dep ON ds.department_id = dep.id
-             WHERE d.api_key_hash = $1 AND d.status != 'INACTIVE'`,
-            [apiKeyHash]
+            `SELECT d.id, d.device_code, d.organization_id, d.service_id, 
+                    d.name, d.status,
+                    e.id as event_id
+             FROM sps_devices d
+             LEFT JOIN sps_services s ON d.service_id = s.id
+             LEFT JOIN sps_department_services ds ON s.id = ds.service_id
+             LEFT JOIN sps_departments dep ON ds.department_id = dep.id
+             LEFT JOIN sps_events e ON dep.event_id = e.id
+             WHERE d.api_key = $1 AND d.status != 'INACTIVE'`,
+            [apiKey]
         );
 
         if (result.rows.length === 0) {
@@ -80,7 +73,7 @@ export const authenticateDevice = async (
             device_code: device.device_code,
             organization_id: device.organization_id,
             event_id: device.event_id,
-            department_service_id: device.department_service_id,
+            service_id: device.service_id,
             name: device.name,
             status: device.status,
         };

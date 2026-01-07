@@ -37,7 +37,7 @@ export const ingest = async (req: Request, res: Response, next: NextFunction): P
                 device_code: device.device_code,
                 organization_id: device.organization_id,
                 event_id: device.event_id,
-                department_service_id: device.department_service_id,
+                service_id: device.service_id,
             },
             data,
             timestamp: timestamp ? new Date(timestamp) : undefined,
@@ -138,9 +138,17 @@ export const getLiveDataByEvent = async (req: Request, res: Response, next: Next
  */
 export const getHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { deviceId } = req.params;
+        const deviceId = parseInt(req.params.deviceId);
         const limit = parseInt(req.query.limit as string) || 100;
         const offset = parseInt(req.query.offset as string) || 0;
+
+        if (isNaN(deviceId)) {
+            res.status(400).json({
+                success: false,
+                error: 'deviceId must be a valid number',
+            });
+            return;
+        }
 
         const records = await telemetryService.getHistory(deviceId, limit, offset);
 
@@ -164,8 +172,16 @@ export const getHistory = async (req: Request, res: Response, next: NextFunction
  */
 export const getHistoryByRange = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { deviceId } = req.params;
+        const deviceId = parseInt(req.params.deviceId);
         const { start, end } = req.query;
+
+        if (isNaN(deviceId)) {
+            res.status(400).json({
+                success: false,
+                error: 'deviceId must be a valid number',
+            });
+            return;
+        }
 
         if (!start || !end) {
             res.status(400).json({

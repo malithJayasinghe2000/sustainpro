@@ -1,113 +1,237 @@
-version: '3.8'
+# ==================================================================================
+# SustainPro Enterprise - Docker Compose (Development)
+# ==================================================================================
+# Usage:
+#   Development:  docker-compose up -d postgres rabbitmq redis gateway
+#   Full Stack:   docker-compose --profile full up -d
+#   Production:   docker-compose -f docker-compose.prod.yml up -d
+# ==================================================================================
 
 services:
   # ========================================
-  # Infrastructure Services
+  # PostgreSQL Database
   # ========================================
   postgres:
     image: postgres:16-alpine
     container_name: sustainpro-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: sustainpro
-      POSTGRES_PASSWORD: sustainpro_dev
-      POSTGRES_DB: sustainpro
+      POSTGRES_USER: ${POSTGRES_USER:-sustainpro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sustainpro_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-sustainpro}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../database/seed-data.sql:/docker-entrypoint-initdb.d/02-seed-data.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sustainpro"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sustainpro} -d ${POSTGRES_DB:-sustainpro}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    networks:
+      - sustainpro-network
 
+  # ========================================
+  # RabbitMQ Message Broker
+  # ========================================
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    image: rabbitmq:3.12-management-alpine
     container_name: sustainpro-rabbitmq
-    ports:
-      - "5672:5672"   # AMQP Protocol
-      - "15672:15672" # Management UI
+    restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: sustainpro
-      RABBITMQ_DEFAULT_PASS: sustainpro_dev
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-sustainpro}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-sustainpro_dev}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"     # AMQP Protocol
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"  # Management UI
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sustainpro-network
+
+  # ========================================
+  # Redis Cache (Optional - for sessions/caching)
+  # ========================================
+  redis:
+    image: redis:7-alpine
+    container_name: sustainpro-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-sustainpro_dev}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-sustainpro_dev}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - sustainpro-network
 
   # ========================================
-  # Microservices (Development Mode)
-  # These run on host for hot-reload
-  # Uncomment when ready to containerize
+  # API Gateway (nginx)
   # ========================================
-  
-  # auth-service:
-  #   build:
-  #     context: ..
-  #     dockerfile: services/auth-service/Dockerfile
-  #   container_name: sustainpro-auth
-  #   ports:
-  #     - "5000:5000"
-  #   environment:
-  #     - NODE_ENV=development
-  #     - PORT=5000
-  #     - DATABASE_URL=postgresql://sustainpro:sustainpro_dev@postgres:5432/sustainpro
-  #     - JWT_SECRET=${JWT_SECRET}
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  
-  # core-service:
-  #   build:
-  #     context: ..
-  #     dockerfile: services/core-service/Dockerfile
-  #   container_name: sustainpro-core
-  #   ports:
-  #     - "5001:5001"
-  #   environment:
-  #     - NODE_ENV=development
-  #     - PORT=5001
-  #     - DATABASE_URL=postgresql://sustainpro:sustainpro_dev@postgres:5432/sustainpro
-  #     - RABBITMQ_URL=amqp://sustainpro:sustainpro_dev@rabbitmq:5672
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
+  gateway:
+    image: nginx:alpine
+    container_name: sustainpro-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sustainpro-network
+    # In development, services run on host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # iot-service:
-  #   build:
-  #     context: ..
-  #     dockerfile: services/iot-service/Dockerfile
-  #   container_name: sustainpro-iot
-  #   ports:
-  #     - "5002:5002"
-  #   environment:
-  #     - NODE_ENV=development
-  #     - PORT=5002
-  #     - DATABASE_URL=postgresql://sustainpro:sustainpro_dev@postgres:5432/sustainpro
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
+  # ========================================
+  # Microservices (Production Mode)
+  # Use --profile full to enable
+  # ========================================
+  auth-service:
+    build:
+      context: ..
+      dockerfile: services/auth-service/Dockerfile
+    container_name: sustainpro-auth
+    restart: unless-stopped
+    profiles:
+      - full
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sustainpro}:${POSTGRES_PASSWORD:-sustainpro_dev}@postgres:5432/${POSTGRES_DB:-sustainpro}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-sustainpro_dev}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-sustainpro}:${RABBITMQ_PASSWORD:-sustainpro_dev}@rabbitmq:5672
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sustainpro-network
 
-  # gateway:
-  #   build: ../services/gateway
-  #   container_name: sustainpro-gateway
-  #   ports:
-  #     - "8080:8080"
-  #   depends_on:
-  #     - auth-service
-  #     - core-service
-  #     - iot-service
+  core-service:
+    build:
+      context: ..
+      dockerfile: services/core-service/Dockerfile
+    container_name: sustainpro-core
+    restart: unless-stopped
+    profiles:
+      - full
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sustainpro}:${POSTGRES_PASSWORD:-sustainpro_dev}@postgres:5432/${POSTGRES_DB:-sustainpro}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-sustainpro}:${RABBITMQ_PASSWORD:-sustainpro_dev}@rabbitmq:5672
+      RABBITMQ_ENABLED: ${RABBITMQ_ENABLED:-true}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-sustainpro_dev}@redis:6379
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sustainpro-network
 
+  iot-service:
+    build:
+      context: ..
+      dockerfile: services/iot-service/Dockerfile
+    container_name: sustainpro-iot
+    restart: unless-stopped
+    profiles:
+      - full
+    environment:
+      NODE_ENV: production
+      PORT: 5002
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sustainpro}:${POSTGRES_PASSWORD:-sustainpro_dev}@postgres:5432/${POSTGRES_DB:-sustainpro}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-sustainpro}:${RABBITMQ_PASSWORD:-sustainpro_dev}@rabbitmq:5672
+      RABBITMQ_ENABLED: ${RABBITMQ_ENABLED:-true}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-sustainpro_dev}@redis:6379
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sustainpro-network
+
+  # ========================================
+  # Frontend (Production Mode)
+  # ========================================
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: sustainpro-frontend
+    restart: unless-stopped
+    profiles:
+      - full
+    environment:
+      NEXT_PUBLIC_API_URL: http://gateway/api/v1
+    depends_on:
+      - gateway
+    networks:
+      - sustainpro-network
+
+# ========================================
+# Volumes
+# ========================================
 volumes:
   postgres_data:
+    name: sustainpro-postgres-data
   rabbitmq_data:
+    name: sustainpro-rabbitmq-data
+  redis_data:
+    name: sustainpro-redis-data
 
+# ========================================
+# Networks
+# ========================================
 networks:
-  default:
+  sustainpro-network:
     name: sustainpro-network
+    driver: bridge

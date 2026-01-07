@@ -1,17 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
-import { DeviceModelService } from '../services/device-model.service';
+import { deviceModelService } from '../services/device-model.service';
 import { createLogger } from '@sustainpro/shared-utils';
 
 const logger = createLogger({ service: 'device-model-controller' });
 
-const deviceModelService = new DeviceModelService();
-
+/**
+ * Get all device models
+ * GET /device-models
+ */
 export const getAll = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const user = (req as any).user;
-        const includeInactive = user?.isSuperAdmin && req.query.include_inactive === 'true';
-
-        const models = await deviceModelService.getAll(includeInactive);
+        const models = await deviceModelService.getAll();
 
         res.json({
             success: true,
@@ -22,92 +21,58 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
     }
 };
 
+/**
+ * Get device model by ID
+ * GET /device-models/:id
+ */
 export const getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { id } = req.params;
         const model = await deviceModelService.getById(id);
 
-        if (!model) {
+        res.json({
+            success: true,
+            data: model,
+        });
+    } catch (error: any) {
+        if (error.name === 'NotFoundError') {
             res.status(404).json({
                 success: false,
-                error: 'Device model not found',
+                error: error.message,
             });
             return;
         }
-
-        // Get usage count
-        const usageCount = await deviceModelService.getUsageCount(id);
-
-        res.json({
-            success: true,
-            data: {
-                ...model,
-                usage_count: usageCount,
-            },
-        });
-    } catch (error) {
         next(error);
     }
 };
 
-export const getByCategory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-        const { category } = req.params;
-        const validCategories = ['SENSOR', 'DISPLAY', 'CONTROLLER', 'GATEWAY', 'OTHER'];
-
-        if (!validCategories.includes(category.toUpperCase())) {
-            res.status(400).json({
-                success: false,
-                error: `Invalid category. Must be one of: ${validCategories.join(', ')}`,
-            });
-            return;
-        }
-
-        const models = await deviceModelService.getByCategory(category.toUpperCase() as any);
-
-        res.json({
-            success: true,
-            data: models,
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
+/**
+ * Create a new device model
+ * POST /device-models
+ * Body: { id, name, description?, parameters? }
+ */
 export const create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { name, manufacturer, model_number, description, category, specifications, firmware_versions, image_url } = req.body;
+        const user = (req as any).user;
+        const { id, name, description, parameters } = req.body;
 
         // Validate required fields
-        if (!name || !manufacturer || !model_number || !category) {
+        if (!id || !name) {
             res.status(400).json({
                 success: false,
-                error: 'name, manufacturer, model_number, and category are required',
-            });
-            return;
-        }
-
-        const validCategories = ['SENSOR', 'DISPLAY', 'CONTROLLER', 'GATEWAY', 'OTHER'];
-        if (!validCategories.includes(category.toUpperCase())) {
-            res.status(400).json({
-                success: false,
-                error: `Invalid category. Must be one of: ${validCategories.join(', ')}`,
+                error: 'id and name are required',
             });
             return;
         }
 
         const model = await deviceModelService.create({
+            id,
             name,
-            manufacturer,
-            model_number,
             description,
-            category: category.toUpperCase(),
-            specifications,
-            firmware_versions,
-            image_url,
+            parameters,
+            created_by: user?.id,
         });
 
-        const user = (req as any).user;
         logger.info('Device model created', { id: model.id, createdBy: user?.id });
 
         res.status(201).json({
@@ -115,7 +80,7 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
             data: model,
         });
     } catch (error: any) {
-        if (error.message.includes('already exists')) {
+        if (error.name === 'ConflictError') {
             res.status(409).json({
                 success: false,
                 error: error.message,
@@ -126,43 +91,20 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
     }
 };
 
+/**
+ * Update a device model
+ * PUT /device-models/:id
+ * Body: { name?, description?, parameters? }
+ */
 export const update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { id } = req.params;
-        const { name, manufacturer, model_number, description, category, specifications, firmware_versions, image_url, is_active } = req.body;
-
-        // Check model exists
-        const existing = await deviceModelService.getById(id);
-        if (!existing) {
-            res.status(404).json({
-                success: false,
-                error: 'Device model not found',
-            });
-            return;
-        }
-
-        // Validate category if provided
-        if (category) {
-            const validCategories = ['SENSOR', 'DISPLAY', 'CONTROLLER', 'GATEWAY', 'OTHER'];
-            if (!validCategories.includes(category.toUpperCase())) {
-                res.status(400).json({
-                    success: false,
-                    error: `Invalid category. Must be one of: ${validCategories.join(', ')}`,
-                });
-                return;
-            }
-        }
+        const { name, description, parameters } = req.body;
 
         const model = await deviceModelService.update(id, {
             name,
-            manufacturer,
-            model_number,
             description,
-            category: category?.toUpperCase(),
-            specifications,
-            firmware_versions,
-            image_url,
-            is_active,
+            parameters,
         });
 
         res.json({
@@ -170,8 +112,8 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
             data: model,
         });
     } catch (error: any) {
-        if (error.message.includes('already exists')) {
-            res.status(409).json({
+        if (error.name === 'NotFoundError') {
+            res.status(404).json({
                 success: false,
                 error: error.message,
             });
@@ -181,29 +123,23 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
     }
 };
 
+/**
+ * Delete a device model
+ * DELETE /device-models/:id
+ */
 export const remove = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { id } = req.params;
-
-        // Check model exists
-        const existing = await deviceModelService.getById(id);
-        if (!existing) {
-            res.status(404).json({
-                success: false,
-                error: 'Device model not found',
-            });
-            return;
-        }
 
         await deviceModelService.delete(id);
 
         res.json({
             success: true,
-            message: 'Device model deleted (soft delete - marked as inactive)',
+            message: 'Device model deleted successfully',
         });
     } catch (error: any) {
-        if (error.message.includes('Cannot delete')) {
-            res.status(409).json({
+        if (error.name === 'NotFoundError') {
+            res.status(404).json({
                 success: false,
                 error: error.message,
             });
@@ -213,41 +149,19 @@ export const remove = async (req: Request, res: Response, next: NextFunction): P
     }
 };
 
-export const addFirmwareVersion = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+/**
+ * Get device model count (for stats)
+ * GET /device-models/stats/count
+ */
+export const getCount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { id } = req.params;
-        const { version } = req.body;
-
-        if (!version) {
-            res.status(400).json({
-                success: false,
-                error: 'version is required',
-            });
-            return;
-        }
-
-        const model = await deviceModelService.addFirmwareVersion(id, version);
+        const count = await deviceModelService.getCount();
 
         res.json({
             success: true,
-            data: model,
-            message: `Firmware version ${version} added`,
+            data: { count },
         });
-    } catch (error: any) {
-        if (error.message === 'Device model not found') {
-            res.status(404).json({
-                success: false,
-                error: error.message,
-            });
-            return;
-        }
-        if (error.message === 'Firmware version already exists') {
-            res.status(409).json({
-                success: false,
-                error: error.message,
-            });
-            return;
-        }
+    } catch (error) {
         next(error);
     }
 };

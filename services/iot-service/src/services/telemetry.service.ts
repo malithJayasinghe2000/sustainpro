@@ -9,11 +9,11 @@ const logger = createLogger({ service: 'telemetry-service' });
 const telemetryRepository = new TelemetryRepository();
 
 export interface DeviceInfo {
-    id: string;
+    id: number;  // Changed from string to number to match database SERIAL type
     device_code: string;
     organization_id: string;
     event_id?: string;
-    department_service_id?: string;
+    service_id?: string;  // Changed from department_service_id to service_id
 }
 
 export interface IngestTelemetryInput {
@@ -51,7 +51,7 @@ export class TelemetryService {
             device_code: device.device_code,
             organization_id: device.organization_id,
             event_id: device.event_id,
-            department_service_id: device.department_service_id,
+            service_id: device.service_id,
             data,
             timestamp: recordedAt,
             status: 'online',
@@ -66,7 +66,7 @@ export class TelemetryService {
             device_code: device.device_code,
             organization_id: device.organization_id,
             event_id: device.event_id,
-            department_service_id: device.department_service_id,
+            service_id: device.service_id,
             data,
             recorded_at: recordedAt,
         }).catch((err) => {
@@ -76,7 +76,7 @@ export class TelemetryService {
         // Emit via Socket.IO
         emitTelemetry({
             device_code: device.device_code,
-            device_id: device.id,
+            device_id: String(device.id),
             organization_id: device.organization_id,
             timestamp: recordedAt,
             data,
@@ -102,8 +102,8 @@ export class TelemetryService {
 
         // Look up device info
         const deviceResult = await query(
-            `SELECT id, device_code, organization_id, department_service_id
-             FROM devices 
+            `SELECT id, device_code, organization_id, service_id
+             FROM sps_devices 
              WHERE device_code = $1`,
             [device_code]
         );
@@ -114,15 +114,15 @@ export class TelemetryService {
 
         const device = deviceResult.rows[0];
 
-        // Get event_id from department_service if exists
+        // Get event_id from service if exists
         let event_id: string | undefined;
-        if (device.department_service_id) {
+        if (device.service_id) {
             const serviceResult = await query(
                 `SELECT d.event_id 
-                 FROM department_services ds
-                 JOIN departments d ON ds.department_id = d.id
+                 FROM sps_department_services ds
+                 JOIN sps_departments d ON ds.department_id = d.id
                  WHERE ds.id = $1`,
-                [device.department_service_id]
+                [device.service_id]
             );
             if (serviceResult.rows.length > 0) {
                 event_id = serviceResult.rows[0].event_id;
@@ -135,7 +135,7 @@ export class TelemetryService {
                 device_code: device.device_code,
                 organization_id: device.organization_id || organization_id,
                 event_id,
-                department_service_id: device.department_service_id,
+                service_id: device.service_id,
             },
             data,
             timestamp: recordedAt,
@@ -167,7 +167,7 @@ export class TelemetryService {
      * Get historical telemetry for a device
      */
     async getHistory(
-        deviceId: string,
+        deviceId: number,
         limit: number = 100,
         offset: number = 0
     ): Promise<TelemetryRecord[]> {
@@ -178,11 +178,11 @@ export class TelemetryService {
      * Get historical telemetry within a time range
      */
     async getHistoryByTimeRange(
-        deviceId: string,
+        deviceId: number,
         startTime: Date,
         endTime: Date
     ): Promise<TelemetryRecord[]> {
-        return telemetryRepository.findByDeviceAndTimeRange(deviceId, startTime, endTime);
+        return telemetryRepository.findByTimeRange(deviceId, startTime, endTime);
     }
 
     /**
@@ -190,7 +190,7 @@ export class TelemetryService {
      */
     async getDashboardStats(organizationId?: string | null): Promise<DashboardStats> {
         // Get device counts from database
-        let deviceQuery = 'SELECT COUNT(*) as total FROM devices';
+        let deviceQuery = 'SELECT COUNT(*) as total FROM sps_devices';
         const params: any[] = [];
 
         if (organizationId) {
@@ -240,8 +240,8 @@ export class TelemetryService {
     }> {
         const telemetryStats = await telemetryRepository.getStats();
 
-        const deviceResult = await query('SELECT COUNT(*) as total FROM devices');
-        const orgResult = await query('SELECT COUNT(DISTINCT organization_id) as count FROM devices');
+        const deviceResult = await query('SELECT COUNT(*) as total FROM sps_devices');
+        const orgResult = await query('SELECT COUNT(DISTINCT organization_id) as count FROM sps_devices');
 
         return {
             total_devices: parseInt(deviceResult.rows[0].total),
@@ -263,9 +263,9 @@ export class TelemetryService {
     /**
      * Update device last_seen timestamp
      */
-    private async updateDeviceLastSeen(deviceId: string): Promise<void> {
+    private async updateDeviceLastSeen(deviceId: number): Promise<void> {
         await query(
-            `UPDATE devices SET last_seen_at = NOW(), status = 'ACTIVE' WHERE id = $1`,
+            `UPDATE sps_devices SET last_seen = NOW(), status = 'ACTIVE' WHERE id = $1`,
             [deviceId]
         );
     }

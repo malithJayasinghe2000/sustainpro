@@ -1,23 +1,18 @@
 /**
  * SustainPro End-to-End Integration Test Script
  * 
- * This script tests the complete flow through the API Gateway:
- * 1. Authentication (Login, Token, Refresh)
- * 2. Organizations CRUD
- * 3. Events CRUD
- * 4. Device Management
- * 5. Telemetry Ingestion
- * 6. Socket.IO Connection
- * 
- * Usage:
- *   npm run test:e2e
- *   # or
- *   npx ts-node scripts/e2e-test.ts
+ * This script tests the complete flow through the API Gateway.
  * 
  * Prerequisites:
  *   - All services running (auth, core, iot)
  *   - Gateway running on port 8080
- *   - Database with at least one user
+ *   - Database with sample data
+ * 
+ * Installation:
+ *   npm install axios socket.io-client (in project root)
+ * 
+ * Usage:
+ *   npx ts-node scripts/e2e-test.ts
  */
 
 import axios, { AxiosInstance } from 'axios';
@@ -132,8 +127,8 @@ async function testLogin(): Promise<void> {
         throw new Error('No token in login response');
     }
     
-    authToken = response.data.token;
-    apiClient = createApiClient(authToken);
+    authToken = response.data.token || null;
+    apiClient = createApiClient(authToken || undefined);
 }
 
 async function testGetCurrentUser(): Promise<void> {

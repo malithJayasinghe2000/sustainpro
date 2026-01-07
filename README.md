@@ -47,6 +47,30 @@ SustainPro uses a **microservices architecture** with an API Gateway for unified
 
 ```
 SustainPro/
+├── database/              # Database files
+│   ├── schema.sql         # Complete database schema (25 tables)
+│   ├── seed.sql           # Sample data for development
+│   └── migrations/        # SQL migration files
+│
+├── docker/                # Docker configuration
+│   ├── docker-compose.yml # Development environment
+│   ├── nginx/             # API Gateway configuration
+│   │   ├── nginx.conf     # Main nginx config
+│   │   └── conf.d/        # Server blocks & routing
+│   └── rabbitmq/          # Message broker configuration
+│       ├── rabbitmq.conf  # RabbitMQ settings
+│       └── definitions.json # Pre-configured exchanges/queues
+│
+├── docs/                  # Documentation
+│   ├── SETUP.md           # 📘 Local development guide
+│   ├── RABBITMQ.md        # 📨 Event-driven architecture explained
+│   ├── NGINX.md           # 🌐 API Gateway explained
+│   ├── MOBILE_API.md      # 📱 Mobile API documentation
+│   └── AWS_IOT_SETUP.md   # ☁️ AWS IoT configuration
+│
+├── firmware/              # ESP32 IoT Firmware
+│   └── SustainPro_AWS_Firmware.ino
+│
 ├── frontend/              # Next.js 15 application
 │   ├── src/
 │   │   ├── app/           # Pages and layouts
@@ -55,109 +79,131 @@ SustainPro/
 │   │   └── lib/           # API clients and utilities
 │   └── package.json
 │
-├── services/              # Microservices
-│   ├── gateway/           # Nginx API Gateway
-│   │   ├── nginx.conf     # Production config
-│   │   ├── nginx.dev.conf # Development config
-│   │   └── Dockerfile
-│   ├── auth-service/      # Authentication & Users
-│   │   ├── src/
-│   │   │   ├── routes/    # Auth, User, RBAC routes
-│   │   │   ├── services/  # Business logic
-│   │   │   └── repositories/
-│   │   └── Dockerfile
-│   ├── core-service/      # Core Business Logic
-│   │   ├── src/
-│   │   │   ├── routes/    # Orgs, Events, Devices, etc.
-│   │   │   ├── services/
-│   │   │   └── repositories/
-│   │   └── Dockerfile
-│   └── iot-service/       # Real-time Telemetry
-│       ├── src/
-│       │   ├── socket/    # Socket.IO handlers
-│       │   ├── routes/    # Telemetry, Webhooks
-│       │   └── services/
-│       └── Dockerfile
-│
-├── packages/              # Shared packages (npm workspace)
+├── packages/              # Shared packages (pnpm workspace)
 │   ├── shared-types/      # TypeScript interfaces
 │   ├── shared-utils/      # Common utilities, logger
 │   └── shared-middleware/ # Express middleware
 │
-├── docker/                # Docker Compose configs
-│   ├── docker-compose.yml     # Development
-│   └── docker-compose.prod.yml# Production
+├── scripts/               # Utility scripts
+│   ├── e2e-test.ts        # End-to-end integration tests
+│   └── generate-password-hashes.ts # Password hash generator
 │
-├── firmware/              # ESP32 IoT Firmware
-│   └── SustainPro_AWS_Firmware.ino
+├── services/              # Microservices
+│   ├── auth-service/      # Authentication & Authorization (Port 5000)
+│   │   ├── src/
+│   │   │   ├── routes/    # Auth, User, RBAC routes
+│   │   │   ├── services/  # Business logic
+│   │   │   ├── repositories/ # Database access
+│   │   │   └── middleware/   # Auth middleware
+│   │   └── Dockerfile
+│   ├── core-service/      # Core Business Logic (Port 5001)
+│   │   ├── src/
+│   │   │   ├── routes/    # Organizations, Events, Departments, Devices
+│   │   │   ├── services/  # Business logic
+│   │   │   ├── repositories/ # Database access
+│   │   │   └── messaging/ # RabbitMQ event publisher
+│   │   └── Dockerfile
+│   └── iot-service/       # Real-time Telemetry (Port 5002)
+│       ├── src/
+│       │   ├── routes/    # Telemetry ingestion, Webhooks
+│       │   ├── services/  # Telemetry processing
+│       │   ├── socket/    # Socket.IO real-time handlers
+│       │   └── repositories/ # Database access
+│       └── Dockerfile
 │
-└── docs/                  # Documentation
-    └── restructure/       # Migration guides
+├── .dockerignore          # Docker build optimization
+├── .env.example           # Environment template
+├── turbo.json             # Turborepo configuration
+└── pnpm-workspace.yaml    # pnpm workspace configuration
 ```
+
+### 🏗️ Architecture Components
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **API Gateway** | nginx | Routing, CORS, Rate limiting, Load balancing |
+| **Message Broker** | RabbitMQ | Event-driven async communication |
+| **Cache** | Redis | Session storage, rate limiting |
+| **Database** | PostgreSQL 16 | Primary data store |
+| **Frontend** | Next.js 15 + React | Web application |
+| **Services** | Node.js + Express | Microservices |
+
+## 📖 Documentation
+
+| Document | Purpose |
+|----------|---------|
+| **[SETUP.md](docs/SETUP.md)** | 📘 Complete local development setup guide |
+| **[PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** | 📂 Detailed explanation of every folder |
+| **[IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)** | 🏗️ Migration phases and architecture evolution |
+| **[RABBITMQ.md](docs/RABBITMQ.md)** | 📨 Event-driven architecture explained |
+| **[NGINX.md](docs/NGINX.md)** | 🌐 API Gateway configuration and routing |
+| **[MOBILE_API.md](docs/MOBILE_API.md)** | 📱 API endpoints for mobile/devices |
+| **[AWS_IOT_SETUP.md](docs/AWS_IOT_SETUP.md)** | ☁️ AWS IoT Core setup instructions |
+
+### Quick Reference
+
+- **New to the project?** → Start with `docs/SETUP.md`
+- **Understanding structure?** → Read `docs/PROJECT_STRUCTURE.md`
+- **Why RabbitMQ?** → See `docs/RABBITMQ.md`
+- **How does routing work?** → Check `docs/NGINX.md`
+- **What are the phases?** → Review `docs/IMPLEMENTATION_PHASES.md`
+
+---
 
 ## 🛠️ Local Development
 
 ### Prerequisites
 - Node.js 20+
+- pnpm 9+
 - PostgreSQL 16+
-- Docker Desktop (for Gateway)
+- Docker Desktop
 - AWS IoT Core Account (optional, for IoT features)
 
 ### Quick Start
 
-1. **Install Dependencies**
+**📘 Full setup guide:** [`docs/SETUP.md`](docs/SETUP.md)
+
+1. **Install pnpm and Dependencies**
    ```bash
-   npm install          # Installs all workspaces
+   npm install -g pnpm@latest
+   pnpm install
    ```
 
-2. **Start Infrastructure (PostgreSQL, RabbitMQ)**
+2. **Start All Services with Docker**
    ```bash
    cd docker
-   docker-compose up -d postgres rabbitmq
+   docker-compose up -d
    ```
 
-3. **Start Microservices**
+3. **Initialize Database**
    ```bash
-   # Terminal 1 - Auth Service
-   cd services/auth-service
-   cp .env.example .env   # Configure database credentials
-   npm run dev
-
-   # Terminal 2 - Core Service  
-   cd services/core-service
-   cp .env.example .env
-   npm run dev
-
-   # Terminal 3 - IoT Service
-   cd services/iot-service
-   cp .env.example .env
-   npm run dev
+   docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro < database/schema.sql
+   docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro < database/seed.sql
    ```
 
-4. **Start API Gateway**
-   ```bash
-   cd services/gateway
-   docker build -t sustainpro-gateway .
-   docker run -d -p 8080:8080 --add-host=host.docker.internal:host-gateway \
-     -v "${PWD}/nginx.dev.conf:/etc/nginx/nginx.conf:ro" \
-     --name sustainpro-gw sustainpro-gateway
-   ```
+4. **Access Services**
+   - API Gateway: http://localhost:8080
+   - RabbitMQ Management: http://localhost:15672
+   - Frontend: http://localhost:3000
 
-5. **Start Frontend**
-   ```bash
-   cd frontend
-   cp .env.local.example .env.local
-   npm run dev
-   ```
-   
-   Access at: `http://localhost:3000`
-   API Gateway: `http://localhost:8080`
+### Development Mode (Individual Services)
 
-### Running All Services (Alternative)
-
-Using Turbo (runs all services in watch mode):
 ```bash
-npm run dev
+# Start infrastructure only
+cd docker
+docker-compose up -d postgres redis rabbitmq gateway
+
+# Run services in watch mode
+pnpm --filter @sustainpro/auth-service dev    # Terminal 1
+pnpm --filter @sustainpro/core-service dev    # Terminal 2
+pnpm --filter @sustainpro/iot-service dev     # Terminal 3
+pnpm --filter @sustainpro/frontend dev        # Terminal 4
+```
+
+### Build All Packages
+
+```bash
+pnpm build
 ```
 
 ## 🌐 Deployment
@@ -213,17 +259,13 @@ All requests go through the API Gateway at `http://localhost:8080`:
 
 ```bash
 # Build all packages
-npm run build
+pnpm build
 
 # Run E2E Integration Tests (requires services running)
-npx ts-node scripts/e2e-test.ts
+pnpm ts-node scripts/e2e-test.ts
 
-# Frontend Tests
-cd frontend && npm run test
-
-# Individual Service Tests
-cd services/auth-service && npm run test
-cd services/core-service && npm run test
+# Run all tests
+pnpm test
 ```
 
 ### Health Checks

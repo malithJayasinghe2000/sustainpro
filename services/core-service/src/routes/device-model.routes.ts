@@ -4,11 +4,11 @@ import * as deviceModelController from '../controllers/device-model.controller';
 
 const router = Router();
 
+// GET /device-models/stats/count - Get device model count (must be before /:id)
+router.get('/stats/count', deviceModelController.getCount);
+
 // GET /device-models - List all device models
 router.get('/', deviceModelController.getAll);
-
-// GET /device-models/category/:category - Get models by category
-router.get('/category/:category', deviceModelController.getByCategory);
 
 // GET /device-models/:id - Get device model by ID
 router.get('/:id', deviceModelController.getById);
@@ -32,13 +32,6 @@ router.delete(
     '/:id',
     requireRole('SUPER_ADMIN'),
     deviceModelController.remove
-);
-
-// POST /device-models/:id/firmware - Add firmware version (SUPER_ADMIN only)
-router.post(
-    '/:id/firmware',
-    requireRole('SUPER_ADMIN'),
-    deviceModelController.addFirmwareVersion
 );
 
 export default router;
