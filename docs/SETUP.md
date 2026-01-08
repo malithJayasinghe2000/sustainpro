@@ -79,7 +79,7 @@ This starts **infrastructure only** (not microservices):
 ```bash
 # From project root (not docker folder)
 docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro < database/schema.sql
-docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro < database/seed.sql
+docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro < database/seed-data.sql
 ```
 
 ### 5. Start Microservices (Choose One Method)
