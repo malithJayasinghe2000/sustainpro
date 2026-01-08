@@ -136,6 +136,9 @@ curl http://localhost:8080/health  # Gateway
 | Admin User | admin@acme.com | Admin@123 |
 | Manager User | manager@acme.com | Manager@123 |
 
+if come logging error terminate local postgresql
+
+Stop-Service -Name "postgresql-x64-17" -Force
 ---
 
 ## Manual Setup (Alternative)
@@ -437,3 +440,20 @@ For issues or questions:
 1. Check the [Troubleshooting](#troubleshooting) section
 2. Review service logs
 3. Open an issue on GitHub
+
+
+## pgAdmin
+For pgAdmin, access it at: http://localhost:5050
+
+Email: admin@local.dev
+Password: admin123
+To add the PostgreSQL server in pgAdmin:
+
+Right-click "Servers" → "Register" → "Server"
+General tab: Name = SustainPro
+Connection tab:
+Host: sustainpro-postgres (use container name since they're on same Docker network)
+Port: 5432
+Database: sustainpro
+Username: sustainpro
+Password: sustainpro_dev

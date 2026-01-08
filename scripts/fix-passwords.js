@@ -22,7 +22,7 @@ async function fixPasswords() {
         const verify = await argon2.verify(hash, 'Admin@123');
         console.log('Hash verification:', verify);
 
-        console.log('\n✅ All passwords set to: Admin@123');
+        console.log('\n All passwords set to: Admin@123');
     } catch (err) {
         console.error('Error:', err.message);
     } finally {
