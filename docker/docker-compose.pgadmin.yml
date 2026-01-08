@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sustainpro
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - sustainpro-network
+
+volumes:
+  pgadmin_data:
+
+networks:
+  sustainpro-network:
+    external: true

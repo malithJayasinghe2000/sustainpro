@@ -138,14 +138,15 @@ export class UserRepository {
      * Get user permissions (via role mappings)
      */
     async getUserPermissions(userId: string): Promise<string[]> {
-        const result = await query<{ permission_code: string }>(
-            `SELECT DISTINCT rp.permission_code
+        const result = await query<{ code: string }>(
+            `SELECT DISTINCT p.code
        FROM sps_role_assignments ra
-       JOIN sps_role_permissions rp ON ra.role = rp.role_code
+       JOIN sps_role_permissions rp ON ra.role = rp.role
+       JOIN sps_permissions p ON rp.permission_id = p.id
        WHERE ra.user_id = $1`,
             [userId]
         );
-        return result.rows.map(r => r.permission_code);
+        return result.rows.map(r => r.code);
     }
 
     /**
