@@ -12,14 +12,21 @@
     "prisma:studio": "prisma studio",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:migrate:reset": "prisma migrate reset"
+    "prisma:migrate:reset": "prisma migrate reset",
+    "prisma:seed": "ts-node prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
+    "@types/node": "^22.19.3",
+    "argon2": "^0.44.0",
     "prisma": "^5.22.0",
-    "typescript": "^5.7.0",
-    "rimraf": "^6.0.0"
+    "rimraf": "^6.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.0"
   }
 }
