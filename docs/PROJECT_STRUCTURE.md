@@ -148,6 +148,40 @@ docker/
 
 **Packages:**
 
+#### `shared-database/` ✨ NEW
+Centralized Prisma ORM client for all services.
+```typescript
+import { getPrismaClient } from '@sustainpro/shared-database';
+
+const prisma = getPrismaClient();
+const users = await prisma.user.findMany();
+```
+- **Prisma Schema**: `prisma/schema.prisma` - Single source of truth
+- **Singleton Client**: Connection pooling and retry logic
+- **Type Safety**: Auto-generated TypeScript types
+- **Commands**: 
+  - `npm run prisma:generate` - Generate client
+  - `npm run prisma:studio` - Database GUI
+  - `npm run prisma:migrate` - Create migrations
+
+#### `shared-swagger/` ✨ NEW
+Reusable Swagger/OpenAPI documentation configuration.
+```typescript
+import { setupSwagger } from '@sustainpro/shared-swagger';
+
+setupSwagger(app, {
+  serviceName: 'Auth Service',
+  serviceDescription: 'Authentication API',
+  version: '1.0.0',
+  port: 5000,
+  tags: [...]
+});
+```
+- **Swagger UI**: Auto-generated API documentation
+- **OpenAPI 3.0**: Industry-standard format
+- **Shared Config**: Consistent docs across services
+- **Access**: http://localhost:PORT/api/v1/docs
+
 #### `shared-types/`
 TypeScript interfaces and types used by all services.
 ```typescript

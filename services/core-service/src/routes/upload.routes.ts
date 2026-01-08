@@ -21,14 +21,40 @@ const upload = multer({
 });
 
 /**
- * POST /api/v1/upload
- * Upload a file
+ * @swagger
+ * /upload:
+ *   post:
+ *     tags: [Uploads]
+ *     summary: Upload file
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: File uploaded
  */
 router.post('/', upload.single('file'), uploadController.upload);
 
 /**
- * DELETE /api/v1/upload
- * Delete a file
+ * @swagger
+ * /upload:
+ *   delete:
+ *     tags: [Uploads]
+ *     summary: Delete file
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: File deleted
  */
 router.delete('/', uploadController.remove);
 

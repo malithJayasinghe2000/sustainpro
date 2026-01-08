@@ -5,26 +5,66 @@ import { authenticateToken, requireSuperAdmin } from '@sustainpro/shared-middlew
 const router = Router();
 
 /**
- * GET /api/v1/settings/public
- * Get public settings (no auth required)
+ * @swagger
+ * /settings/public:
+ *   get:
+ *     tags: [Settings]
+ *     summary: Get public settings
+ *     description: Get public settings (no authentication required)
+ *     responses:
+ *       200:
+ *         description: Public settings retrieved
  */
 router.get('/public', settingsController.getPublic);
 
 /**
- * GET /api/v1/settings/security
- * Get security settings for login page (no auth required)
+ * @swagger
+ * /settings/security:
+ *   get:
+ *     tags: [Settings]
+ *     summary: Get security settings
+ *     description: Get security settings for login page (no authentication required)
+ *     responses:
+ *       200:
+ *         description: Security settings retrieved
  */
 router.get('/security', settingsController.getSecurity);
 
 /**
- * GET /api/v1/settings
- * Get full system settings (requires auth)
+ * @swagger
+ * /settings:
+ *   get:
+ *     tags: [Settings]
+ *     summary: Get system settings
+ *     description: Get full system settings
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: System settings retrieved
  */
 router.get('/', authenticateToken, settingsController.get);
 
 /**
- * PUT /api/v1/settings
- * Update system settings (Super Admin only)
+ * @swagger
+ * /settings:
+ *   put:
+ *     tags: [Settings]
+ *     summary: Update system settings
+ *     description: Update system settings (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Settings updated
+ *       403:
+ *         description: Forbidden - Super Admin required
  */
 router.put('/', authenticateToken, requireSuperAdmin, settingsController.update);
 

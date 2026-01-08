@@ -1,4 +1,6 @@
-import pool from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
+
+const prisma = getPrismaClient();
 
 export interface DepartmentTemplate {
     id: string;
@@ -36,110 +38,78 @@ export interface UpdateDepartmentTemplateInput {
 
 export class DepartmentTemplateRepository {
     async findAll(organizationId?: string): Promise<DepartmentTemplate[]> {
-        const result = await pool.query(
-            `SELECT * FROM sps_department_templates 
-             WHERE (organization_id IS NULL OR organization_id = $1) 
+        const result = await prisma.$queryRaw`
+            SELECT * FROM sps_department_templates 
+             WHERE (organization_id IS NULL OR organization_id = ${organizationId || null}) 
              AND is_active = true 
-             ORDER BY organization_id NULLS FIRST, name ASC`,
-            [organizationId]
-        );
-        return result.rows;
+             ORDER BY organization_id NULLS FIRST, name ASC
+        ` as any as DepartmentTemplate[];
+        return result;
     }
 
     async findById(id: string): Promise<DepartmentTemplate | null> {
-        const result = await pool.query(
-            'SELECT * FROM sps_department_templates WHERE id = $1',
-            [id]
-        );
-        return result.rows[0] || null;
+        const result = await prisma.sps_department_templates.findUnique({
+            where: { id },
+        });
+        return result as any as DepartmentTemplate | null;
     }
 
     async findByName(name: string, organizationId?: string | null): Promise<DepartmentTemplate | null> {
         if (organizationId) {
-            const result = await pool.query(
-                `SELECT * FROM sps_department_templates 
-                 WHERE organization_id = $1 AND LOWER(name) = LOWER($2)`,
-                [organizationId, name]
-            );
-            return result.rows[0] || null;
+            const result = await prisma.$queryRaw`
+                SELECT * FROM sps_department_templates 
+                 WHERE organization_id = ${organizationId} AND LOWER(name) = LOWER(${name})
+            ` as any as DepartmentTemplate[];
+            return result[0] || null;
         } else {
-            const result = await pool.query(
-                `SELECT * FROM sps_department_templates 
-                 WHERE organization_id IS NULL AND LOWER(name) = LOWER($1)`,
-                [name]
-            );
-            return result.rows[0] || null;
+            const result = await prisma.$queryRaw`
+                SELECT * FROM sps_department_templates 
+                 WHERE organization_id IS NULL AND LOWER(name) = LOWER(${name})
+            ` as any as DepartmentTemplate[];
+            return result[0] || null;
         }
     }
 
     async create(data: CreateDepartmentTemplateInput): Promise<DepartmentTemplate> {
-        const result = await pool.query(
-            `INSERT INTO sps_department_templates 
-             (organization_id, name, description, icon, color, suggested_services, required_roles)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING *`,
-            [
-                data.organization_id || null,
-                data.name,
-                data.description || null,
-                data.icon || null,
-                data.color || null,
-                JSON.stringify(data.suggested_services || []),
-                JSON.stringify(data.required_roles || []),
-            ]
-        );
-        return result.rows[0];
+        const result = await prisma.sps_department_templates.create({
+            data: {
+                organization_id: data.organization_id || null,
+                name: data.name,
+                description: data.description || null,
+                icon: data.icon || null,
+                color: data.color || null,
+                suggested_services: data.suggested_services || [],
+                required_roles: data.required_roles || [],
+            },
+        });
+        return result as any as DepartmentTemplate;
     }
 
     async update(id: string, data: UpdateDepartmentTemplateInput): Promise<DepartmentTemplate> {
-        const fields: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
+        const updates: any = {};
 
-        if (data.name !== undefined) {
-            fields.push(`name = $${paramIndex++}`);
-            values.push(data.name);
-        }
-        if (data.description !== undefined) {
-            fields.push(`description = $${paramIndex++}`);
-            values.push(data.description);
-        }
-        if (data.icon !== undefined) {
-            fields.push(`icon = $${paramIndex++}`);
-            values.push(data.icon);
-        }
-        if (data.color !== undefined) {
-            fields.push(`color = $${paramIndex++}`);
-            values.push(data.color);
-        }
-        if (data.suggested_services !== undefined) {
-            fields.push(`suggested_services = $${paramIndex++}`);
-            values.push(JSON.stringify(data.suggested_services));
-        }
-        if (data.required_roles !== undefined) {
-            fields.push(`required_roles = $${paramIndex++}`);
-            values.push(JSON.stringify(data.required_roles));
-        }
-        if (data.is_active !== undefined) {
-            fields.push(`is_active = $${paramIndex++}`);
-            values.push(data.is_active);
-        }
+        if (data.name !== undefined) updates.name = data.name;
+        if (data.description !== undefined) updates.description = data.description;
+        if (data.icon !== undefined) updates.icon = data.icon;
+        if (data.color !== undefined) updates.color = data.color;
+        if (data.suggested_services !== undefined) updates.suggested_services = data.suggested_services;
+        if (data.required_roles !== undefined) updates.required_roles = data.required_roles;
+        if (data.is_active !== undefined) updates.is_active = data.is_active;
 
-        fields.push(`updated_at = NOW()`);
-        values.push(id);
-
-        const result = await pool.query(
-            `UPDATE sps_department_templates SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-            values
-        );
-        return result.rows[0];
+        const result = await prisma.sps_department_templates.update({
+            where: { id },
+            data: updates,
+        });
+        return result as any as DepartmentTemplate;
     }
 
     async delete(id: string): Promise<void> {
         // Soft delete
-        await pool.query(
-            'UPDATE sps_department_templates SET is_active = false, updated_at = NOW() WHERE id = $1',
-            [id]
-        );
+        await prisma.sps_department_templates.update({
+            where: { id },
+            data: {
+                is_active: false,
+            },
+        });
     }
 }

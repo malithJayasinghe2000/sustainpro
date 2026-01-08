@@ -4,27 +4,100 @@ import * as departmentTemplateController from '../controllers/department-templat
 
 const router = Router();
 
-// GET /department-templates - List all templates (global + org-specific)
+/**
+ * @swagger
+ * /department-templates:
+ *   get:
+ *     tags: [Department Templates]
+ *     summary: Get all department templates
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of department templates
+ */
 router.get('/', departmentTemplateController.getAll);
 
-// GET /department-templates/:id - Get specific template
+/**
+ * @swagger
+ * /department-templates/{id}:
+ *   get:
+ *     tags: [Department Templates]
+ *     summary: Get specific template
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Template details
+ */
 router.get('/:id', departmentTemplateController.getById);
 
-// POST /department-templates - Create template (ORG_ADMIN+)
+/**
+ * @swagger
+ * /department-templates:
+ *   post:
+ *     tags: [Department Templates]
+ *     summary: Create template (ORG_ADMIN+)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Template created
+ */
 router.post(
     '/',
     requireRole('SUPER_ADMIN', 'ORG_ADMIN'),
     departmentTemplateController.create
 );
 
-// PUT /department-templates/:id - Update template (ORG_ADMIN+)
+/**
+ * @swagger
+ * /department-templates/{id}:
+ *   put:
+ *     tags: [Department Templates]
+ *     summary: Update template (ORG_ADMIN+)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Template updated
+ */
 router.put(
     '/:id',
     requireRole('SUPER_ADMIN', 'ORG_ADMIN'),
     departmentTemplateController.update
 );
 
-// DELETE /department-templates/:id - Delete template (ORG_ADMIN+)
+/**
+ * @swagger
+ * /department-templates/{id}:
+ *   delete:
+ *     tags: [Department Templates]
+ *     summary: Delete template (ORG_ADMIN+)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       204:
+ *         description: Template deleted
+ */
 router.delete(
     '/:id',
     requireRole('SUPER_ADMIN', 'ORG_ADMIN'),

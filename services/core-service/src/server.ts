@@ -1,13 +1,17 @@
 import app from './app';
 import { config } from './config';
-import { closePool } from './db';
 import { connectRabbitMQ, closeRabbitMQ } from './messaging/publisher';
 import { createLogger } from '@sustainpro/shared-utils';
+import { initDatabase, closeDatabase } from '@sustainpro/shared-database';
 
 const logger = createLogger({ service: 'core-service' });
 
 const startServer = async () => {
     try {
+        // Initialize database connection
+        await initDatabase();
+        logger.info('✅ Database connected successfully');
+
         // Connect to RabbitMQ
         await connectRabbitMQ();
 
@@ -24,7 +28,8 @@ const startServer = async () => {
             server.close(async () => {
                 logger.info('HTTP server closed');
                 await closeRabbitMQ();
-                await closePool();
+                await closeDatabase();
+                logger.info('Database connection closed');
                 process.exit(0);
             });
 

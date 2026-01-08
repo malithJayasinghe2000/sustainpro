@@ -5,38 +5,121 @@ import { requireSuperAdmin } from '@sustainpro/shared-middleware';
 const router = Router();
 
 /**
- * GET /api/v1/organizations
- * Get all organizations (filtered by org for non-super-admins)
+ * @swagger
+ * /organizations:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Get all organizations
+ *     description: Get all organizations (filtered by org for non-super-admins)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of organizations
  */
 router.get('/', orgController.getAll);
 
 /**
- * GET /api/v1/organizations/:id
- * Get organization by ID
+ * @swagger
+ * /organizations/{id}:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Get organization by ID
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Organization details
  */
 router.get('/:id', orgController.getById);
 
 /**
- * GET /api/v1/organizations/:id/structure
- * Get full organization structure with events and departments
+ * @swagger
+ * /organizations/{id}/structure:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Get organization structure
+ *     description: Get full organization structure with events and departments
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Organization structure
  */
 router.get('/:id/structure', orgController.getStructure);
 
 /**
- * POST /api/v1/organizations
- * Create new organization (Super Admin only)
+ * @swagger
+ * /organizations:
+ *   post:
+ *     tags: [Organizations]
+ *     summary: Create organization
+ *     description: Create new organization (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: Organization created
  */
 router.post('/', requireSuperAdmin, orgController.create);
 
 /**
- * PUT /api/v1/organizations/:id
- * Update organization (Super Admin only)
+ * @swagger
+ * /organizations/{id}:
+ *   put:
+ *     tags: [Organizations]
+ *     summary: Update organization
+ *     description: Update organization (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Organization updated
  */
 router.put('/:id', requireSuperAdmin, orgController.update);
 
 /**
- * DELETE /api/v1/organizations/:id
- * Delete organization (Super Admin only)
+ * @swagger
+ * /organizations/{id}:
+ *   delete:
+ *     tags: [Organizations]
+ *     summary: Delete organization
+ *     description: Delete organization (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Organization deleted
  */
 router.delete('/:id', requireSuperAdmin, orgController.remove);
 

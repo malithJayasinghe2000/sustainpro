@@ -2,6 +2,15 @@
 
 Enterprise-grade platform for managing IoT-enabled events with real-time monitoring, RBAC, and streamlined device provisioning.
 
+## 🆕 What's New in v2.0
+
+- **🔷 Prisma ORM Integration** - Type-safe database queries with auto-generated types
+- **📚 Swagger API Documentation** - Interactive API docs for all services
+- **🎯 Improved Developer Experience** - Better tooling, setup scripts, and documentation
+- **⚡ Performance Optimizations** - Better connection pooling and query optimization
+
+See [CHANGELOG.md](CHANGELOG.md) for complete details.
+
 ## 🏗️ Architecture
 
 SustainPro uses a **microservices architecture** with an API Gateway for unified access:
@@ -38,10 +47,13 @@ SustainPro uses a **microservices architecture** with an API Gateway for unified
 
 ### Technical Highlights
 - **Frontend**: Next.js 15, React, TypeScript, TailwindCSS
-- **Backend**: Node.js, Express, PostgreSQL, Socket.IO
+- **Backend**: Node.js, Express, PostgreSQL, Prisma ORM
+- **Database**: PostgreSQL 14+ with Prisma for type-safe queries
+- **API Documentation**: Swagger/OpenAPI 3.0 for all services
 - **IoT Infrastructure**: AWS IoT Core, MQTT, ngrok (dev), ESP32 Firmware
 - **Authentication**: JWT access/refresh tokens, Argon2 password hashing
 - **Security**: Rate limiting, account lockout, CORS protection, Input validation
+- **DevTools**: Prisma Studio, Swagger UI, Turbo for monorepo management
 
 ## 📂 Project Structure
 
@@ -80,6 +92,8 @@ SustainPro/
 │   └── package.json
 │
 ├── packages/              # Shared packages (pnpm workspace)
+│   ├── shared-database/   # 🆕 Prisma ORM client
+│   ├── shared-swagger/    # 🆕 Swagger/OpenAPI configuration
 │   ├── shared-types/      # TypeScript interfaces
 │   ├── shared-utils/      # Common utilities, logger
 │   └── shared-middleware/ # Express middleware
@@ -133,16 +147,19 @@ SustainPro/
 | Document | Purpose |
 |----------|---------|
 | **[SETUP.md](docs/SETUP.md)** | 📘 Complete local development setup guide |
+| **[PRISMA_SWAGGER_GUIDE.md](docs/PRISMA_SWAGGER_GUIDE.md)** | 🆕 Prisma ORM & Swagger API documentation guide |
 | **[PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** | 📂 Detailed explanation of every folder |
 | **[IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)** | 🏗️ Migration phases and architecture evolution |
 | **[RABBITMQ.md](docs/RABBITMQ.md)** | 📨 Event-driven architecture explained |
 | **[NGINX.md](docs/NGINX.md)** | 🌐 API Gateway configuration and routing |
 | **[MOBILE_API.md](docs/MOBILE_API.md)** | 📱 API endpoints for mobile/devices |
 | **[AWS_IOT_SETUP.md](docs/AWS_IOT_SETUP.md)** | ☁️ AWS IoT Core setup instructions |
+| **[CHANGELOG.md](CHANGELOG.md)** | 📝 Version history and changes |
 
 ### Quick Reference
 
 - **New to the project?** → Start with `docs/SETUP.md`
+- **Using Prisma/Swagger?** → Read `docs/PRISMA_SWAGGER_GUIDE.md` 🆕
 - **Understanding structure?** → Read `docs/PROJECT_STRUCTURE.md`
 - **Why RabbitMQ?** → See `docs/RABBITMQ.md`
 - **How does routing work?** → Check `docs/NGINX.md`
@@ -163,26 +180,46 @@ SustainPro/
 
 **📘 Full setup guide:** [`docs/SETUP.md`](docs/SETUP.md)
 
-1. **Install pnpm and Dependencies**
+1. **Clone & Setup**
    ```bash
-   npm install -g pnpm@latest
-   pnpm install
+   git clone <repository-url>
+   cd sustainpro
+   npm run setup  # Automated setup script
    ```
 
-2. **Start All Services with Docker**
+2. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your database credentials
+   ```
+
+3. **Start Infrastructure**
    ```bash
    cd docker
    docker-compose up -d
    ```
 
-3. **Initialize Database**
+4. **Initialize Database**
    ```bash
+   # Option 1: Direct SQL (traditional)
    docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro < database/schema.sql
-   docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro < database/seed.sql
+   docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro < database/seed-data.sql
+
+   # Option 2: Prisma (recommended for new setup)
+   npm run prisma:push  # Push schema to database
    ```
 
-4. **Access Services**
+5. **Start Development**
+   ```bash
+   npm run dev  # Starts all services
+   ```
+
+6. **Access Services**
    - API Gateway: http://localhost:8080
+   - Auth Service Docs: http://localhost:5000/api/v1/docs 🆕
+   - Core Service Docs: http://localhost:5001/api/v1/docs 🆕
+   - IoT Service Docs: http://localhost:5002/api/v1/docs 🆕
+   - Prisma Studio: `npm run prisma:studio` 🆕
    - RabbitMQ Management: http://localhost:15672
    - Frontend: http://localhost:3000
 

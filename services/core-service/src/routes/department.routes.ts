@@ -5,56 +5,181 @@ import { requireMinRole } from '@sustainpro/shared-middleware';
 const router = Router();
 
 /**
- * GET /api/v1/departments/by-event/:eventId
- * Get departments by event
+ * @swagger
+ * /departments/by-event/{eventId}:
+ *   get:
+ *     tags: [Departments]
+ *     summary: Get departments by event
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event departments
  */
 router.get('/by-event/:eventId', deptController.getByEvent);
 
 /**
- * GET /api/v1/departments/:id
- * Get department by ID
+ * @swagger
+ * /departments/{id}:
+ *   get:
+ *     tags: [Departments]
+ *     summary: Get department by ID
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Department details
  */
 router.get('/:id', deptController.getById);
 
 /**
- * GET /api/v1/departments/:id/services
- * Get services in department
+ * @swagger
+ * /departments/{id}/services:
+ *   get:
+ *     tags: [Departments]
+ *     summary: Get services in department
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Department services
  */
 router.get('/:id/services', deptController.getServices);
 
 /**
- * GET /api/v1/departments/:id/full
- * Get department with all services
+ * @swagger
+ * /departments/{id}/full:
+ *   get:
+ *     tags: [Departments]
+ *     summary: Get department with all services
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Full department with services
  */
 router.get('/:id/full', deptController.getWithServices);
 
 /**
- * POST /api/v1/departments
- * Create new department
+ * @swagger
+ * /departments:
+ *   post:
+ *     tags: [Departments]
+ *     summary: Create new department
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Department created
  */
 router.post('/', requireMinRole('ORG_ADMIN'), deptController.create);
 
 /**
- * PUT /api/v1/departments/:id
- * Update department
+ * @swagger
+ * /departments/{id}:
+ *   put:
+ *     tags: [Departments]
+ *     summary: Update department
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Department updated
  */
 router.put('/:id', requireMinRole('ORG_ADMIN'), deptController.update);
 
 /**
- * DELETE /api/v1/departments/:id
- * Delete department
+ * @swagger
+ * /departments/{id}:
+ *   delete:
+ *     tags: [Departments]
+ *     summary: Delete department
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       204:
+ *         description: Department deleted
  */
 router.delete('/:id', requireMinRole('ORG_ADMIN'), deptController.remove);
 
 /**
- * POST /api/v1/departments/:id/services
- * Add service to department
+ * @swagger
+ * /departments/{id}/services:
+ *   post:
+ *     tags: [Departments]
+ *     summary: Add service to department
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service added
  */
 router.post('/:id/services', requireMinRole('ORG_ADMIN'), deptController.addService);
 
 /**
- * DELETE /api/v1/departments/:id/services/:serviceId
- * Remove service from department
+ * @swagger
+ * /departments/{id}/services/{serviceId}:
+ *   delete:
+ *     tags: [Departments]
+ *     summary: Remove service from department
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       204:
+ *         description: Service removed
  */
 router.delete('/:id/services/:serviceId', requireMinRole('ORG_ADMIN'), deptController.removeService);
 

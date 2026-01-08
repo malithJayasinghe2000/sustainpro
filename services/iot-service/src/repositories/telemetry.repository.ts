@@ -1,4 +1,6 @@
-import { query } from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
+
+const prisma = getPrismaClient();
 
 export interface TelemetryRecord {
     id: number;
@@ -34,23 +36,18 @@ export class TelemetryRepository {
      * Insert a telemetry record
      */
     async create(input: CreateTelemetryInput): Promise<TelemetryRecord> {
-        const result = await query(
-            `INSERT INTO sps_telemetry (
-                device_id, device_code, organization_id, event_id, 
-                service_id, data, recorded_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING *`,
-            [
-                input.device_id,
-                input.device_code,
-                input.organization_id,
-                input.event_id || null,
-                input.service_id || null,
-                JSON.stringify(input.data),
-                input.recorded_at || new Date(),
-            ]
-        );
-        return result.rows[0];
+        const record = await prisma.sps_telemetry.create({
+            data: {
+                device_id: input.device_id,
+                device_code: input.device_code,
+                organization_id: input.organization_id,
+                event_id: input.event_id || null,
+                service_id: input.service_id || null,
+                data: input.data as any,
+                recorded_at: input.recorded_at || new Date(),
+            },
+        });
+        return record as any as TelemetryRecord;
     }
 
     /**
@@ -61,14 +58,13 @@ export class TelemetryRepository {
         limit: number = 100,
         offset: number = 0
     ): Promise<TelemetryRecord[]> {
-        const result = await query(
-            `SELECT * FROM sps_telemetry 
-             WHERE device_id = $1 
-             ORDER BY recorded_at DESC 
-             LIMIT $2 OFFSET $3`,
-            [deviceId, limit, offset]
-        );
-        return result.rows;
+        const records = await prisma.sps_telemetry.findMany({
+            where: { device_id: deviceId },
+            orderBy: { recorded_at: 'desc' },
+            take: limit,
+            skip: offset,
+        });
+        return records as any as TelemetryRecord[];
     }
 
     /**
@@ -78,14 +74,12 @@ export class TelemetryRepository {
         deviceCode: string,
         limit: number = 100
     ): Promise<TelemetryRecord[]> {
-        const result = await query(
-            `SELECT * FROM sps_telemetry 
-             WHERE device_code = $1 
-             ORDER BY recorded_at DESC 
-             LIMIT $2`,
-            [deviceCode, limit]
-        );
-        return result.rows;
+        const records = await prisma.sps_telemetry.findMany({
+            where: { device_code: deviceCode },
+            orderBy: { recorded_at: 'desc' },
+            take: limit,
+        });
+        return records as any as TelemetryRecord[];
     }
 
     /**
@@ -96,14 +90,13 @@ export class TelemetryRepository {
         limit: number = 100,
         offset: number = 0
     ): Promise<TelemetryRecord[]> {
-        const result = await query(
-            `SELECT * FROM sps_telemetry 
-             WHERE organization_id = $1 
-             ORDER BY recorded_at DESC 
-             LIMIT $2 OFFSET $3`,
-            [organizationId, limit, offset]
-        );
-        return result.rows;
+        const records = await prisma.sps_telemetry.findMany({
+            where: { organization_id: organizationId },
+            orderBy: { recorded_at: 'desc' },
+            take: limit,
+            skip: offset,
+        });
+        return records as any as TelemetryRecord[];
     }
 
     /**
@@ -114,58 +107,61 @@ export class TelemetryRepository {
         startTime: Date,
         endTime: Date
     ): Promise<TelemetryRecord[]> {
-        const result = await query(
-            `SELECT * FROM sps_telemetry 
-             WHERE device_id = $1 
-             AND recorded_at >= $2 
-             AND recorded_at <= $3 
-             ORDER BY recorded_at ASC`,
-            [deviceId, startTime, endTime]
-        );
-        return result.rows;
+        const records = await prisma.sps_telemetry.findMany({
+            where: {
+                device_id: deviceId,
+                recorded_at: {
+                    gte: startTime,
+                    lte: endTime,
+                },
+            },
+            orderBy: { recorded_at: 'asc' },
+        });
+        return records as any as TelemetryRecord[];
     }
 
     /**
      * Get latest telemetry for each device in an organization
      */
     async findLatestByOrganization(organizationId: string): Promise<TelemetryRecord[]> {
-        const result = await query(
-            `SELECT DISTINCT ON (device_id) *
-             FROM sps_telemetry 
-             WHERE organization_id = $1
-             ORDER BY device_id, recorded_at DESC`,
-            [organizationId]
-        );
-        return result.rows;
+        // Use raw SQL for DISTINCT ON which Prisma doesn't support natively
+        const records = await prisma.$queryRaw<TelemetryRecord[]>`
+            SELECT DISTINCT ON (device_id) *
+            FROM sps_telemetry 
+            WHERE organization_id = ${organizationId}::uuid
+            ORDER BY device_id, recorded_at DESC
+        `;
+        return records;
     }
 
     /**
      * Get telemetry statistics
      */
     async getStats(organizationId?: string): Promise<TelemetryStats> {
-        let whereClause = '';
-        const params: any[] = [];
-
-        if (organizationId) {
-            whereClause = 'WHERE organization_id = $1';
-            params.push(organizationId);
-        }
-
-        const result = await query(
-            `SELECT 
-                COUNT(*) as total_records,
-                COUNT(*) FILTER (WHERE recorded_at >= CURRENT_DATE) as records_today,
-                COUNT(*) FILTER (WHERE recorded_at >= NOW() - INTERVAL '1 hour') as records_this_hour,
-                COUNT(DISTINCT device_id) as unique_devices
-             FROM sps_telemetry ${whereClause}`,
-            params
-        );
+        const result = organizationId
+            ? await prisma.$queryRaw<Array<any>>`
+                SELECT 
+                    COUNT(*) as total_records,
+                    COUNT(*) FILTER (WHERE recorded_at >= CURRENT_DATE) as records_today,
+                    COUNT(*) FILTER (WHERE recorded_at >= NOW() - INTERVAL '1 hour') as records_this_hour,
+                    COUNT(DISTINCT device_id) as unique_devices
+                FROM sps_telemetry 
+                WHERE organization_id = ${organizationId}::uuid
+            `
+            : await prisma.$queryRaw<Array<any>>`
+                SELECT 
+                    COUNT(*) as total_records,
+                    COUNT(*) FILTER (WHERE recorded_at >= CURRENT_DATE) as records_today,
+                    COUNT(*) FILTER (WHERE recorded_at >= NOW() - INTERVAL '1 hour') as records_this_hour,
+                    COUNT(DISTINCT device_id) as unique_devices
+                FROM sps_telemetry
+            `;
 
         return {
-            total_records: parseInt(result.rows[0].total_records),
-            records_today: parseInt(result.rows[0].records_today),
-            records_this_hour: parseInt(result.rows[0].records_this_hour),
-            unique_devices: parseInt(result.rows[0].unique_devices),
+            total_records: parseInt(result[0].total_records),
+            records_today: parseInt(result[0].records_today),
+            records_this_hour: parseInt(result[0].records_this_hour),
+            unique_devices: parseInt(result[0].unique_devices),
         };
     }
 
@@ -173,13 +169,17 @@ export class TelemetryRepository {
      * Delete old telemetry records (for cleanup)
      */
     async deleteOlderThan(days: number): Promise<number> {
-        const result = await query(
-            `DELETE FROM sps_telemetry 
-             WHERE recorded_at < NOW() - INTERVAL '1 day' * $1
-             RETURNING id`,
-            [days]
-        );
-        return result.rowCount || 0;
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+        
+        const result = await prisma.sps_telemetry.deleteMany({
+            where: {
+                recorded_at: {
+                    lt: cutoffDate,
+                },
+            },
+        });
+        return result.count;
     }
 
     /**
@@ -190,21 +190,20 @@ export class TelemetryRepository {
         today: number;
         devices_reporting: number;
     }> {
-        const result = await query(
-            `SELECT 
+        const result = await prisma.$queryRaw<Array<any>>`
+            SELECT 
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE recorded_at >= CURRENT_DATE) as today,
                 COUNT(DISTINCT device_id) as devices_reporting
-             FROM sps_telemetry 
-             WHERE organization_id = $1 
-             AND recorded_at >= NOW() - INTERVAL '24 hours'`,
-            [organizationId]
-        );
+            FROM sps_telemetry 
+            WHERE organization_id = ${organizationId}::uuid
+            AND recorded_at >= NOW() - INTERVAL '24 hours'
+        `;
 
         return {
-            total: parseInt(result.rows[0].total),
-            today: parseInt(result.rows[0].today),
-            devices_reporting: parseInt(result.rows[0].devices_reporting),
+            total: parseInt(result[0].total),
+            today: parseInt(result[0].today),
+            devices_reporting: parseInt(result[0].devices_reporting),
         };
     }
 }

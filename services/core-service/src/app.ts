@@ -5,6 +5,7 @@ import os from 'os';
 import { config } from './config';
 import { authenticateToken, errorHandler, notFoundHandler, requireRole } from '@sustainpro/shared-middleware';
 import { createLogger } from '@sustainpro/shared-utils';
+import { setupSwagger } from '@sustainpro/shared-swagger';
 
 // Import routes
 import organizationRoutes from './routes/organization.routes';
@@ -44,6 +45,24 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
     logger.debug(`${req.method} ${req.path}`);
     next();
+});
+
+// Setup Swagger API documentation
+setupSwagger(app, {
+    serviceName: 'SustainPro Core Service',
+    serviceDescription: 'Organizations, Events, Departments, Services & Devices API',
+    version: '1.0.0',
+    port: config.port,
+    apiPrefix: '/api/v1',
+    tags: [
+        { name: 'Organizations', description: 'Organization management' },
+        { name: 'Events', description: 'Event lifecycle management' },
+        { name: 'Departments', description: 'Department operations' },
+        { name: 'Services', description: 'Service management' },
+        { name: 'Devices', description: 'Device registration & management' },
+        { name: 'Settings', description: 'System settings' },
+        { name: 'Uploads', description: 'File upload operations' },
+    ],
 });
 
 // Health check

@@ -5,64 +5,185 @@ import * as telemetryController from '../controllers/telemetry.controller';
 
 const router = Router();
 
-// Device telemetry ingestion (uses device API key auth)
-// POST /api/v1/telemetry
+/**
+ * @swagger
+ * /telemetry:
+ *   post:
+ *     tags: [Telemetry]
+ *     summary: Ingest device telemetry
+ *     description: Submit telemetry data from IoT device (requires device API key)
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               data:
+ *                 type: object
+ *     responses:
+ *       201:
+ *         description: Telemetry ingested
+ */
 router.post(
     '/',
     authenticateDevice,
     telemetryController.ingest
 );
 
-// Get live data for a device (requires user auth)
-// GET /api/v1/telemetry/live/:deviceCode
+/**
+ * @swagger
+ * /telemetry/live/{deviceCode}:
+ *   get:
+ *     tags: [Telemetry]
+ *     summary: Get live data for device
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: deviceCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Live device data
+ */
 router.get(
     '/live/:deviceCode',
     authenticateToken,
     telemetryController.getLiveData
 );
 
-// Get live data for organization (requires user auth)
-// GET /api/v1/telemetry/live/organization/:orgId
+/**
+ * @swagger
+ * /telemetry/live/organization/{orgId}:
+ *   get:
+ *     tags: [Telemetry]
+ *     summary: Get live data for organization
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orgId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Organization live data
+ */
 router.get(
     '/live/organization/:orgId',
     authenticateToken,
     telemetryController.getLiveDataByOrganization
 );
 
-// Get live data for event (requires user auth)
-// GET /api/v1/telemetry/live/event/:eventId
+/**
+ * @swagger
+ * /telemetry/live/event/{eventId}:
+ *   get:
+ *     tags: [Telemetry]
+ *     summary: Get live data for event
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event live data
+ */
 router.get(
     '/live/event/:eventId',
     authenticateToken,
     telemetryController.getLiveDataByEvent
 );
 
-// Get telemetry history for a device (requires user auth)
-// GET /api/v1/telemetry/history/:deviceId
+/**
+ * @swagger
+ * /telemetry/history/{deviceId}:
+ *   get:
+ *     tags: [Telemetry]
+ *     summary: Get telemetry history
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Telemetry history
+ */
 router.get(
     '/history/:deviceId',
     authenticateToken,
     telemetryController.getHistory
 );
 
-// Get telemetry history within time range (requires user auth)
-// GET /api/v1/telemetry/history/:deviceId/range
+/**
+ * @swagger
+ * /telemetry/history/{deviceId}/range:
+ *   get:
+ *     tags: [Telemetry]
+ *     summary: Get telemetry within time range
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Telemetry history
+ */
 router.get(
     '/history/:deviceId/range',
     authenticateToken,
     telemetryController.getHistoryByRange
 );
 
-// Get dashboard statistics (requires user auth)
-// GET /api/v1/telemetry/stats/dashboard
+/**
+ * @swagger
+ * /telemetry/stats/dashboard:
+ *   get:
+ *     tags: [Telemetry]
+ *     summary: Get dashboard statistics
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard stats
+ */
 router.get(
     '/stats/dashboard',
     authenticateToken,
     telemetryController.getDashboardStats
 );
 
-// Get system-wide statistics (super admin only)
-// GET /api/v1/telemetry/stats/system
+/**
+ * @swagger
+ * /telemetry/stats/system:
+ *   get:
+ *     tags: [Telemetry]
+ *     summary: Get system-wide statistics
+ *     description: Get system-wide statistics (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: System statistics
+ */
 router.get(
     '/stats/system',
     authenticateToken,

@@ -8,8 +8,17 @@ const router = Router();
 router.use(authenticateToken);
 
 /**
- * GET /api/v1/rbac/permissions
- * Get all available permissions
+ * @swagger
+ * /rbac/permissions:
+ *   get:
+ *     tags: [RBAC]
+ *     summary: Get all permissions
+ *     description: Get list of all available permissions
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of permissions
  */
 router.get('/permissions', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -30,8 +39,19 @@ router.get('/permissions', async (req: Request, res: Response): Promise<void> =>
 });
 
 /**
- * GET /api/v1/rbac/mappings
- * Get role-permission mappings (Super Admin only)
+ * @swagger
+ * /rbac/mappings:
+ *   get:
+ *     tags: [RBAC]
+ *     summary: Get role-permission mappings
+ *     description: Get all role-permission mappings (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Role-permission mappings
+ *       403:
+ *         description: Forbidden - Super Admin required
  */
 router.get('/mappings', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -55,8 +75,33 @@ router.get('/mappings', requireSuperAdmin, async (req: Request, res: Response): 
 });
 
 /**
- * POST /api/v1/rbac/mappings
- * Update role-permission mapping (Super Admin only)
+ * @swagger
+ * /rbac/mappings:
+ *   post:
+ *     tags: [RBAC]
+ *     summary: Update role-permission mapping
+ *     description: Update permissions for a role (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [role, permissions]
+ *             properties:
+ *               role:
+ *                 type: string
+ *               permissions:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Permissions updated
+ *       403:
+ *         description: Forbidden - Super Admin required
  */
 router.post('/mappings', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {

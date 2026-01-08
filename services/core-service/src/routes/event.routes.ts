@@ -5,62 +5,203 @@ import { requireMinRole } from '@sustainpro/shared-middleware';
 const router = Router();
 
 /**
- * GET /api/v1/events
- * Get all events (Super Admin only)
+ * @swagger
+ * /events:
+ *   get:
+ *     tags: [Events]
+ *     summary: Get all events
+ *     description: Get all events (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of events
  */
 router.get('/', eventController.getAll);
 
 /**
- * GET /api/v1/events/by-org/:orgId
- * Get events by organization
+ * @swagger
+ * /events/by-org/{orgId}:
+ *   get:
+ *     tags: [Events]
+ *     summary: Get events by organization
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orgId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Organization events
  */
 router.get('/by-org/:orgId', eventController.getByOrganization);
 
 /**
- * GET /api/v1/events/:id
- * Get event by ID
+ * @swagger
+ * /events/{id}:
+ *   get:
+ *     tags: [Events]
+ *     summary: Get event by ID
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event details
  */
 router.get('/:id', eventController.getById);
 
 /**
- * GET /api/v1/events/:id/details
- * Get event with full details (departments, services)
+ * @swagger
+ * /events/{id}/details:
+ *   get:
+ *     tags: [Events]
+ *     summary: Get event details
+ *     description: Get event with full details (departments, services)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event full details
  */
 router.get('/:id/details', eventController.getDetails);
 
 /**
- * POST /api/v1/events
- * Create new event (ORG_ADMIN or higher)
+ * @swagger
+ * /events:
+ *   post:
+ *     tags: [Events]
+ *     summary: Create event
+ *     description: Create new event (ORG_ADMIN or higher)
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: Event created
  */
 router.post('/', requireMinRole('ORG_ADMIN'), eventController.create);
 
 /**
- * PUT /api/v1/events/:id
- * Update event (ORG_ADMIN or higher)
+ * @swagger
+ * /events/{id}:
+ *   put:
+ *     tags: [Events]
+ *     summary: Update event
+ *     description: Update event (ORG_ADMIN or higher)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event updated
  */
 router.put('/:id', requireMinRole('ORG_ADMIN'), eventController.update);
 
 /**
- * DELETE /api/v1/events/:id
- * Delete event (ORG_ADMIN or higher)
+ * @swagger
+ * /events/{id}:
+ *   delete:
+ *     tags: [Events]
+ *     summary: Delete event
+ *     description: Delete event (ORG_ADMIN or higher)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event deleted
  */
 router.delete('/:id', requireMinRole('ORG_ADMIN'), eventController.remove);
 
 /**
- * POST /api/v1/events/:id/start
- * Start event (change status to ACTIVE)
+ * @swagger
+ * /events/{id}/start:
+ *   post:
+ *     tags: [Events]
+ *     summary: Start event
+ *     description: Start event (change status to ACTIVE)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event started
  */
 router.post('/:id/start', requireMinRole('ORG_ADMIN'), eventController.start);
 
 /**
- * POST /api/v1/events/:id/stop
- * Stop event (change status to PAUSED)
+ * @swagger
+ * /events/{id}/stop:
+ *   post:
+ *     tags: [Events]
+ *     summary: Stop event
+ *     description: Stop event (change status to PAUSED)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event stopped
  */
 router.post('/:id/stop', requireMinRole('ORG_ADMIN'), eventController.stop);
 
 /**
- * POST /api/v1/events/:id/archive
- * Archive event
+ * @swagger
+ * /events/{id}/archive:
+ *   post:
+ *     tags: [Events]
+ *     summary: Archive event
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Event archived
  */
 router.post('/:id/archive', requireMinRole('ORG_ADMIN'), eventController.archive);
 

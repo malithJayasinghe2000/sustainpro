@@ -15,7 +15,11 @@ export const config = {
     cors: {
         origins: process.env.CORS_ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || [
             'http://localhost:3000',
+            'http://localhost:3001',
             'http://localhost:8080',
+            'http://localhost:5000',
+            'http://localhost:5001',
+            'http://localhost:5002',
         ],
     },
 

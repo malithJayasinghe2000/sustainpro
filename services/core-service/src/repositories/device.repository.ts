@@ -1,4 +1,6 @@
-import pool from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
+
+const prisma = getPrismaClient();
 
 export interface Device {
     id: number;
@@ -39,180 +41,169 @@ export interface UpdateDeviceInput {
 
 export class DeviceRepository {
     async findAll(organizationId?: string | null): Promise<Device[]> {
-        let query = `
-            SELECT 
-                d.id, d.device_code, d.name, d.type, d.status, 
-                d.last_seen, d.metadata, d.created_at, d.organization_id,
-                s.name as service_name,
-                dept.name as dept_name
-            FROM sps_devices d
-            LEFT JOIN sps_department_services ds ON d.service_id = ds.id
-            LEFT JOIN sps_service_templates s ON ds.service_id = s.id
-            LEFT JOIN sps_departments dept ON ds.department_id = dept.id
-        `;
-        const params: any[] = [];
-
         if (organizationId) {
-            query += ' WHERE d.organization_id = $1';
-            params.push(organizationId);
+            const result = await prisma.$queryRaw`
+                SELECT 
+                    d.id, d.device_code, d.name, d.type, d.status, 
+                    d.last_seen, d.metadata, d.created_at, d.organization_id,
+                    s.name as service_name,
+                    dept.name as dept_name
+                FROM sps_devices d
+                LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+                LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+                LEFT JOIN sps_departments dept ON ds.department_id = dept.id
+                WHERE d.organization_id = ${organizationId}
+                ORDER BY d.created_at DESC
+            ` as any as Device[];
+            return result;
+        } else {
+            const result = await prisma.$queryRaw`
+                SELECT 
+                    d.id, d.device_code, d.name, d.type, d.status, 
+                    d.last_seen, d.metadata, d.created_at, d.organization_id,
+                    s.name as service_name,
+                    dept.name as dept_name
+                FROM sps_devices d
+                LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+                LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+                LEFT JOIN sps_departments dept ON ds.department_id = dept.id
+                ORDER BY d.created_at DESC
+            ` as any as Device[];
+            return result;
         }
-
-        query += ' ORDER BY d.created_at DESC';
-
-        const result = await pool.query(query, params);
-        return result.rows;
     }
 
     async findById(id: string, organizationId?: string): Promise<Device | null> {
-        let sql = `
-            SELECT 
-                d.*,
-                s.name as service_name,
-                dept.name as dept_name
-            FROM sps_devices d
-            LEFT JOIN sps_department_services ds ON d.service_id = ds.id
-            LEFT JOIN sps_service_templates s ON ds.service_id = s.id
-            LEFT JOIN sps_departments dept ON ds.department_id = dept.id
-            WHERE d.id = $1
-        `;
-        const params: any[] = [id];
-
         if (organizationId) {
-            sql += ' AND d.organization_id = $2';
-            params.push(organizationId);
+            const result = await prisma.$queryRaw`
+                SELECT 
+                    d.*,
+                    s.name as service_name,
+                    dept.name as dept_name
+                FROM sps_devices d
+                LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+                LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+                LEFT JOIN sps_departments dept ON ds.department_id = dept.id
+                WHERE d.id = ${id} AND d.organization_id = ${organizationId}
+            ` as any as Device[];
+            return result[0] || null;
+        } else {
+            const result = await prisma.$queryRaw`
+                SELECT 
+                    d.*,
+                    s.name as service_name,
+                    dept.name as dept_name
+                FROM sps_devices d
+                LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+                LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+                LEFT JOIN sps_departments dept ON ds.department_id = dept.id
+                WHERE d.id = ${id}
+            ` as any as Device[];
+            return result[0] || null;
         }
-
-        const result = await pool.query(sql, params);
-        return result.rows[0] || null;
     }
 
     async findByDeviceCode(deviceCode: string): Promise<Device | null> {
-        const result = await pool.query(
-            'SELECT * FROM sps_devices WHERE device_code = $1',
-            [deviceCode]
-        );
-        return result.rows[0] || null;
+        const result = await prisma.sps_devices.findFirst({
+            where: { device_code: deviceCode },
+        });
+        return result as any as Device | null;
     }
 
     async findByApiKey(apiKey: string): Promise<Device | null> {
-        const result = await pool.query(
-            `SELECT d.*, o.id as org_id 
+        const result = await prisma.$queryRaw`
+            SELECT d.*, o.id as org_id 
              FROM sps_devices d
              LEFT JOIN sps_organizations o ON d.organization_id = o.id
-             WHERE d.api_key = $1 AND d.status != 'INACTIVE'`,
-            [apiKey]
-        );
-        return result.rows[0] || null;
+             WHERE d.api_key = ${apiKey} AND d.status != 'INACTIVE'
+        ` as any as Device[];
+        return result[0] || null;
     }
 
     async findByOrganization(organizationId: string): Promise<Device[]> {
-        const result = await pool.query(
-            `SELECT d.*, s.name as service_name
+        const result = await prisma.$queryRaw`
+            SELECT d.*, s.name as service_name
              FROM sps_devices d
              LEFT JOIN sps_department_services ds ON d.service_id = ds.id
              LEFT JOIN sps_service_templates s ON ds.service_id = s.id
-             WHERE d.organization_id = $1
-             ORDER BY d.created_at DESC`,
-            [organizationId]
-        );
-        return result.rows;
+             WHERE d.organization_id = ${organizationId}
+             ORDER BY d.created_at DESC
+        ` as any as Device[];
+        return result;
     }
 
     async findByService(serviceId: string): Promise<Device[]> {
-        const result = await pool.query(
-            `SELECT d.*
-             FROM sps_devices d
-             WHERE d.service_id = $1
-             ORDER BY d.name`,
-            [serviceId]
-        );
-        return result.rows;
+        const result = await prisma.sps_devices.findMany({
+            where: { service_id: serviceId },
+            orderBy: { name: 'asc' },
+        });
+        return result as any as Device[];
     }
 
     async create(data: CreateDeviceInput): Promise<Device> {
-        const result = await pool.query(
-            `INSERT INTO sps_devices (
-                organization_id, device_code, name, type, api_key, service_id, status, metadata
-            ) VALUES ($1, $2, $3, $4, $5, $6, 'OFFLINE', $7)
-            RETURNING *`,
-            [
-                data.organization_id,
-                data.device_code,
-                data.name || null,
-                data.type || null,
-                data.api_key || null,
-                data.service_id || null,
-                data.metadata ? JSON.stringify(data.metadata) : '{}',
-            ]
-        );
-        return result.rows[0];
+        const result = await prisma.sps_devices.create({
+            data: {
+                organization_id: data.organization_id,
+                device_code: data.device_code,
+                name: data.name || null,
+                type: data.type || null,
+                api_key: data.api_key || null,
+                service_id: data.service_id || null,
+                status: 'OFFLINE',
+                metadata: data.metadata || {},
+            },
+        });
+        return result as any as Device;
     }
 
     async update(id: string, data: UpdateDeviceInput): Promise<Device> {
-        const fields: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
+        const updates: any = {};
 
-        if (data.name !== undefined) {
-            fields.push(`name = $${paramIndex++}`);
-            values.push(data.name);
-        }
-        if (data.type !== undefined) {
-            fields.push(`type = $${paramIndex++}`);
-            values.push(data.type);
-        }
-        if (data.service_id !== undefined) {
-            fields.push(`service_id = $${paramIndex++}`);
-            values.push(data.service_id);
-        }
-        if (data.status !== undefined) {
-            fields.push(`status = $${paramIndex++}`);
-            values.push(data.status);
-        }
-        if (data.last_seen !== undefined) {
-            fields.push(`last_seen = $${paramIndex++}`);
-            values.push(data.last_seen);
-        }
-        if (data.metadata !== undefined) {
-            fields.push(`metadata = $${paramIndex++}`);
-            values.push(JSON.stringify(data.metadata));
-        }
+        if (data.name !== undefined) updates.name = data.name;
+        if (data.type !== undefined) updates.type = data.type;
+        if (data.service_id !== undefined) updates.service_id = data.service_id;
+        if (data.status !== undefined) updates.status = data.status;
+        if (data.last_seen !== undefined) updates.last_seen = data.last_seen;
+        if (data.metadata !== undefined) updates.metadata = data.metadata;
 
-        fields.push(`updated_at = NOW()`);
-        values.push(id);
-
-        const result = await pool.query(
-            `UPDATE sps_devices SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-            values
-        );
-        return result.rows[0];
+        const result = await prisma.sps_devices.update({
+            where: { id: parseInt(id) },
+            data: updates,
+        });
+        return result as any as Device;
     }
 
     async updateLastSeen(id: string | number): Promise<void> {
-        await pool.query(
-            `UPDATE sps_devices SET last_seen = NOW(), status = 'ACTIVE' WHERE id = $1`,
-            [id]
-        );
+        await prisma.sps_devices.update({
+            where: { id: typeof id === 'string' ? parseInt(id) : id },
+            data: {
+                last_seen: new Date(),
+                status: 'ACTIVE',
+            },
+        });
     }
 
     async assignToService(deviceId: string, serviceId: string | null): Promise<Device> {
-        const result = await pool.query(
-            `UPDATE sps_devices SET service_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
-            [serviceId, deviceId]
-        );
-        return result.rows[0];
+        const result = await prisma.sps_devices.update({
+            where: { id: parseInt(deviceId) },
+            data: {
+                service_id: serviceId,
+            },
+        });
+        return result as any as Device;
     }
 
     async delete(id: string): Promise<void> {
-        await pool.query('DELETE FROM sps_devices WHERE id = $1', [id]);
+        await prisma.sps_devices.delete({
+            where: { id: parseInt(id) },
+        });
     }
 
     async countByOrganization(organizationId: string): Promise<number> {
-        const result = await pool.query(
-            'SELECT COUNT(*) FROM sps_devices WHERE organization_id = $1',
-            [organizationId]
-        );
-        return parseInt(result.rows[0].count);
+        const result = await prisma.sps_devices.count({
+            where: { organization_id: organizationId },
+        });
+        return result;
     }
 
     async getDeviceStats(organizationId?: string): Promise<{
@@ -220,25 +211,33 @@ export class DeviceRepository {
         active: number;
         offline: number;
     }> {
-        let query = `
-            SELECT 
-                COUNT(*) as total,
-                COUNT(*) FILTER (WHERE status = 'ACTIVE') as active,
-                COUNT(*) FILTER (WHERE status = 'OFFLINE') as offline
-            FROM sps_devices
-        `;
-        const params: any[] = [];
-
         if (organizationId) {
-            query += ' WHERE organization_id = $1';
-            params.push(organizationId);
+            const result = await prisma.$queryRaw`
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status = 'ACTIVE') as active,
+                    COUNT(*) FILTER (WHERE status = 'OFFLINE') as offline
+                FROM sps_devices
+                WHERE organization_id = ${organizationId}
+            ` as any;
+            return {
+                total: parseInt(result[0].total),
+                active: parseInt(result[0].active),
+                offline: parseInt(result[0].offline),
+            };
+        } else {
+            const result = await prisma.$queryRaw`
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status = 'ACTIVE') as active,
+                    COUNT(*) FILTER (WHERE status = 'OFFLINE') as offline
+                FROM sps_devices
+            ` as any;
+            return {
+                total: parseInt(result[0].total),
+                active: parseInt(result[0].active),
+                offline: parseInt(result[0].offline),
+            };
         }
-
-        const result = await pool.query(query, params);
-        return {
-            total: parseInt(result.rows[0].total),
-            active: parseInt(result.rows[0].active),
-            offline: parseInt(result.rows[0].offline),
-        };
     }
 }

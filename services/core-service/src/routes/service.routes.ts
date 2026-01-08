@@ -5,32 +5,95 @@ import { requireSuperAdmin } from '@sustainpro/shared-middleware';
 const router = Router();
 
 /**
- * GET /api/v1/services
- * Get all service templates (Super Admin only)
+ * @swagger
+ * /services:
+ *   get:
+ *     tags: [Services]
+ *     summary: Get service templates
+ *     description: Get all service templates (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Service templates
  */
 router.get('/', requireSuperAdmin, serviceController.getAll);
 
 /**
- * GET /api/v1/services/:id
- * Get service template by ID (Super Admin only)
+ * @swagger
+ * /services/{id}:
+ *   get:
+ *     tags: [Services]
+ *     summary: Get service template
+ *     description: Get service template by ID (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service template
  */
 router.get('/:id', requireSuperAdmin, serviceController.getById);
 
 /**
- * POST /api/v1/services
- * Create new service template (Super Admin only)
+ * @swagger
+ * /services:
+ *   post:
+ *     tags: [Services]
+ *     summary: Create service template
+ *     description: Create new service template (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Service created
  */
 router.post('/', requireSuperAdmin, serviceController.create);
 
 /**
- * PUT /api/v1/services/:id
- * Update service template (Super Admin only)
+ * @swagger
+ * /services/{id}:
+ *   put:
+ *     tags: [Services]
+ *     summary: Update service template
+ *     description: Update service template (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service updated
  */
 router.put('/:id', requireSuperAdmin, serviceController.update);
 
 /**
- * DELETE /api/v1/services/:id
- * Delete service template (Super Admin only)
+ * @swagger
+ * /services/{id}:
+ *   delete:
+ *     tags: [Services]
+ *     summary: Delete service template
+ *     description: Delete service template (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service deleted
  */
 router.delete('/:id', requireSuperAdmin, serviceController.remove);
 

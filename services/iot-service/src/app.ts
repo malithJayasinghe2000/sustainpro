@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config } from './config';
 import { errorHandler, notFoundHandler } from '@sustainpro/shared-middleware';
 import { createLogger } from '@sustainpro/shared-utils';
+import { setupSwagger } from '@sustainpro/shared-swagger';
 
 // Import routes
 import telemetryRoutes from './routes/telemetry.routes';
@@ -35,6 +36,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
     logger.debug(`${req.method} ${req.path}`);
     next();
+});
+
+// Setup Swagger API documentation
+setupSwagger(app, {
+    serviceName: 'SustainPro IoT Service',
+    serviceDescription: 'Telemetry Ingestion & Real-time Streaming API',
+    version: '1.0.0',
+    port: config.port,
+    apiPrefix: '/api/v1',
+    tags: [
+        { name: 'Telemetry', description: 'Device telemetry ingestion & retrieval' },
+        { name: 'Webhooks', description: 'AWS IoT Core webhook endpoints' },
+        { name: 'Socket.IO', description: 'Real-time telemetry streaming' },
+    ],
 });
 
 // Health check

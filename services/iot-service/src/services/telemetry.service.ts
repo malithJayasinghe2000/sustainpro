@@ -1,9 +1,10 @@
 import { TelemetryRepository, CreateTelemetryInput, TelemetryRecord } from '../repositories/telemetry.repository';
 import { liveDataService, LiveDataEntry } from './live-data.service';
 import { emitTelemetry, emitDashboardStats } from '../socket';
-import { query } from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
 import { createLogger } from '@sustainpro/shared-utils';
 
+const prisma = getPrismaClient();
 const logger = createLogger({ service: 'telemetry-service' });
 
 const telemetryRepository = new TelemetryRepository();
@@ -101,31 +102,33 @@ export class TelemetryService {
         const recordedAt = timestamp ? new Date(timestamp) : new Date();
 
         // Look up device info
-        const deviceResult = await query(
-            `SELECT id, device_code, organization_id, service_id
-             FROM sps_devices 
-             WHERE device_code = $1`,
-            [device_code]
-        );
+        const device = await prisma.sps_devices.findFirst({
+            where: { device_code },
+            select: {
+                id: true,
+                device_code: true,
+                organization_id: true,
+                service_id: true,
+            },
+        });
 
-        if (deviceResult.rows.length === 0) {
+        if (!device) {
             throw new Error(`Device not found: ${device_code}`);
         }
-
-        const device = deviceResult.rows[0];
 
         // Get event_id from service if exists
         let event_id: string | undefined;
         if (device.service_id) {
-            const serviceResult = await query(
-                `SELECT d.event_id 
-                 FROM sps_department_services ds
-                 JOIN sps_departments d ON ds.department_id = d.id
-                 WHERE ds.id = $1`,
-                [device.service_id]
-            );
-            if (serviceResult.rows.length > 0) {
-                event_id = serviceResult.rows[0].event_id;
+            const service = await prisma.sps_department_services.findUnique({
+                where: { id: device.service_id },
+                include: {
+                    sps_departments: {
+                        select: { event_id: true },
+                    },
+                },
+            });
+            if (service?.sps_departments?.event_id) {
+                event_id = service.sps_departments.event_id;
             }
         }
 
@@ -135,7 +138,7 @@ export class TelemetryService {
                 device_code: device.device_code,
                 organization_id: device.organization_id || organization_id,
                 event_id,
-                service_id: device.service_id,
+                service_id: device.service_id || undefined,
             },
             data,
             timestamp: recordedAt,
@@ -190,16 +193,9 @@ export class TelemetryService {
      */
     async getDashboardStats(organizationId?: string | null): Promise<DashboardStats> {
         // Get device counts from database
-        let deviceQuery = 'SELECT COUNT(*) as total FROM sps_devices';
-        const params: any[] = [];
-
-        if (organizationId) {
-            deviceQuery += ' WHERE organization_id = $1';
-            params.push(organizationId);
-        }
-
-        const deviceResult = await query(deviceQuery, params);
-        const totalDevices = parseInt(deviceResult.rows[0].total);
+        const totalDevices = organizationId
+            ? await prisma.sps_devices.count({ where: { organization_id: organizationId } })
+            : await prisma.sps_devices.count();
 
         // Get online/offline from live data
         const devicesOnline = liveDataService.getOnlineCount(organizationId || undefined);
@@ -240,16 +236,19 @@ export class TelemetryService {
     }> {
         const telemetryStats = await telemetryRepository.getStats();
 
-        const deviceResult = await query('SELECT COUNT(*) as total FROM sps_devices');
-        const orgResult = await query('SELECT COUNT(DISTINCT organization_id) as count FROM sps_devices');
+        const totalDevices = await prisma.sps_devices.count();
+        const uniqueOrgs = await prisma.sps_devices.findMany({
+            distinct: ['organization_id'],
+            select: { organization_id: true },
+        });
 
         return {
-            total_devices: parseInt(deviceResult.rows[0].total),
+            total_devices: totalDevices,
             devices_online: liveDataService.getOnlineCount(),
             devices_offline: liveDataService.getOfflineCount(),
             total_telemetry_records: telemetryStats.total_records,
             telemetry_today: telemetryStats.records_today,
-            unique_organizations: parseInt(orgResult.rows[0].count),
+            unique_organizations: uniqueOrgs.length,
         };
     }
 
@@ -264,10 +263,13 @@ export class TelemetryService {
      * Update device last_seen timestamp
      */
     private async updateDeviceLastSeen(deviceId: number): Promise<void> {
-        await query(
-            `UPDATE sps_devices SET last_seen = NOW(), status = 'ACTIVE' WHERE id = $1`,
-            [deviceId]
-        );
+        await prisma.sps_devices.update({
+            where: { id: deviceId },
+            data: {
+                last_seen: new Date(),
+                status: 'ACTIVE',
+            },
+        });
     }
 }
 

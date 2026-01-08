@@ -1,6 +1,7 @@
-import { query } from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
 import { SystemSettings } from '@sustainpro/shared-types';
 
+const prisma = getPrismaClient();
 const SETTINGS_ID = 'sps_main_config';
 
 export class SettingsRepository {
@@ -8,11 +9,10 @@ export class SettingsRepository {
      * Get system settings
      */
     async get(): Promise<SystemSettings | null> {
-        const result = await query<SystemSettings>(
-            `SELECT * FROM sps_system_settings WHERE id = $1`,
-            [SETTINGS_ID]
-        );
-        return result.rows[0] || null;
+        const settings = await prisma.sps_system_settings.findUnique({
+            where: { id: SETTINGS_ID },
+        });
+        return settings as any as SystemSettings | null;
     }
 
     /**
@@ -23,13 +23,16 @@ export class SettingsRepository {
         account_lock_duration_minutes: number;
         token_expire_minutes: number;
     }> {
-        const result = await query(
-            `SELECT max_login_attempts, account_lock_duration_minutes, token_expire_minutes
-             FROM sps_system_settings WHERE id = $1`,
-            [SETTINGS_ID]
-        );
+        const settings = await prisma.sps_system_settings.findUnique({
+            where: { id: SETTINGS_ID },
+            select: {
+                max_login_attempts: true,
+                account_lock_duration_minutes: true,
+                token_expire_minutes: true,
+            },
+        });
 
-        if (result.rows.length === 0) {
+        if (!settings) {
             return {
                 max_login_attempts: 5,
                 account_lock_duration_minutes: 15,
@@ -37,16 +40,18 @@ export class SettingsRepository {
             };
         }
 
-        return result.rows[0];
+        return {
+            max_login_attempts: settings.max_login_attempts ?? 5,
+            account_lock_duration_minutes: settings.account_lock_duration_minutes ?? 15,
+            token_expire_minutes: settings.token_expire_minutes ?? 60,
+        };
     }
 
     /**
      * Update system settings
      */
     async update(data: Partial<SystemSettings>): Promise<SystemSettings | null> {
-        const fields: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
+        const updateData: any = {};
 
         const allowedFields = [
             'site_title', 'site_logo', 'maintenance_mode', 'default_timezone',
@@ -57,20 +62,17 @@ export class SettingsRepository {
 
         for (const field of allowedFields) {
             if ((data as any)[field] !== undefined) {
-                fields.push(`${field} = $${paramIndex++}`);
-                values.push((data as any)[field]);
+                updateData[field] = (data as any)[field];
             }
         }
 
-        if (fields.length === 0) return this.get();
+        if (Object.keys(updateData).length === 0) return this.get();
 
-        fields.push(`updated_at = NOW()`);
-
-        const result = await query<SystemSettings>(
-            `UPDATE sps_system_settings SET ${fields.join(', ')} WHERE id = '${SETTINGS_ID}' RETURNING *`,
-            values
-        );
-        return result.rows[0] || null;
+        const updated = await prisma.sps_system_settings.update({
+            where: { id: SETTINGS_ID },
+            data: updateData,
+        });
+        return updated as any as SystemSettings;
     }
 
     /**
@@ -84,11 +86,27 @@ export class SettingsRepository {
         support_phone: string | null;
         global_alert_message: string | null;
     } | null> {
-        const result = await query(
-            `SELECT site_title, site_logo, maintenance_mode, support_email, support_phone, global_alert_message
-             FROM sps_system_settings WHERE id = $1`,
-            [SETTINGS_ID]
-        );
-        return result.rows[0] || null;
+        const settings = await prisma.sps_system_settings.findUnique({
+            where: { id: SETTINGS_ID },
+            select: {
+                site_title: true,
+                site_logo: true,
+                maintenance_mode: true,
+                support_email: true,
+                support_phone: true,
+                global_alert_message: true,
+            },
+        });
+        
+        if (!settings) return null;
+        
+        return {
+            site_title: settings.site_title ?? 'SustainPro',
+            site_logo: settings.site_logo,
+            maintenance_mode: settings.maintenance_mode ?? false,
+            support_email: settings.support_email,
+            support_phone: settings.support_phone,
+            global_alert_message: settings.global_alert_message,
+        };
     }
 }

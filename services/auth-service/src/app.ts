@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import { config } from './config';
 import { errorHandler, notFoundHandler } from '@sustainpro/shared-middleware';
 import { createLogger } from '@sustainpro/shared-utils';
+import { setupSwagger } from '@sustainpro/shared-swagger';
 
 // Import routes
 import authRoutes from './routes/auth.routes';
@@ -38,6 +39,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
     logger.debug(`${req.method} ${req.path}`);
     next();
+});
+
+// Setup Swagger API documentation
+setupSwagger(app, {
+    serviceName: 'SustainPro Auth Service',
+    serviceDescription: 'Authentication, User Management & RBAC API',
+    version: '1.0.0',
+    port: config.port,
+    apiPrefix: '/api/v1',
+    tags: [
+        { name: 'Authentication', description: 'Login, logout, token management' },
+        { name: 'Users', description: 'User CRUD operations' },
+        { name: 'RBAC', description: 'Role-based access control' },
+    ],
 });
 
 // Health check

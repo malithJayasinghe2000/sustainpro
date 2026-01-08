@@ -13,6 +13,8 @@
         "@sustainpro/shared-types": "*",
         "@sustainpro/shared-utils": "*",
         "@sustainpro/shared-middleware": "*",
+        "@sustainpro/shared-database": "*",
+        "@sustainpro/shared-swagger": "*",
         "express": "^5.0.0",
         "pg": "^8.16.0",
         "cors": "^2.8.5",

@@ -1,4 +1,6 @@
-import pool from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
+
+const prisma = getPrismaClient();
 
 // Actual schema:
 // id VARCHAR(50) PRIMARY KEY
@@ -34,70 +36,54 @@ export interface UpdateDeviceModelInput {
 
 export class DeviceModelRepository {
     async findAll(): Promise<DeviceModel[]> {
-        const result = await pool.query(
-            'SELECT * FROM sps_device_models ORDER BY name'
-        );
-        return result.rows;
+        const result = await prisma.sps_device_models.findMany({
+            orderBy: { name: 'asc' },
+        });
+        return result as any as DeviceModel[];
     }
 
     async findById(id: string): Promise<DeviceModel | null> {
-        const result = await pool.query(
-            'SELECT * FROM sps_device_models WHERE id = $1',
-            [id]
-        );
-        return result.rows[0] || null;
+        const result = await prisma.sps_device_models.findUnique({
+            where: { id },
+        });
+        return result as any as DeviceModel | null;
     }
 
     async create(data: CreateDeviceModelInput): Promise<DeviceModel> {
-        const result = await pool.query(
-            `INSERT INTO sps_device_models (id, name, description, parameters, created_by)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING *`,
-            [
-                data.id,
-                data.name,
-                data.description || null,
-                JSON.stringify(data.parameters || []),
-                data.created_by || null,
-            ]
-        );
-        return result.rows[0];
+        const result = await prisma.sps_device_models.create({
+            data: {
+                id: data.id,
+                name: data.name,
+                description: data.description || null,
+                parameters: data.parameters || [],
+                created_by: data.created_by || null,
+            },
+        });
+        return result as any as DeviceModel;
     }
 
     async update(id: string, data: UpdateDeviceModelInput): Promise<DeviceModel> {
-        const fields: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
+        const updates: any = {};
 
-        if (data.name !== undefined) {
-            fields.push(`name = $${paramIndex++}`);
-            values.push(data.name);
-        }
-        if (data.description !== undefined) {
-            fields.push(`description = $${paramIndex++}`);
-            values.push(data.description);
-        }
-        if (data.parameters !== undefined) {
-            fields.push(`parameters = $${paramIndex++}`);
-            values.push(JSON.stringify(data.parameters));
-        }
+        if (data.name !== undefined) updates.name = data.name;
+        if (data.description !== undefined) updates.description = data.description;
+        if (data.parameters !== undefined) updates.parameters = data.parameters;
 
-        fields.push(`updated_at = NOW()`);
-        values.push(id);
-
-        const result = await pool.query(
-            `UPDATE sps_device_models SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-            values
-        );
-        return result.rows[0];
+        const result = await prisma.sps_device_models.update({
+            where: { id },
+            data: updates,
+        });
+        return result as any as DeviceModel;
     }
 
     async delete(id: string): Promise<void> {
-        await pool.query('DELETE FROM sps_device_models WHERE id = $1', [id]);
+        await prisma.sps_device_models.delete({
+            where: { id },
+        });
     }
 
     async count(): Promise<number> {
-        const result = await pool.query('SELECT COUNT(*) FROM sps_device_models');
-        return parseInt(result.rows[0].count);
+        const result = await prisma.sps_device_models.count();
+        return result;
     }
 }

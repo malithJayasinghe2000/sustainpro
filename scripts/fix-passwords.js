@@ -3,7 +3,7 @@ const { Pool } = require('pg');
 
 async function fixPasswords() {
     const pool = new Pool({
-        connectionString: 'postgresql://sustainpro:sustainpro_dev@localhost:5432/sustainpro'
+        connectionString: 'postgresql://sustainpro:sustainpro_dev@localhost:5433/sustainpro'
     });
 
     try {

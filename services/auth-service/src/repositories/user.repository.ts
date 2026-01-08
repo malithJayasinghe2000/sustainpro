@@ -1,59 +1,87 @@
-import { query } from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
 import { User, UserWithPassword, RoleAssignment } from '@sustainpro/shared-types';
+
+const prisma = getPrismaClient();
 
 export class UserRepository {
     /**
      * Find user by email (includes password hash for auth)
      */
     async findByEmail(email: string): Promise<UserWithPassword | null> {
-        const result = await query<UserWithPassword>(
-            `SELECT u.*, o.name as org_name, o.logo_url, o.theme_config
-       FROM sps_users u
-       LEFT JOIN sps_organizations o ON u.organization_id = o.id
-       WHERE u.email = $1`,
-            [email]
-        );
-        return result.rows[0] || null;
+        const user = await prisma.sps_users.findUnique({
+            where: { email },
+            include: {
+                sps_organizations: {
+                    select: {
+                        name: true,
+                        logo_url: true,
+                        theme_config: true,
+                    },
+                },
+            },
+        });
+
+        if (!user) return null;
+
+        return {
+            ...user,
+            org_name: user.sps_organizations?.name,
+            logo_url: user.sps_organizations?.logo_url,
+            theme_config: user.sps_organizations?.theme_config,
+        } as any as UserWithPassword;
     }
 
     /**
      * Find user by ID
      */
     async findById(id: string): Promise<User | null> {
-        const result = await query<User>(
-            `SELECT u.id, u.email, u.full_name, u.code, u.organization_id, 
-              u.is_super_admin, u.is_active, u.timezone, u.created_at, u.updated_at,
-              o.name as org_name, o.logo_url, o.theme_config
-       FROM sps_users u
-       LEFT JOIN sps_organizations o ON u.organization_id = o.id
-       WHERE u.id = $1`,
-            [id]
-        );
-        return result.rows[0] || null;
+        const user = await prisma.sps_users.findUnique({
+            where: { id },
+            include: {
+                sps_organizations: {
+                    select: {
+                        name: true,
+                        logo_url: true,
+                        theme_config: true,
+                    },
+                },
+            },
+        });
+
+        if (!user) return null;
+
+        const { password_hash, ...userWithoutPassword } = user;
+        return {
+            ...userWithoutPassword,
+            org_name: user.sps_organizations?.name,
+            logo_url: user.sps_organizations?.logo_url,
+            theme_config: user.sps_organizations?.theme_config,
+        } as any as User;
     }
 
     /**
      * Get all users (with optional org filter)
      */
     async findAll(organizationId?: string): Promise<User[]> {
-        let sql = `
-      SELECT u.id, u.email, u.full_name, u.code, u.organization_id, 
-             u.is_super_admin, u.is_active, u.timezone, u.created_at,
-             o.name as org_name
-      FROM sps_users u
-      LEFT JOIN sps_organizations o ON u.organization_id = o.id
-    `;
-        const params: any[] = [];
+        const users = await prisma.sps_users.findMany({
+            where: organizationId ? { organization_id: organizationId } : undefined,
+            include: {
+                sps_organizations: {
+                    select: {
+                        name: true,
+                    },
+                },
+            },
+            orderBy: { created_at: 'desc' },
+        });
 
-        if (organizationId) {
-            sql += ` WHERE u.organization_id = $1`;
-            params.push(organizationId);
-        }
-
-        sql += ` ORDER BY u.created_at DESC`;
-
-        const result = await query<User>(sql, params);
-        return result.rows;
+        return users.map((user: any) => {
+            const { password_hash, ...userWithoutPassword } = user;
+            return {
+                ...userWithoutPassword,
+                org_name: user.sps_organizations?.name,
+            } as User;
+        });
     }
 
     /**
@@ -67,113 +95,105 @@ export class UserRepository {
         timezone?: string;
         code?: string;
     }): Promise<User> {
-        const result = await query<User>(
-            `INSERT INTO sps_users (email, password_hash, full_name, organization_id, timezone, code)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, email, full_name, code, organization_id, is_super_admin, is_active, timezone, created_at`,
-            [data.email, data.password_hash, data.full_name, data.organization_id, data.timezone || 'UTC', data.code]
-        );
-        return result.rows[0];
+        const user = await prisma.sps_users.create({
+            data: {
+                email: data.email,
+                password_hash: data.password_hash,
+                full_name: data.full_name,
+                organization_id: data.organization_id,
+                timezone: data.timezone || 'UTC',
+                code: data.code,
+            },
+        });
+
+        const { password_hash, ...userWithoutPassword } = user;
+        return userWithoutPassword as any as User;
     }
 
     /**
      * Update user
      */
     async update(id: string, data: Partial<User>): Promise<User | null> {
-        const fields: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
+        const updateData: any = {};
 
-        if (data.email !== undefined) {
-            fields.push(`email = $${paramIndex++}`);
-            values.push(data.email);
-        }
-        if (data.full_name !== undefined) {
-            fields.push(`full_name = $${paramIndex++}`);
-            values.push(data.full_name);
-        }
-        if (data.timezone !== undefined) {
-            fields.push(`timezone = $${paramIndex++}`);
-            values.push(data.timezone);
-        }
-        if (data.is_active !== undefined) {
-            fields.push(`is_active = $${paramIndex++}`);
-            values.push(data.is_active);
-        }
+        if (data.email !== undefined) updateData.email = data.email;
+        if (data.full_name !== undefined) updateData.full_name = data.full_name;
+        if (data.timezone !== undefined) updateData.timezone = data.timezone;
+        if (data.is_active !== undefined) updateData.is_active = data.is_active;
 
-        if (fields.length === 0) return this.findById(id);
+        if (Object.keys(updateData).length === 0) return this.findById(id);
 
-        fields.push(`updated_at = NOW()`);
-        values.push(id);
+        const user = await prisma.sps_users.update({
+            where: { id },
+            data: updateData,
+        });
 
-        const result = await query<User>(
-            `UPDATE sps_users SET ${fields.join(', ')} WHERE id = $${paramIndex} 
-       RETURNING id, email, full_name, code, organization_id, is_super_admin, is_active, timezone, created_at, updated_at`,
-            values
-        );
-        return result.rows[0] || null;
+        const { password_hash, ...userWithoutPassword } = user;
+        return userWithoutPassword as any as User;
     }
 
     /**
      * Delete user
      */
     async delete(id: string): Promise<boolean> {
-        const result = await query('DELETE FROM sps_users WHERE id = $1', [id]);
-        return (result.rowCount ?? 0) > 0;
+        try {
+            await prisma.sps_users.delete({ where: { id } });
+            return true;
+        } catch (error) {
+            return false;
+        }
     }
 
     /**
      * Get user roles
      */
     async getUserRoles(userId: string): Promise<RoleAssignment[]> {
-        const result = await query<RoleAssignment>(
-            `SELECT id, user_id, role, org_id, event_id, dept_id, service_id
-       FROM sps_role_assignments WHERE user_id = $1`,
-            [userId]
-        );
-        return result.rows;
+        return await prisma.sps_role_assignments.findMany({
+            where: { user_id: userId },
+        }) as any as RoleAssignment[];
     }
 
     /**
      * Get user permissions (via role mappings)
      */
     async getUserPermissions(userId: string): Promise<string[]> {
-        const result = await query<{ code: string }>(
-            `SELECT DISTINCT p.code
-       FROM sps_role_assignments ra
-       JOIN sps_role_permissions rp ON ra.role = rp.role
-       JOIN sps_permissions p ON rp.permission_id = p.id
-       WHERE ra.user_id = $1`,
-            [userId]
-        );
-        return result.rows.map(r => r.code);
+        // Use raw SQL since role_assignments and role_permissions are connected via role string
+        const result = await prisma.$queryRaw<Array<{ code: string }>>`
+            SELECT DISTINCT p.code
+            FROM sps_role_assignments ra
+            JOIN sps_role_permissions rp ON ra.role = rp.role
+            JOIN sps_permissions p ON rp.permission_id = p.id
+            WHERE ra.user_id = ${userId}::uuid
+        `;
+        
+        return result.map((r: { code: string }) => r.code);
     }
 
     /**
      * Increment failed login attempts
      */
     async incrementFailedAttempts(userId: string, lockUntil?: Date): Promise<void> {
-        await query(
-            `UPDATE sps_users 
-       SET failed_login_attempts = failed_login_attempts + 1, 
-           account_locked_until = $2
-       WHERE id = $1`,
-            [userId, lockUntil]
-        );
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                failed_login_attempts: { increment: 1 },
+                account_locked_until: lockUntil,
+            },
+        });
     }
 
     /**
      * Reset failed login attempts
      */
     async resetFailedAttempts(userId: string): Promise<void> {
-        await query(
-            `UPDATE sps_users 
-       SET failed_login_attempts = 0, 
-           account_locked_until = NULL, 
-           last_login = NOW()
-       WHERE id = $1`,
-            [userId]
-        );
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                failed_login_attempts: 0,
+                account_locked_until: null,
+                last_login: new Date(),
+            },
+        });
     }
 
     /**
@@ -184,20 +204,27 @@ export class UserRepository {
         role: string,
         context: { org_id?: string; event_id?: string; dept_id?: string; service_id?: string }
     ): Promise<RoleAssignment> {
-        const result = await query<RoleAssignment>(
-            `INSERT INTO sps_role_assignments (user_id, role, org_id, event_id, dept_id, service_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-            [userId, role, context.org_id, context.event_id, context.dept_id, context.service_id]
-        );
-        return result.rows[0];
+        return await prisma.sps_role_assignments.create({
+            data: {
+                user_id: userId,
+                role,
+                org_id: context.org_id,
+                event_id: context.event_id,
+                dept_id: context.dept_id,
+                service_id: context.service_id,
+            },
+        }) as any as RoleAssignment;
     }
 
     /**
      * Remove role from user
      */
     async removeRole(assignmentId: string): Promise<boolean> {
-        const result = await query('DELETE FROM sps_role_assignments WHERE id = $1', [assignmentId]);
-        return (result.rowCount ?? 0) > 0;
+        try {
+            await prisma.sps_role_assignments.delete({ where: { id: assignmentId } });
+            return true;
+        } catch (error) {
+            return false;
+        }
     }
 }

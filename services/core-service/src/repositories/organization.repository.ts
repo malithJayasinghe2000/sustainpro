@@ -1,78 +1,71 @@
-import { query, getClient } from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
 import { Organization, CreateOrganizationDto, UpdateOrganizationDto } from '@sustainpro/shared-types';
+
+const prisma = getPrismaClient();
 
 export class OrganizationRepository {
     /**
      * Get all organizations
      */
     async findAll(organizationId?: string | null): Promise<Organization[]> {
-        let sql = `SELECT * FROM sps_organizations`;
-        const params: any[] = [];
+        const where = organizationId ? { id: organizationId } : {};
+        
+        const orgs = await prisma.sps_organizations.findMany({
+            where,
+            orderBy: { created_at: 'desc' }
+        });
 
-        if (organizationId) {
-            sql += ` WHERE id = $1`;
-            params.push(organizationId);
-        }
-
-        sql += ` ORDER BY created_at DESC`;
-
-        const result = await query<Organization>(sql, params);
-        return result.rows;
+        return orgs as any as Organization[];
     }
 
     /**
      * Get organization by ID
      */
     async findById(id: string): Promise<Organization | null> {
-        const result = await query<Organization>(
-            `SELECT * FROM sps_organizations WHERE id = $1`,
-            [id]
-        );
-        return result.rows[0] || null;
+        const org = await prisma.sps_organizations.findUnique({
+            where: { id }
+        });
+        
+        return org as any as Organization | null;
     }
 
     /**
      * Get organization by slug
      */
     async findBySlug(slug: string): Promise<Organization | null> {
-        const result = await query<Organization>(
-            `SELECT * FROM sps_organizations WHERE slug = $1`,
-            [slug]
-        );
-        return result.rows[0] || null;
+        const org = await prisma.sps_organizations.findFirst({
+            where: { slug }
+        });
+        
+        return org as any as Organization | null;
     }
 
     /**
      * Create a new organization
      */
     async create(data: CreateOrganizationDto & { code: string }): Promise<Organization> {
-        const result = await query<Organization>(
-            `INSERT INTO sps_organizations (
-                name, slug, code, type, description, industry, timezone, contact_email
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING *`,
-            [
-                data.name,
-                data.slug || this.generateSlug(data.name),
-                data.code,
-                data.type || 'CLIENT',
-                data.description || null,
-                data.industry || null,
-                data.timezone || 'UTC',
-                data.contact_email || null,
-            ]
-        );
-        return result.rows[0];
+        const org = await prisma.sps_organizations.create({
+            data: {
+                name: data.name,
+                slug: data.slug || this.generateSlug(data.name),
+                code: data.code,
+                type: data.type || 'CLIENT',
+                description: data.description || null,
+                industry: data.industry || null,
+                timezone: data.timezone || 'UTC',
+                contact_email: data.contact_email || null,
+            }
+        });
+        
+        return org as any as Organization;
     }
 
     /**
      * Update organization
      */
     async update(id: string, data: UpdateOrganizationDto): Promise<Organization | null> {
-        const fields: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
-
+        const updateData: any = {};
+        
         const allowedFields: (keyof UpdateOrganizationDto)[] = [
             'name', 'description', 'industry', 'website', 'logo_url',
             'timezone', 'address', 'city', 'country', 'phone',
@@ -81,43 +74,55 @@ export class OrganizationRepository {
 
         for (const field of allowedFields) {
             if (data[field] !== undefined) {
-                fields.push(`${field} = $${paramIndex++}`);
-                values.push(field === 'theme_config' ? JSON.stringify(data[field]) : data[field]);
+                updateData[field] = field === 'theme_config' 
+                    ? JSON.stringify(data[field]) 
+                    : data[field];
             }
         }
 
-        if (fields.length === 0) return this.findById(id);
+        if (Object.keys(updateData).length === 0) {
+            return this.findById(id);
+        }
 
-        fields.push(`updated_at = NOW()`);
-        values.push(id);
-
-        const result = await query<Organization>(
-            `UPDATE sps_organizations SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-            values
-        );
-        return result.rows[0] || null;
+        const org = await prisma.sps_organizations.update({
+            where: { id },
+            data: updateData
+        });
+        
+        return org as any as Organization;
     }
 
     /**
      * Delete organization
      */
     async delete(id: string): Promise<boolean> {
-        const result = await query('DELETE FROM sps_organizations WHERE id = $1', [id]);
-        return (result.rowCount ?? 0) > 0;
+        try {
+            await prisma.sps_organizations.delete({
+                where: { id }
+            });
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     /**
      * Generate next organization code
      */
     async generateCode(): Promise<string> {
-        const result = await query<{ code: string }>(
-            `SELECT code FROM sps_organizations WHERE code LIKE 'SPS-ORG-%' ORDER BY code DESC LIMIT 1`
-        );
+        const lastOrg = await prisma.sps_organizations.findFirst({
+            where: {
+                code: {
+                    startsWith: 'SPS-ORG-'
+                }
+            },
+            orderBy: { code: 'desc' },
+            select: { code: true }
+        });
 
         let nextId = 1;
-        if (result.rows.length > 0) {
-            const lastCode = result.rows[0].code;
-            const parts = lastCode.split('-');
+        if (lastOrg?.code) {
+            const parts = lastOrg.code.split('-');
             const lastNum = parseInt(parts[2]);
             if (!isNaN(lastNum)) {
                 nextId = lastNum + 1;
@@ -134,42 +139,41 @@ export class OrganizationRepository {
         const org = await this.findById(id);
         if (!org) return null;
 
-        // Get events
-        const eventsResult = await query(
-            `SELECT * FROM sps_events WHERE organization_id = $1 ORDER BY created_at DESC`,
-            [id]
-        );
+        // Get events with departments
+        const events = await prisma.sps_events.findMany({
+            where: { organization_id: id },
+            orderBy: { created_at: 'desc' }
+        });
 
-        // Get departments for each event
-        const events = await Promise.all(
-            eventsResult.rows.map(async (event: any) => {
-                const deptsResult = await query(
-                    `SELECT d.*, 
+        // Get departments for each event with service count
+        const eventsWithDepts = await Promise.all(
+            events.map(async (event: any) => {
+                const departments = await prisma.$queryRaw`
+                    SELECT d.*, 
                         (SELECT COUNT(*) FROM sps_department_services ds WHERE ds.department_id = d.id)::int as services_count
-                     FROM sps_departments d WHERE d.event_id = $1`,
-                    [event.id]
-                );
-                return { ...event, departments: deptsResult.rows };
+                    FROM sps_departments d 
+                    WHERE d.event_id = ${event.id}
+                ` as any[];
+                
+                return { ...event, departments };
             })
         );
 
         // Get user count
-        const userCountResult = await query(
-            `SELECT COUNT(*)::int as count FROM sps_users WHERE organization_id = $1`,
-            [id]
-        );
+        const userCount = await prisma.sps_users.count({
+            where: { organization_id: id }
+        });
 
         // Get device count
-        const deviceCountResult = await query(
-            `SELECT COUNT(*)::int as count FROM sps_devices WHERE organization_id = $1`,
-            [id]
-        );
+        const deviceCount = await prisma.sps_devices.count({
+            where: { organization_id: id }
+        });
 
         return {
             ...org,
-            events,
-            user_count: userCountResult.rows[0]?.count || 0,
-            device_count: deviceCountResult.rows[0]?.count || 0,
+            events: eventsWithDepts,
+            user_count: userCount,
+            device_count: deviceCount,
         };
     }
 

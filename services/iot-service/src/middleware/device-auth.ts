@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { query } from '../db';
+import { getPrismaClient } from '@sustainpro/shared-database';
 import { createLogger } from '@sustainpro/shared-utils';
 
+const prisma = getPrismaClient();
 const logger = createLogger({ service: 'device-auth' });
 
 // Extend Express Request to include device info
@@ -42,21 +43,19 @@ export const authenticateDevice = async (
             return;
         }
 
-        // Look up device by API key (plain text match)
-        const result = await query(
-            `SELECT d.id, d.device_code, d.organization_id, d.service_id, 
-                    d.name, d.status,
-                    e.id as event_id
-             FROM sps_devices d
-             LEFT JOIN sps_services s ON d.service_id = s.id
-             LEFT JOIN sps_department_services ds ON s.id = ds.service_id
-             LEFT JOIN sps_departments dep ON ds.department_id = dep.id
-             LEFT JOIN sps_events e ON dep.event_id = e.id
-             WHERE d.api_key = $1 AND d.status != 'INACTIVE'`,
-            [apiKey]
-        );
+        // Look up device by API key using raw SQL for complex joins
+        const result = await prisma.$queryRaw<Array<any>>`
+            SELECT d.id, d.device_code, d.organization_id, d.service_id, 
+                   d.name, d.status,
+                   e.id as event_id
+            FROM sps_devices d
+            LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+            LEFT JOIN sps_departments dep ON ds.department_id = dep.id
+            LEFT JOIN sps_events e ON dep.event_id = e.id
+            WHERE d.api_key = ${apiKey} AND d.status != 'INACTIVE'
+        `;
 
-        if (result.rows.length === 0) {
+        if (result.length === 0) {
             logger.warn('Invalid device API key attempt');
             res.status(401).json({
                 success: false,
@@ -65,7 +64,7 @@ export const authenticateDevice = async (
             return;
         }
 
-        const device = result.rows[0];
+        const device = result[0];
 
         // Attach device info to request
         req.device = {
