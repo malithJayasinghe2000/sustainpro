@@ -16,6 +16,7 @@ COPY packages/shared-types ./packages/shared-types
 COPY packages/shared-utils ./packages/shared-utils
 COPY packages/shared-middleware ./packages/shared-middleware
 COPY packages/shared-database ./packages/shared-database
+COPY packages/shared-swagger ./packages/shared-swagger
 
 # Copy auth service
 COPY services/auth-service ./services/auth-service
@@ -50,6 +51,9 @@ COPY --from=builder /app/packages/shared-middleware/dist ./packages/shared-middl
 
 COPY --from=builder /app/packages/shared-database/package.json ./packages/shared-database/
 COPY --from=builder /app/packages/shared-database/dist ./packages/shared-database/dist
+
+COPY --from=builder /app/packages/shared-swagger/package.json ./packages/shared-swagger/
+COPY --from=builder /app/packages/shared-swagger/dist ./packages/shared-swagger/dist
 
 # Copy built auth service
 COPY --from=builder /app/services/auth-service/package.json ./services/auth-service/
