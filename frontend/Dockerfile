@@ -2,11 +2,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json ./
+# Copy package file
+COPY package.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (generates lock file)
+RUN npm install
 
 # Copy source files
 COPY . .
