@@ -274,6 +274,33 @@ INSERT INTO sps_role_assignments (id, user_id, role, dept_id)
 VALUES (uuid_generate_v4(), 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'DEPT_HEAD', 'd2222222-2222-2222-2222-222222222222');
 
 -- ==================================================================================
+-- 13. ROLE PERMISSIONS (Maps roles to permissions)
+-- ==================================================================================
+
+-- ORG_ADMIN gets all permissions
+INSERT INTO sps_role_permissions (role, permission_id)
+SELECT 'ORG_ADMIN', id FROM sps_permissions
+ON CONFLICT DO NOTHING;
+
+-- EVENT_MANAGER gets limited permissions
+INSERT INTO sps_role_permissions (role, permission_id)
+SELECT 'EVENT_MANAGER', id FROM sps_permissions 
+WHERE code IN ('dashboard.view', 'events.view', 'events.manage', 'devices.view', 'reports.view', 'telemetry.view')
+ON CONFLICT DO NOTHING;
+
+-- DEPT_HEAD gets department-level permissions
+INSERT INTO sps_role_permissions (role, permission_id)
+SELECT 'DEPT_HEAD', id FROM sps_permissions 
+WHERE code IN ('dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view')
+ON CONFLICT DO NOTHING;
+
+-- VIEWER gets read-only permissions
+INSERT INTO sps_role_permissions (role, permission_id)
+SELECT 'VIEWER', id FROM sps_permissions 
+WHERE code IN ('dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view')
+ON CONFLICT DO NOTHING;
+
+-- ==================================================================================
 -- SEED DATA COMPLETE
 -- ==================================================================================
 

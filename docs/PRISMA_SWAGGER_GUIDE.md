@@ -527,3 +527,9 @@ npm run build:packages
    manager@acme.com / Admin@123 (Event Manager)
    operator@acme.com / Admin@123 (Operator)
 
+
+# PowerShell - Run SQL directly
+docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro -c "YOUR SQL HERE"
+
+# Or pipe a file
+Get-Content database\migrations\your_migration.sql | docker exec -i sustainpro-postgres psql -U sustainpro -d sustainpro

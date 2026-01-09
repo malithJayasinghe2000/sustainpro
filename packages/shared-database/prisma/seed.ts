@@ -163,7 +163,7 @@ async function main() {
     // 5. PERMISSIONS
     // ==================================================================================
     console.log('🔐 Seeding permissions...');
-    
+
     const permissions = [
         { name: 'View Dashboard', code: 'dashboard.view', description: 'View main dashboard', category: 'dashboard' },
         { name: 'View Devices', code: 'devices.view', description: 'View device list', category: 'devices' },
@@ -248,6 +248,56 @@ async function main() {
             dept_id: null,
         },
     });
+
+    // ==================================================================================
+    // 7. ROLE PERMISSIONS (Maps roles to permissions)
+    // ==================================================================================
+    console.log('🔗 Seeding role permissions...');
+
+    // Get all permission IDs for mapping
+    const allPermissions = await prisma.sps_permissions.findMany();
+    const permissionMap = new Map(allPermissions.map(p => [p.code, p.id]));
+
+    // Define role-permission mappings
+    const rolePermissionMappings: Record<string, string[]> = {
+        'ORG_ADMIN': [
+            'dashboard.view', 'devices.view', 'devices.manage', 'events.view', 'events.manage',
+            'users.view', 'users.manage', 'reports.view', 'settings.manage', 'telemetry.view', 'alerts.manage'
+        ],
+        'EVENT_MANAGER': [
+            'dashboard.view', 'events.view', 'events.manage', 'devices.view', 'reports.view', 'telemetry.view'
+        ],
+        'DEPT_HEAD': [
+            'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view'
+        ],
+        'OPERATOR': [
+            'dashboard.view', 'events.view', 'devices.view', 'telemetry.view'
+        ],
+        'VIEWER': [
+            'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view'
+        ],
+    };
+
+    // Clear existing role permissions and insert new ones
+    for (const [role, permCodes] of Object.entries(rolePermissionMappings)) {
+        // Delete existing for this role
+        await prisma.sps_role_permissions.deleteMany({
+            where: { role }
+        });
+
+        // Insert new mappings
+        for (const code of permCodes) {
+            const permissionId = permissionMap.get(code);
+            if (permissionId) {
+                await prisma.sps_role_permissions.create({
+                    data: {
+                        role,
+                        permission_id: permissionId,
+                    },
+                });
+            }
+        }
+    }
 
     console.log('\n✅ Seeding completed successfully!');
     console.log('\n📋 Test Credentials:');
