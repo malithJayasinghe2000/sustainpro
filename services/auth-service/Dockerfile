@@ -15,6 +15,7 @@ COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 COPY packages/shared-types ./packages/shared-types
 COPY packages/shared-utils ./packages/shared-utils
 COPY packages/shared-middleware ./packages/shared-middleware
+COPY packages/shared-database ./packages/shared-database
 
 # Copy auth service
 COPY services/auth-service ./services/auth-service
@@ -46,6 +47,9 @@ COPY --from=builder /app/packages/shared-utils/dist ./packages/shared-utils/dist
 
 COPY --from=builder /app/packages/shared-middleware/package.json ./packages/shared-middleware/
 COPY --from=builder /app/packages/shared-middleware/dist ./packages/shared-middleware/dist
+
+COPY --from=builder /app/packages/shared-database/package.json ./packages/shared-database/
+COPY --from=builder /app/packages/shared-database/dist ./packages/shared-database/dist
 
 # Copy built auth service
 COPY --from=builder /app/services/auth-service/package.json ./services/auth-service/
