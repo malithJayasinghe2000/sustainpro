@@ -176,6 +176,8 @@ services:
   gateway:
     image: nginx:alpine
     container_name: sustainpro-gateway
+    ports:
+      - "8080:80"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
@@ -200,8 +202,10 @@ services:
       context: ../frontend
       dockerfile: Dockerfile
     container_name: sustainpro-frontend
+    ports:
+      - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: https://api.${DOMAIN}/api/v1
+      NEXT_PUBLIC_API_URL: http://${SERVER_IP:-localhost}:8080/api/v1
     depends_on:
       - gateway
     labels:

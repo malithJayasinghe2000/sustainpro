@@ -24,6 +24,9 @@ COPY services/core-service ./services/core-service
 # Install all dependencies (including devDependencies for build)
 RUN npm ci
 
+# Generate Prisma client
+RUN npx prisma generate --schema=packages/shared-database/prisma/schema.prisma
+
 # Build using turbo (handles dependency order automatically)
 RUN npx turbo build --filter=@sustainpro/core-service
 
@@ -51,6 +54,9 @@ COPY --from=builder /app/packages/shared-middleware/dist ./packages/shared-middl
 
 COPY --from=builder /app/packages/shared-database/package.json ./packages/shared-database/
 COPY --from=builder /app/packages/shared-database/dist ./packages/shared-database/dist
+COPY --from=builder /app/packages/shared-database/prisma ./packages/shared-database/prisma
+COPY --from=builder /app/packages/shared-database/node_modules/.prisma ./packages/shared-database/node_modules/.prisma
+COPY --from=builder /app/packages/shared-database/node_modules/@prisma ./packages/shared-database/node_modules/@prisma
 
 COPY --from=builder /app/packages/shared-swagger/package.json ./packages/shared-swagger/
 COPY --from=builder /app/packages/shared-swagger/dist ./packages/shared-swagger/dist
