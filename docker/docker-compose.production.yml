@@ -201,6 +201,8 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://${SERVER_IP:-localhost}:8080/api/v1
     container_name: sustainpro-frontend
     ports:
       - "3000:3000"

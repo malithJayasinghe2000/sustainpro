@@ -2,6 +2,10 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Build arguments for Next.js public variables
+ARG NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Copy package file
 COPY package.json ./
 
@@ -14,7 +18,7 @@ COPY . .
 # Set environment for build
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Build the application
+# Build the application with the API URL baked in
 RUN npm run build
 
 # Production stage
