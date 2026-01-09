@@ -25,7 +25,9 @@ COPY services/iot-service ./services/iot-service
 RUN npm ci
 
 # Generate Prisma client
-RUN npx prisma generate --schema=packages/shared-database/prisma/schema.prisma
+WORKDIR /app/packages/shared-database
+RUN npx prisma generate
+WORKDIR /app
 
 # Build using turbo (handles dependency order automatically)
 RUN npx turbo build --filter=@sustainpro/iot-service
