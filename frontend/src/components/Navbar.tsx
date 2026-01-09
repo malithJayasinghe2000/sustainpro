@@ -39,10 +39,10 @@ export default function Navbar() {
             setCurrentTime(new Date());
         }, 1000);
 
-        // Fetch Settings
+        // Fetch Settings (use public endpoint - doesn't require auth)
         const fetchSettings = async () => {
             try {
-                const settings = await settingsApi.get();
+                const settings = await settingsApi.getPublic();
                 if (settings.site_title) setSiteTitle(settings.site_title);
 
                 // Prioritize Organization Logo, else System Logo
@@ -157,18 +157,18 @@ export default function Navbar() {
                     <div className="flex items-center gap-3">
 
                         {/* Server Stats (Super Admin Only) */}
-                        {user?.is_super_admin && serverStats && (
+                        {user?.is_super_admin && serverStats?.data && (
                             <div className="hidden lg:flex items-center gap-4 mr-2">
                                 {/* CPU */}
                                 <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/30 px-2 py-1 rounded-md border border-border/50">
                                     <Cpu className="w-3.5 h-3.5 text-primary" />
-                                    <span>{serverStats.cpu.load_avg_1m}%</span>
+                                    <span>{serverStats.data.cpu?.usage?.[0] ? (100 - parseFloat(serverStats.data.cpu.usage[0].idle)).toFixed(0) : 0}%</span>
                                 </div>
                                 {/* RAM */}
                                 <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/30 px-2 py-1 rounded-md border border-border/50">
                                     <Activity className="w-3.5 h-3.5 text-blue-500" />
-                                    <span>{serverStats.memory.percent_used}%</span>
-                                    {/* <span className="text-[10px] opacity-70">({serverStats.memory.used_mb}MB)</span> */}
+                                    <span>{serverStats.data.memory?.usagePercent || 0}%</span>
+                                    {/* <span className="text-[10px] opacity-70">({serverStats.data.memory?.used}MB)</span> */}
                                 </div>
                             </div>
                         )}

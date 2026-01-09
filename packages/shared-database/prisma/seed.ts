@@ -4,6 +4,11 @@
  * Run: npm run prisma:seed
  */
 
+
+// if not get env 
+
+// $env:DATABASE_URL="postgresql://sustainpro:sustainpro_dev@localhost:5432/sustainpro"; npx prisma studio
+
 import { PrismaClient } from '@prisma/client';
 import argon2 from 'argon2';
 

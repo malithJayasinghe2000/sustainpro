@@ -49,10 +49,7 @@ export const getById = async (req: Request, res: Response, next: NextFunction): 
  */
 export const create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const template = await serviceService.createTemplate({
-            ...req.body,
-            created_by: req.user?.id,
-        });
+        const template = await serviceService.createTemplate(req.body);
 
         res.status(201).json({
             success: true,

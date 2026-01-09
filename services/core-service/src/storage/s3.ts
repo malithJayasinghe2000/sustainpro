@@ -33,10 +33,30 @@ const getS3Client = (): S3Client | null => {
 };
 
 /**
- * Check if S3 is configured
+ * Check if S3 is configured with valid credentials
  */
 export const isS3Configured = (): boolean => {
-    return !!(config.aws.accessKeyId && config.aws.secretAccessKey);
+    const { accessKeyId, secretAccessKey } = config.aws;
+
+    // Check if credentials exist
+    if (!accessKeyId || !secretAccessKey) {
+        return false;
+    }
+
+    // Check for common placeholder values
+    const placeholders = ['your-access-key', 'your-secret-key', 'placeholder', 'xxx', 'changeme'];
+    const isPlaceholder = placeholders.some(p =>
+        accessKeyId.toLowerCase().includes(p) ||
+        secretAccessKey.toLowerCase().includes(p)
+    );
+
+    if (isPlaceholder) {
+        return false;
+    }
+
+    // AWS access keys start with 'AKIA' for long-term or 'ASIA' for temporary
+    const validKeyPattern = /^(AKIA|ASIA)[A-Z0-9]{16}$/;
+    return validKeyPattern.test(accessKeyId);
 };
 
 /**

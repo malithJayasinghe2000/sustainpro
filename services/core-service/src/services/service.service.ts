@@ -10,8 +10,8 @@ export class ServiceService {
     /**
      * Get all service templates
      */
-    async getAllTemplates(scope?: string): Promise<ServiceTemplate[]> {
-        return this.repo.findAllTemplates(scope);
+    async getAllTemplates(category?: string): Promise<ServiceTemplate[]> {
+        return this.repo.findAllTemplates(category);
     }
 
     /**
@@ -30,13 +30,15 @@ export class ServiceService {
      */
     async createTemplate(data: {
         name: string;
+        code?: string;
         description?: string;
-        scope: string;
-        config?: Record<string, any>;
-        is_public_dashboard_supported?: boolean;
-        created_by: string;
+        category?: string;
+        config_schema?: Record<string, any>;
+        default_config?: Record<string, any>;
         main_dashboard_layout?: any[];
         public_dashboard_layout?: any[];
+        features?: any[];
+        is_public?: boolean;
     }): Promise<ServiceTemplate> {
         const template = await this.repo.createTemplate(data);
 

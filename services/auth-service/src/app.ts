@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { config } from './config';
 import { errorHandler, notFoundHandler } from '@sustainpro/shared-middleware';
@@ -15,23 +14,8 @@ const logger = createLogger({ service: 'auth-service' });
 
 const app = express();
 
-// Middleware
+// Middleware (CORS handled by nginx gateway)
 app.use(cookieParser());
-app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, Postman)
-        if (!origin) {
-            return callback(null, true);
-        }
-        if (config.cors.origins.includes(origin)) {
-            callback(null, true);
-        } else {
-            logger.warn('CORS blocked origin', { origin });
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
-}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

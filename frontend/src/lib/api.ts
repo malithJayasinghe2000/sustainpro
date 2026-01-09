@@ -189,6 +189,11 @@ export const settingsApi = {
         return response.data.settings as SystemSettings;
     },
 
+    getPublic: async () => {
+        const response = await apiClient.get('/settings/public');
+        return response.data.settings as Partial<SystemSettings>;
+    },
+
     update: async (settings: Partial<SystemSettings>) => {
         const response = await apiClient.put('/settings', settings);
         return response.data.settings as SystemSettings;
@@ -244,7 +249,7 @@ export const departmentTemplatesApi = {
             ? `/department-templates?organization_id=${organizationId}`
             : '/department-templates';
         const response = await apiClient.get(url);
-        return response.data;
+        return response.data.data;
     },
 
     getById: async (id: string) => {
@@ -332,7 +337,7 @@ export const departmentServicesApi = {
 export const organizationsApi = {
     getAll: async () => {
         const response = await apiClient.get('/organizations');
-        return response.data;
+        return response.data.data;
     },
     getById: async (id: string) => {
         const response = await apiClient.get(`/organizations/${id}`);
@@ -367,11 +372,11 @@ export const organizationsApi = {
 export const eventsApi = {
     getAll: async () => {
         const response = await apiClient.get('/events');
-        return response.data;
+        return response.data.data;
     },
     getByOrg: async (orgId: string) => {
         const response = await apiClient.get(`/events/by-org/${orgId}`);
-        return response.data;
+        return response.data.data;
     },
     create: async (data: any) => {
         const response = await apiClient.post('/events', data);
@@ -406,7 +411,7 @@ export const eventsApi = {
 export const servicesApi = {
     getAll: async (scope?: string) => {
         const response = await apiClient.get('/services', { params: { scope } });
-        return response.data;
+        return response.data.data;
     },
     getById: async (id: string) => {
         console.log('API Requesting Service ID:', id);

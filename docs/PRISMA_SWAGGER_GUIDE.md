@@ -519,3 +519,11 @@ npm run build:packages
 3. **Remove Old Code**: Clean up `db/` folders with pg pool code
 4. **Update Tests**: Modify tests to use Prisma
 5. **Production Deploy**: Test migrations in staging before production
+
+
+📋 Test Credentials:
+   superadmin@sustainpro.io / Admin@123 (Super Admin)
+   admin@acme.com / Admin@123 (Org Admin)
+   manager@acme.com / Admin@123 (Event Manager)
+   operator@acme.com / Admin@123 (Operator)
+

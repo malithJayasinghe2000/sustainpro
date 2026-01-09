@@ -5,11 +5,16 @@ const prisma = getPrismaClient();
 export interface ServiceTemplate {
     id: string;
     name: string;
+    code: string;
     description: string | null;
-    scope: string;
-    config: Record<string, any>;
-    is_public_dashboard_supported: boolean;
-    created_by: string;
+    category: string;
+    config_schema: Record<string, any>;
+    default_config: Record<string, any>;
+    main_dashboard_layout: any;
+    public_dashboard_layout: any;
+    features: any[];
+    is_public: boolean;
+    is_active: boolean;
     created_at: Date;
     device_models?: any[];
 }
@@ -29,52 +34,27 @@ export class ServiceRepository {
     /**
      * Get all service templates
      */
-    async findAllTemplates(scope?: string): Promise<ServiceTemplate[]> {
-        let sql = `
-            SELECT st.*, 
-                COALESCE(
-                    json_agg(
-                        json_build_object('device_model_id', sdm.device_model_id, 'role', sdm.role)
-                    ) FILTER (WHERE sdm.device_model_id IS NOT NULL),
-                    '[]'::json
-                ) as device_models
-            FROM sps_service_templates st
-            LEFT JOIN sps_service_device_models sdm ON st.id = sdm.service_id
-        `;
-        const params: any[] = [];
+    async findAllTemplates(category?: string): Promise<ServiceTemplate[]> {
+        const whereClause = category ? { category } : {};
 
-        if (scope) {
-            sql += ` WHERE st.scope = $1`;
-            params.push(scope);
-        }
+        const templates = await prisma.sps_service_templates.findMany({
+            where: whereClause,
+            orderBy: { created_at: 'desc' },
+        });
 
-        sql += ` GROUP BY st.id ORDER BY st.created_at DESC`;
+        // Get device models for each template
+        const templateIds = templates.map(t => t.id);
+        const deviceModels = await prisma.sps_service_device_models.findMany({
+            where: { service_template_id: { in: templateIds } },
+        });
 
-        const result = await prisma.$queryRaw`${sql}` as any;
-        return scope ? await prisma.$queryRaw`
-            SELECT st.*, 
-                COALESCE(
-                    json_agg(
-                        json_build_object('device_model_id', sdm.device_model_id, 'role', sdm.role)
-                    ) FILTER (WHERE sdm.device_model_id IS NOT NULL),
-                    '[]'::json
-                ) as device_models
-            FROM sps_service_templates st
-            LEFT JOIN sps_service_device_models sdm ON st.id = sdm.service_id
-            WHERE st.scope = ${scope}
-            GROUP BY st.id ORDER BY st.created_at DESC
-        ` as any as ServiceTemplate[] : await prisma.$queryRaw`
-            SELECT st.*, 
-                COALESCE(
-                    json_agg(
-                        json_build_object('device_model_id', sdm.device_model_id, 'role', sdm.role)
-                    ) FILTER (WHERE sdm.device_model_id IS NOT NULL),
-                    '[]'::json
-                ) as device_models
-            FROM sps_service_templates st
-            LEFT JOIN sps_service_device_models sdm ON st.id = sdm.service_id
-            GROUP BY st.id ORDER BY st.created_at DESC
-        ` as any as ServiceTemplate[];
+        // Map device models to templates
+        return templates.map(template => ({
+            ...template,
+            device_models: deviceModels
+                .filter(dm => dm.service_template_id === template.id)
+                .map(dm => ({ device_model_id: dm.device_model_id, role: dm.is_required ? 'required' : 'optional' })),
+        })) as any as ServiceTemplate[];
     }
 
     /**
@@ -105,31 +85,34 @@ export class ServiceRepository {
      */
     async createTemplate(data: {
         name: string;
+        code?: string;
         description?: string;
-        scope: string;
-        config?: Record<string, any>;
-        is_public_dashboard_supported?: boolean;
-        created_by: string;
+        category?: string;
+        config_schema?: Record<string, any>;
+        default_config?: Record<string, any>;
         main_dashboard_layout?: any[];
         public_dashboard_layout?: any[];
+        features?: any[];
+        is_public?: boolean;
     }): Promise<ServiceTemplate> {
-        const result = await prisma.$queryRaw`
-            INSERT INTO sps_service_templates (
-                name, description, scope, config, is_public_dashboard_supported, 
-                created_by, main_dashboard_layout, public_dashboard_layout
-            ) VALUES (
-                ${data.name},
-                ${data.description || null},
-                ${data.scope},
-                ${JSON.stringify(data.config || {})},
-                ${data.is_public_dashboard_supported || false},
-                ${data.created_by},
-                ${JSON.stringify(data.main_dashboard_layout || [])},
-                ${JSON.stringify(data.public_dashboard_layout || [])}
-            )
-            RETURNING *
-        ` as any as ServiceTemplate[];
-        return result[0];
+        // Generate a code from the name if not provided
+        const code = data.code || data.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+
+        const result = await prisma.sps_service_templates.create({
+            data: {
+                name: data.name,
+                code: code,
+                category: data.category || 'MONITORING',
+                description: data.description,
+                config_schema: data.config_schema || {},
+                default_config: data.default_config || {},
+                main_dashboard_layout: data.main_dashboard_layout || { widgets: [] },
+                public_dashboard_layout: data.public_dashboard_layout || { widgets: [] },
+                features: data.features || [],
+                is_public: data.is_public ?? true,
+            },
+        });
+        return result as any as ServiceTemplate;
     }
 
     /**
@@ -140,8 +123,11 @@ export class ServiceRepository {
 
         if (data.name !== undefined) updates.name = data.name;
         if (data.description !== undefined) updates.description = data.description;
-        if (data.scope !== undefined) updates.scope = data.scope;
-        if (data.config !== undefined) updates.config = data.config;
+        if (data.category !== undefined) updates.category = data.category;
+        if (data.config_schema !== undefined) updates.config_schema = data.config_schema;
+        if (data.default_config !== undefined) updates.default_config = data.default_config;
+        if (data.is_public !== undefined) updates.is_public = data.is_public;
+        if (data.is_active !== undefined) updates.is_active = data.is_active;
 
         if (Object.keys(updates).length === 0) return this.findTemplateById(id);
 

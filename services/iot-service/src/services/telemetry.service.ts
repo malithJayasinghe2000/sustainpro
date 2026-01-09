@@ -233,6 +233,9 @@ export class TelemetryService {
         total_telemetry_records: number;
         telemetry_today: number;
         unique_organizations: number;
+        total_organizations: number;
+        total_events: number;
+        total_users: number;
     }> {
         const telemetryStats = await telemetryRepository.getStats();
 
@@ -242,6 +245,11 @@ export class TelemetryService {
             select: { organization_id: true },
         });
 
+        // Get organization, event, and user counts for dashboard
+        const totalOrganizations = await prisma.sps_organizations.count();
+        const totalEvents = await prisma.sps_events.count();
+        const totalUsers = await prisma.sps_users.count();
+
         return {
             total_devices: totalDevices,
             devices_online: liveDataService.getOnlineCount(),
@@ -249,6 +257,9 @@ export class TelemetryService {
             total_telemetry_records: telemetryStats.total_records,
             telemetry_today: telemetryStats.records_today,
             unique_organizations: uniqueOrgs.length,
+            total_organizations: totalOrganizations,
+            total_events: totalEvents,
+            total_users: totalUsers,
         };
     }
 
