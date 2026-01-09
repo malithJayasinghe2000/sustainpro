@@ -13,7 +13,7 @@ router.use(authenticateToken);
  *   get:
  *     tags: [RBAC]
  *     summary: Get all permissions
- *     description: Get list of all available permissions
+ *     description: Get list of all available permissions with details
  *     security:
  *       - BearerAuth: []
  *     responses:
@@ -22,15 +22,17 @@ router.use(authenticateToken);
  */
 router.get('/permissions', async (req: Request, res: Response): Promise<void> => {
     try {
+        // Get all permissions with full details
         const result = await query(
-            `SELECT DISTINCT permission_code FROM sps_role_permissions ORDER BY permission_code`
+            `SELECT id, code, name, description, category as module FROM sps_permissions ORDER BY category, code`
         );
 
         res.json({
             success: true,
-            data: result.rows.map(r => r.permission_code),
+            data: result.rows,
         });
     } catch (error) {
+        console.error('Failed to fetch permissions:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch permissions',
@@ -55,18 +57,27 @@ router.get('/permissions', async (req: Request, res: Response): Promise<void> =>
  */
 router.get('/mappings', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
+        // Get mappings using actual column names: role, permission_id
         const result = await query(
-            `SELECT role_code, array_agg(permission_code) as permissions
-       FROM sps_role_permissions
-       GROUP BY role_code
-       ORDER BY role_code`
+            `SELECT rp.role, array_agg(p.code) as permissions
+             FROM sps_role_permissions rp
+             JOIN sps_permissions p ON rp.permission_id = p.id
+             GROUP BY rp.role
+             ORDER BY rp.role`
         );
+
+        // Convert to object format for frontend: { 'ORG_ADMIN': ['events.view', ...], ... }
+        const mappings: Record<string, string[]> = {};
+        for (const row of result.rows) {
+            mappings[row.role] = row.permissions || [];
+        }
 
         res.json({
             success: true,
-            data: result.rows,
+            data: mappings,
         });
     } catch (error) {
+        console.error('Failed to fetch mappings:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch mappings',
@@ -115,14 +126,15 @@ router.post('/mappings', requireSuperAdmin, async (req: Request, res: Response):
             return;
         }
 
-        // Delete existing permissions for role
-        await query('DELETE FROM sps_role_permissions WHERE role_code = $1', [role]);
+        // Delete existing permissions for role (using actual column name: role)
+        await query('DELETE FROM sps_role_permissions WHERE role = $1', [role]);
 
-        // Insert new permissions
-        for (const permission of permissions) {
+        // Insert new permissions (lookup permission_id from code)
+        for (const permCode of permissions) {
             await query(
-                'INSERT INTO sps_role_permissions (role_code, permission_code) VALUES ($1, $2)',
-                [role, permission]
+                `INSERT INTO sps_role_permissions (role, permission_id)
+                 SELECT $1, id FROM sps_permissions WHERE code = $2`,
+                [role, permCode]
             );
         }
 
@@ -131,6 +143,7 @@ router.post('/mappings', requireSuperAdmin, async (req: Request, res: Response):
             message: 'Permissions updated',
         });
     } catch (error) {
+        console.error('Failed to update mappings:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to update mappings',

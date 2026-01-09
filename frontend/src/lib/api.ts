@@ -452,11 +452,13 @@ export const uploadApi = {
 export const rbacApi = {
     getPermissions: async () => {
         const response = await apiClient.get('/rbac/permissions');
-        return response.data;
+        console.log('RBAC getPermissions response:', response.data);
+        return response.data.data || response.data || [];
     },
     getMappings: async () => {
         const response = await apiClient.get('/rbac/mappings');
-        return response.data;
+        console.log('RBAC getMappings response:', response.data);
+        return response.data.data || response.data || {};
     },
     updateMapping: async (role: string, permissions: string[]) => {
         const response = await apiClient.post('/rbac/mappings', { role, permissions });
