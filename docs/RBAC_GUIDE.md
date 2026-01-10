@@ -428,7 +428,7 @@ Edit `packages/shared-database/prisma/seed.ts`:
 const permissions = [
     // ... existing permissions ...
     
-    // ✅ New permissions
+    // New permissions
     { name: 'View Billing', code: 'billing.view', description: 'View billing information', category: 'billing' },
     { name: 'Manage Billing', code: 'billing.manage', description: 'Update payment methods', category: 'billing' },
 ];
@@ -442,11 +442,11 @@ In the same `seed.ts` file, update `rolePermissionMappings`:
 const rolePermissionMappings: Record<string, string[]> = {
     'ORG_ADMIN': [
         // ... existing permissions ...
-        'billing.view', 'billing.manage',  // ✅ Full access
+        'billing.view', 'billing.manage',  // Full access
     ],
     'VIEWER': [
         // ... existing permissions ...
-        'billing.view',  // ✅ Read-only access
+        'billing.view',  // Read-only access
     ],
 };
 ```
