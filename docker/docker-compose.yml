@@ -24,8 +24,8 @@ services:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ../database/seed-data.sql:/docker-entrypoint-initdb.d/02-seed-data.sql:ro
+      # Note: Database schema is managed by Prisma migrations
+      # Run: npx prisma migrate deploy && npx prisma db seed
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sustainpro} -d ${POSTGRES_DB:-sustainpro}"]
       interval: 10s
