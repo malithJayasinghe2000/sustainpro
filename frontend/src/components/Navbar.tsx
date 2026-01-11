@@ -27,8 +27,8 @@ export default function Navbar() {
     const siteTitle = settings?.site_title || 'SPS IoT';
     const siteLogo = settings?.site_logo; // User configured logo from settings
     const orgLogo = user?.org_logo; // Organization-specific logo
-    // Use getFullImageUrl to resolve relative URLs to full URLs
-    const logo = getFullImageUrl(orgLogo || siteLogo);
+    // Use getFullImageUrl to resolve relative URLs to full URLs, fallback to default logo
+    const logo = getFullImageUrl(orgLogo || siteLogo) || '/logo.png';
     const globalAlert = settings?.global_alert_message;
     const alertType = settings?.global_alert_type || 'INFO';
     const [logoError, setLogoError] = useState(false);

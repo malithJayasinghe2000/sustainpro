@@ -165,7 +165,7 @@ export class UserRepository {
             JOIN sps_permissions p ON rp.permission_id = p.id
             WHERE ra.user_id = ${userId}::uuid
         `;
-        
+
         return result.map((r: { code: string }) => r.code);
     }
 
@@ -192,6 +192,18 @@ export class UserRepository {
                 failed_login_attempts: 0,
                 account_locked_until: null,
                 last_login: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Update user password
+     */
+    async updatePassword(userId: string, passwordHash: string): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                password_hash: passwordHash,
             },
         });
     }

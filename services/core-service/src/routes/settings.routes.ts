@@ -28,6 +28,16 @@ router.get('/public', settingsController.getPublicSettings);
  */
 router.get('/security', settingsController.getSecuritySettings);
 
+/**
+ * @swagger
+ * /settings/password-rules:
+ *   get:
+ *     tags: [Settings]
+ *     summary: Get password rules
+ *     description: Get password policies for frontend validation (no authentication required)
+ */
+router.get('/password-rules', settingsController.getPublicPasswordPolicies);
+
 // =========================================================================
 // PROTECTED ROUTES (Super Admin only)
 // =========================================================================

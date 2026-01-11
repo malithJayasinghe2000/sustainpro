@@ -21,7 +21,7 @@ export default function LoginPage() {
     // Get branding from settings
     const systemName = settings?.system_name || 'SustainPro';
     const siteTagline = settings?.site_tagline || 'IoT Cloud Platform';
-    const siteLogo = getFullImageUrl(settings?.site_logo); // Convert relative URL to full URL
+    const siteLogo = getFullImageUrl(settings?.site_logo) || '/logo.png'; // Fallback to default logo
 
     // ... (state hooks same as before)
     const [email, setEmail] = useState('');

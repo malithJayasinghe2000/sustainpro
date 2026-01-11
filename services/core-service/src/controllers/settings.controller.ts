@@ -60,6 +60,29 @@ export const getPasswordPolicies = async (req: Request, res: Response, next: Nex
     }
 };
 
+/**
+ * Get password policies for public frontend validation
+ * Returns only the validation rules without sensitive info
+ */
+export const getPublicPasswordPolicies = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const policies = await settingsService.getPasswordPolicies();
+        // Only return validation-related fields
+        const publicPolicies = {
+            min_length: policies?.min_length || 8,
+            max_length: policies?.max_length || 128,
+            require_uppercase: policies?.require_uppercase ?? true,
+            require_lowercase: policies?.require_lowercase ?? true,
+            require_numbers: policies?.require_numbers ?? true,
+            require_special_chars: policies?.require_special_chars ?? true,
+            special_chars_allowed: policies?.special_chars_allowed || '!@#$%^&*()_+-=[]{}|;:,.<>?',
+        };
+        res.json({ success: true, data: publicPolicies });
+    } catch (error) {
+        handleError(error, res, next);
+    }
+};
+
 export const updatePasswordPolicies = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const policies = await settingsService.updatePasswordPolicies(req.body);

@@ -9,6 +9,7 @@ import {
 import toast, { Toaster } from 'react-hot-toast';
 import DashboardLayout from '@/components/DashboardLayout';
 import ImageUpload from '@/components/ImageUpload';
+import { useSettings } from '@/contexts/SettingsContext';
 import {
     settingsApi,
     AllSettings,
@@ -126,6 +127,44 @@ const SelectField = ({ label, value, onChange, options }: SelectFieldProps) => (
     </div>
 );
 
+interface ColorFieldProps {
+    label: string;
+    value: string | undefined;
+    onChange: (value: string) => void;
+    placeholder?: string;
+}
+
+const ColorField = ({ label, value, onChange, placeholder = '#14b8a6' }: ColorFieldProps) => (
+    <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground">{label}</label>
+        <div className="flex items-center gap-3">
+            <div className="relative">
+                <input
+                    type="color"
+                    value={value || placeholder}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="w-12 h-12 rounded-lg cursor-pointer border border-input overflow-hidden"
+                    style={{ padding: 0 }}
+                />
+            </div>
+            <div className="flex-1">
+                <input
+                    type="text"
+                    value={value || ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={placeholder}
+                    className="w-full px-4 py-2.5 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all uppercase"
+                />
+            </div>
+            <div
+                className="w-12 h-12 rounded-lg border border-input shadow-inner"
+                style={{ backgroundColor: value || placeholder }}
+                title="Preview"
+            />
+        </div>
+    </div>
+);
+
 interface SectionHeaderProps {
     icon: React.ReactNode;
     title: string;
@@ -154,6 +193,9 @@ export default function SystemSettingsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+
+    // Get refetch function from settings context to apply colors after save
+    const { refetch: refetchSettings } = useSettings();
 
     // Settings state
     const [settings, setSettings] = useState<AllSettings | null>(null);
@@ -220,6 +262,16 @@ export default function SystemSettingsPage() {
                     break;
             }
             toast.success('Settings saved successfully');
+
+            // If general settings were saved, refetch to apply colors immediately
+            // This is done in a separate try-catch to avoid showing error after success
+            if (activeTab === 'general') {
+                try {
+                    await refetchSettings();
+                } catch {
+                    // Silently ignore refetch errors - the save was still successful
+                }
+            }
         } catch (error: any) {
             toast.error(error.response?.data?.error || 'Failed to save settings');
         } finally {
@@ -264,13 +316,13 @@ export default function SystemSettingsPage() {
                         folder="logos"
                     />
                 </div>
-                <InputField
+                <ColorField
                     label="Primary Color"
                     value={systemSettings.primary_color}
                     onChange={(v: string) => setSystemSettings({ ...systemSettings, primary_color: v })}
-                    placeholder="#3B82F6"
+                    placeholder="#14b8a6"
                 />
-                <InputField
+                <ColorField
                     label="Secondary Color"
                     value={systemSettings.secondary_color}
                     onChange={(v: string) => setSystemSettings({ ...systemSettings, secondary_color: v })}

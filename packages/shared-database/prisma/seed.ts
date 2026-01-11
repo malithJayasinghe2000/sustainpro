@@ -194,7 +194,7 @@ async function main() {
     });
 
     // SMTP Settings
-    console.log('📧 Seeding SMTP settings...');
+    console.log('Seeding SMTP settings...');
     await prisma.sps_smtp_settings.upsert({
         where: { id: 'sps_smtp_config' },
         update: {},
