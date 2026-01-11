@@ -1,10 +1,10 @@
 'use client';
 
-import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { SettingsProvider } from "@/contexts/SettingsContext";
 import InactivityTimer from "@/components/InactivityTimer";
 import ThemeAwareToaster from "@/components/ThemeAwareToaster";
 
@@ -23,6 +23,7 @@ export default function RootLayout({
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         <title>SustainPro - IoT Platform</title>
+        <meta name="description" content="Smart Sustainability Management Platform" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -46,12 +47,14 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased bg-background text-foreground">
         <ThemeProvider>
-          <AuthProvider>
-            <InactivityTimer>
-              {children}
-            </InactivityTimer>
-            <ThemeAwareToaster />
-          </AuthProvider>
+          <SettingsProvider>
+            <AuthProvider>
+              <InactivityTimer>
+                {children}
+              </InactivityTimer>
+              <ThemeAwareToaster />
+            </AuthProvider>
+          </SettingsProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -164,39 +164,321 @@ export const usersApi = {
     },
 };
 
-// Settings API functions
+// Settings API functions - System Configuration
 export interface SystemSettings {
     id: string;
-    category: string;
+    system_name: string;
     site_title: string;
+    site_tagline: string | null;
     site_logo: string | null;
-    maintenance_mode: boolean;
+    site_favicon: string | null;
+    primary_color: string;
+    secondary_color: string;
     default_timezone: string;
-    account_lock_duration_minutes: number;
-    token_expire_minutes: number;
-    max_login_attempts: number;
-    session_timeout_enabled: boolean;
-    support_email: string;
-    support_phone: string;
-    global_alert_message: string;
-    device_api_url: string;
+    default_language: string;
+    date_format: string;
+    time_format: string;
+    datetime_format: string;
+    first_day_of_week: number;
+    maintenance_mode: boolean;
+    maintenance_message: string | null;
+    global_alert_message: string | null;
+    global_alert_type: string;
+    support_email: string | null;
+    support_phone: string | null;
+    support_url: string | null;
+    meta_description: string | null;
+    meta_keywords: string | null;
     updated_at: string;
 }
 
+export interface PasswordPolicies {
+    id: string;
+    min_length: number;
+    max_length: number;
+    require_uppercase: boolean;
+    require_lowercase: boolean;
+    require_numbers: boolean;
+    require_special_chars: boolean;
+    special_chars_allowed: string;
+    password_expires: boolean;
+    password_expiry_days: number;
+    expiry_warning_days: number;
+    prevent_reuse: boolean;
+    reuse_prevention_count: number;
+    require_change_on_first_login: boolean;
+    min_password_age_hours: number;
+}
+
+export interface SessionPolicies {
+    id: string;
+    session_timeout_enabled: boolean;
+    session_timeout_minutes: number;
+    idle_timeout_enabled: boolean;
+    idle_timeout_minutes: number;
+    max_concurrent_sessions: number;
+    enforce_single_session: boolean;
+    access_token_expire_minutes: number;
+    refresh_token_expire_days: number;
+    remember_me_expire_days: number;
+    bind_session_to_ip: boolean;
+    bind_session_to_user_agent: boolean;
+    regenerate_session_on_login: boolean;
+}
+
+export interface LoginPolicies {
+    id: string;
+    max_login_attempts: number;
+    lockout_duration_minutes: number;
+    progressive_lockout: boolean;
+    progressive_lockout_multiplier: number;
+    max_lockout_duration_minutes: number;
+    enable_captcha: boolean;
+    captcha_after_attempts: number;
+    captcha_provider: string;
+    captcha_site_key: string | null;
+    captcha_secret_key: string | null;
+    enable_ip_blocking: boolean;
+    ip_block_threshold: number;
+    ip_block_duration_minutes: number;
+    notify_on_lockout: boolean;
+    notify_on_new_device_login: boolean;
+    notify_on_password_change: boolean;
+}
+
+export interface TwoFactorConfig {
+    id: string;
+    enabled: boolean;
+    enforce_globally: boolean;
+    enforce_for_admins: boolean;
+    grace_period_days: number;
+    email_method_enabled: boolean;
+    sms_method_enabled: boolean;
+    totp_method_enabled: boolean;
+    email_otp_length: number;
+    email_otp_expiry_minutes: number;
+    email_otp_max_attempts: number;
+    sms_otp_length: number;
+    sms_otp_expiry_minutes: number;
+    sms_otp_max_attempts: number;
+    totp_issuer: string;
+    totp_digits: number;
+    totp_period: number;
+    recovery_codes_enabled: boolean;
+    recovery_codes_count: number;
+}
+
+export interface ApiSecurityConfig {
+    id: string;
+    rate_limit_enabled: boolean;
+    rate_limit_requests: number;
+    rate_limit_window_minutes: number;
+    rate_limit_by: string;
+    api_key_enabled: boolean;
+    api_key_expiry_days: number;
+    api_key_max_per_user: number;
+    api_key_require_ip_whitelist: boolean;
+    cors_enabled: boolean;
+    cors_allowed_origins: string;
+    cors_allowed_methods: string;
+    cors_allowed_headers: string;
+    cors_max_age_seconds: number;
+    cors_allow_credentials: boolean;
+    api_versioning_enabled: boolean;
+    current_api_version: string;
+    supported_versions: string;
+    deprecation_warning_enabled: boolean;
+    max_request_body_size_mb: number;
+    request_timeout_seconds: number;
+    enable_security_headers: boolean;
+    hsts_enabled: boolean;
+    hsts_max_age_seconds: number;
+}
+
+export interface SmtpSettings {
+    id: string;
+    smtp_enabled: boolean;
+    smtp_host: string | null;
+    smtp_port: number;
+    smtp_username: string | null;
+    smtp_password: string | null;
+    smtp_encryption: string;
+    smtp_timeout_seconds: number;
+    from_email: string | null;
+    from_name: string;
+    reply_to_email: string | null;
+    max_emails_per_hour: number;
+    max_emails_per_day: number;
+    max_recipients_per_email: number;
+    test_mode: boolean;
+    test_email_recipient: string | null;
+    last_connection_status: string | null;
+    last_connection_error: string | null;
+}
+
+export interface NotificationSettings {
+    id: string;
+    email_notifications_enabled: boolean;
+    email_frequency: string;
+    email_batch_size: number;
+    email_digest_time: string;
+    quiet_hours_enabled: boolean;
+    quiet_hours_start: string;
+    quiet_hours_end: string;
+    quiet_hours_timezone: string;
+    quiet_hours_override_urgent: boolean;
+    in_app_notifications_enabled: boolean;
+    in_app_auto_dismiss_seconds: number;
+    in_app_max_visible: number;
+    push_notifications_enabled: boolean;
+    push_provider: string | null;
+    retention_days: number;
+}
+
+export interface EmailTemplate {
+    id: string;
+    code: string;
+    name: string;
+    description: string | null;
+    category: string;
+    subject: string;
+    body_html: string;
+    body_text: string | null;
+    available_variables: string[];
+    is_active: boolean;
+    is_system_template: boolean;
+    language: string;
+}
+
+export interface AllSettings {
+    system: SystemSettings | null;
+    password: PasswordPolicies | null;
+    session: SessionPolicies | null;
+    login: LoginPolicies | null;
+    twoFactor: TwoFactorConfig | null;
+    apiSecurity: ApiSecurityConfig | null;
+    smtp: SmtpSettings | null;
+    notification: NotificationSettings | null;
+}
+
 export const settingsApi = {
-    get: async () => {
+    // Get all settings at once
+    getAll: async (): Promise<AllSettings> => {
         const response = await apiClient.get('/settings');
-        return response.data.settings as SystemSettings;
+        return response.data.data;
     },
 
+    // Public settings (no auth required)
     getPublic: async () => {
         const response = await apiClient.get('/settings/public');
-        return response.data.settings as Partial<SystemSettings>;
+        return response.data.data;
     },
 
-    update: async (settings: Partial<SystemSettings>) => {
-        const response = await apiClient.put('/settings', settings);
-        return response.data.settings as SystemSettings;
+    // Security settings (for login page)
+    getSecurity: async () => {
+        const response = await apiClient.get('/settings/security');
+        return response.data.data;
+    },
+
+    // System Settings
+    getSystemSettings: async (): Promise<SystemSettings> => {
+        const response = await apiClient.get('/settings/system');
+        return response.data.data;
+    },
+    updateSystemSettings: async (data: Partial<SystemSettings>): Promise<SystemSettings> => {
+        const response = await apiClient.put('/settings/system', data);
+        return response.data.data;
+    },
+
+    // Password Policies
+    getPasswordPolicies: async (): Promise<PasswordPolicies> => {
+        const response = await apiClient.get('/settings/password-policies');
+        return response.data.data;
+    },
+    updatePasswordPolicies: async (data: Partial<PasswordPolicies>): Promise<PasswordPolicies> => {
+        const response = await apiClient.put('/settings/password-policies', data);
+        return response.data.data;
+    },
+
+    // Session Policies
+    getSessionPolicies: async (): Promise<SessionPolicies> => {
+        const response = await apiClient.get('/settings/session-policies');
+        return response.data.data;
+    },
+    updateSessionPolicies: async (data: Partial<SessionPolicies>): Promise<SessionPolicies> => {
+        const response = await apiClient.put('/settings/session-policies', data);
+        return response.data.data;
+    },
+
+    // Login Policies
+    getLoginPolicies: async (): Promise<LoginPolicies> => {
+        const response = await apiClient.get('/settings/login-policies');
+        return response.data.data;
+    },
+    updateLoginPolicies: async (data: Partial<LoginPolicies>): Promise<LoginPolicies> => {
+        const response = await apiClient.put('/settings/login-policies', data);
+        return response.data.data;
+    },
+
+    // Two-Factor Authentication
+    getTwoFactorConfig: async (): Promise<TwoFactorConfig> => {
+        const response = await apiClient.get('/settings/two-factor');
+        return response.data.data;
+    },
+    updateTwoFactorConfig: async (data: Partial<TwoFactorConfig>): Promise<TwoFactorConfig> => {
+        const response = await apiClient.put('/settings/two-factor', data);
+        return response.data.data;
+    },
+
+    // API Security
+    getApiSecurityConfig: async (): Promise<ApiSecurityConfig> => {
+        const response = await apiClient.get('/settings/api-security');
+        return response.data.data;
+    },
+    updateApiSecurityConfig: async (data: Partial<ApiSecurityConfig>): Promise<ApiSecurityConfig> => {
+        const response = await apiClient.put('/settings/api-security', data);
+        return response.data.data;
+    },
+
+    // SMTP Settings
+    getSmtpSettings: async (): Promise<SmtpSettings> => {
+        const response = await apiClient.get('/settings/smtp');
+        return response.data.data;
+    },
+    updateSmtpSettings: async (data: Partial<SmtpSettings>): Promise<SmtpSettings> => {
+        const response = await apiClient.put('/settings/smtp', data);
+        return response.data.data;
+    },
+
+    // Notification Settings
+    getNotificationSettings: async (): Promise<NotificationSettings> => {
+        const response = await apiClient.get('/settings/notifications');
+        return response.data.data;
+    },
+    updateNotificationSettings: async (data: Partial<NotificationSettings>): Promise<NotificationSettings> => {
+        const response = await apiClient.put('/settings/notifications', data);
+        return response.data.data;
+    },
+
+    // Email Templates
+    getEmailTemplates: async (): Promise<EmailTemplate[]> => {
+        const response = await apiClient.get('/settings/email-templates');
+        return response.data.data;
+    },
+    getEmailTemplate: async (code: string): Promise<EmailTemplate> => {
+        const response = await apiClient.get(`/settings/email-templates/${code}`);
+        return response.data.data;
+    },
+    createEmailTemplate: async (data: Partial<EmailTemplate>): Promise<EmailTemplate> => {
+        const response = await apiClient.post('/settings/email-templates', data);
+        return response.data.data;
+    },
+    updateEmailTemplate: async (code: string, data: Partial<EmailTemplate>): Promise<EmailTemplate> => {
+        const response = await apiClient.put(`/settings/email-templates/${code}`, data);
+        return response.data.data;
+    },
+    deleteEmailTemplate: async (code: string): Promise<void> => {
+        await apiClient.delete(`/settings/email-templates/${code}`);
     },
 };
 

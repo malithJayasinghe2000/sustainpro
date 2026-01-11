@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import Navbar from '@/components/Navbar';
+import MaintenancePage from '@/components/MaintenancePage';
 import { getRoleLabel, hasRole, isAdmin, ROLES } from '@/lib/roles';
 import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User } from 'lucide-react';
 import { applyOrganizationTheme } from '@/lib/theme-utils';
@@ -28,6 +30,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
     const { user, logout, isAuthenticated, isLoading } = useAuth();
+    const { settings } = useSettings();
 
     useEffect(() => {
         if (!isLoading && !isAuthenticated) {
@@ -163,6 +166,11 @@ export default function DashboardLayout({ children }: SidebarProps) {
         logout();
         router.push('/login');
     };
+
+    // Show maintenance page if enabled (except for super admins)
+    if (settings?.maintenance_mode && !user?.is_super_admin) {
+        return <MaintenancePage />;
+    }
 
     if (isLoading) {
         return (

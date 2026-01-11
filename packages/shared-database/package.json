@@ -9,11 +9,15 @@
     "clean": "rimraf dist",
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:push": "dotenv -e ../../.env -- prisma db push",
+    "prisma:push:force": "dotenv -e ../../.env -- prisma db push --accept-data-loss",
     "prisma:studio": "dotenv -e ../../.env -- prisma studio",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "prisma:migrate:reset": "dotenv -e ../../.env -- prisma migrate reset",
-    "prisma:seed": "dotenv -e ../../.env -- ts-node prisma/seed.ts"
+    "prisma:seed": "dotenv -e ../../.env -- ts-node prisma/seed.ts",
+    "prisma:migrate:sql": "dotenv -e ../../.env -- node -e \"require('child_process').execSync('psql ' + process.env.DATABASE_URL + ' -f prisma/migrations/20260111_add_system_configuration/migration.sql', {stdio: 'inherit'})\"",
+    "db:setup": "npm run prisma:generate && npm run prisma:push:force && npm run prisma:seed",
+    "db:deploy": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run prisma:seed"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
