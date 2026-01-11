@@ -1,6 +1,7 @@
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
 import { UserRepository } from '../repositories/user.repository';
+import { passwordValidationService } from './password-validation.service';
 import { config } from '../config';
 import {
     UnauthorizedError,
@@ -177,9 +178,13 @@ export class AuthService {
             throw new UnauthorizedError('Current password is incorrect');
         }
 
+        // Validate new password against configured policies
+        await passwordValidationService.validatePasswordStrength(newPassword);
+
         const newHash = await argon2.hash(newPassword);
         // Update password in database
-        // For now, return success - implement update method if needed
+        await this.userRepo.updatePassword(user.id, newHash);
+
         logger.info('Password changed', { userId });
 
         return { success: true };

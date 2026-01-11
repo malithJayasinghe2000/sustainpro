@@ -1,5 +1,6 @@
 import argon2 from 'argon2';
 import { UserRepository } from '../repositories/user.repository';
+import { passwordValidationService } from './password-validation.service';
 import {
     NotFoundError,
     BadRequestError,
@@ -40,6 +41,9 @@ export class UserService {
         if (existing) {
             throw new ConflictError('Email already in use');
         }
+
+        // Validate password against configured policies
+        await passwordValidationService.validatePasswordStrength(data.password);
 
         // Hash password
         const passwordHash = await argon2.hash(data.password);

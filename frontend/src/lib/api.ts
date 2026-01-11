@@ -400,6 +400,20 @@ export const settingsApi = {
         return response.data.data;
     },
 
+    // Public password rules (no auth required) - for frontend validation
+    getPasswordRules: async (): Promise<{
+        min_length: number;
+        max_length: number;
+        require_uppercase: boolean;
+        require_lowercase: boolean;
+        require_numbers: boolean;
+        require_special_chars: boolean;
+        special_chars_allowed: string;
+    }> => {
+        const response = await apiClient.get('/settings/password-rules');
+        return response.data.data;
+    },
+
     // Session Policies
     getSessionPolicies: async (): Promise<SessionPolicies> => {
         const response = await apiClient.get('/settings/session-policies');
