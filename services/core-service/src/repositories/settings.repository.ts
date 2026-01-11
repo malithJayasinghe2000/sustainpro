@@ -1,112 +1,324 @@
 import { getPrismaClient } from '@sustainpro/shared-database';
-import { SystemSettings } from '@sustainpro/shared-types';
 
 const prisma = getPrismaClient();
-const SETTINGS_ID = 'sps_main_config';
+
+// Configuration IDs
+const CONFIG_IDS = {
+    SYSTEM: 'sps_main_config',
+    PASSWORD: 'sps_password_policy',
+    SESSION: 'sps_session_policy',
+    LOGIN: 'sps_login_policy',
+    TWO_FACTOR: 'sps_2fa_config',
+    API_SECURITY: 'sps_api_security',
+    SMTP: 'sps_smtp_config',
+    NOTIFICATION: 'sps_notification_config',
+};
 
 export class SettingsRepository {
-    /**
-     * Get system settings
-     */
-    async get(): Promise<SystemSettings | null> {
+    // =========================================================================
+    // SYSTEM SETTINGS
+    // =========================================================================
+
+    async getSystemSettings() {
         const settings = await prisma.sps_system_settings.findUnique({
-            where: { id: SETTINGS_ID },
+            where: { id: CONFIG_IDS.SYSTEM },
         });
-        return settings as any as SystemSettings | null;
+        return settings;
     }
 
-    /**
-     * Get security settings (public)
-     */
-    async getSecuritySettings(): Promise<{
-        max_login_attempts: number;
-        account_lock_duration_minutes: number;
-        token_expire_minutes: number;
-    }> {
+    async updateSystemSettings(data: any) {
+        const settings = await prisma.sps_system_settings.upsert({
+            where: { id: CONFIG_IDS.SYSTEM },
+            update: { ...data, updated_at: new Date() },
+            create: { id: CONFIG_IDS.SYSTEM, ...data },
+        });
+        return settings;
+    }
+
+    async getPublicSettings() {
         const settings = await prisma.sps_system_settings.findUnique({
-            where: { id: SETTINGS_ID },
+            where: { id: CONFIG_IDS.SYSTEM },
             select: {
-                max_login_attempts: true,
-                account_lock_duration_minutes: true,
-                token_expire_minutes: true,
+                system_name: true,
+                site_title: true,
+                site_tagline: true,
+                site_logo: true,
+                site_favicon: true,
+                primary_color: true,
+                secondary_color: true,
+                default_timezone: true,
+                date_format: true,
+                time_format: true,
+                maintenance_mode: true,
+                maintenance_message: true,
+                global_alert_message: true,
+                global_alert_type: true,
+                support_email: true,
+                support_phone: true,
+                support_url: true,
             },
         });
+        return settings;
+    }
 
-        if (!settings) {
-            return {
-                max_login_attempts: 5,
-                account_lock_duration_minutes: 15,
-                token_expire_minutes: 60,
-            };
+    // =========================================================================
+    // PASSWORD POLICIES
+    // =========================================================================
+
+    async getPasswordPolicies() {
+        const policies = await prisma.sps_password_policies.findUnique({
+            where: { id: CONFIG_IDS.PASSWORD },
+        });
+        return policies;
+    }
+
+    async updatePasswordPolicies(data: any) {
+        const policies = await prisma.sps_password_policies.upsert({
+            where: { id: CONFIG_IDS.PASSWORD },
+            update: { ...data, updated_at: new Date() },
+            create: { id: CONFIG_IDS.PASSWORD, ...data },
+        });
+        return policies;
+    }
+
+    // =========================================================================
+    // SESSION POLICIES
+    // =========================================================================
+
+    async getSessionPolicies() {
+        const policies = await prisma.sps_session_policies.findUnique({
+            where: { id: CONFIG_IDS.SESSION },
+        });
+        return policies;
+    }
+
+    async updateSessionPolicies(data: any) {
+        const policies = await prisma.sps_session_policies.upsert({
+            where: { id: CONFIG_IDS.SESSION },
+            update: { ...data, updated_at: new Date() },
+            create: { id: CONFIG_IDS.SESSION, ...data },
+        });
+        return policies;
+    }
+
+    // =========================================================================
+    // LOGIN POLICIES
+    // =========================================================================
+
+    async getLoginPolicies() {
+        const policies = await prisma.sps_login_policies.findUnique({
+            where: { id: CONFIG_IDS.LOGIN },
+        });
+        return policies;
+    }
+
+    async updateLoginPolicies(data: any) {
+        const policies = await prisma.sps_login_policies.upsert({
+            where: { id: CONFIG_IDS.LOGIN },
+            update: { ...data, updated_at: new Date() },
+            create: { id: CONFIG_IDS.LOGIN, ...data },
+        });
+        return policies;
+    }
+
+    // =========================================================================
+    // TWO-FACTOR CONFIG
+    // =========================================================================
+
+    async getTwoFactorConfig() {
+        const config = await prisma.sps_two_factor_config.findUnique({
+            where: { id: CONFIG_IDS.TWO_FACTOR },
+        });
+        return config;
+    }
+
+    async updateTwoFactorConfig(data: any) {
+        const config = await prisma.sps_two_factor_config.upsert({
+            where: { id: CONFIG_IDS.TWO_FACTOR },
+            update: { ...data, updated_at: new Date() },
+            create: { id: CONFIG_IDS.TWO_FACTOR, ...data },
+        });
+        return config;
+    }
+
+    // =========================================================================
+    // API SECURITY CONFIG
+    // =========================================================================
+
+    async getApiSecurityConfig() {
+        const config = await prisma.sps_api_security_config.findUnique({
+            where: { id: CONFIG_IDS.API_SECURITY },
+        });
+        return config;
+    }
+
+    async updateApiSecurityConfig(data: any) {
+        const config = await prisma.sps_api_security_config.upsert({
+            where: { id: CONFIG_IDS.API_SECURITY },
+            update: { ...data, updated_at: new Date() },
+            create: { id: CONFIG_IDS.API_SECURITY, ...data },
+        });
+        return config;
+    }
+
+    // =========================================================================
+    // SMTP SETTINGS
+    // =========================================================================
+
+    async getSmtpSettings() {
+        const settings = await prisma.sps_smtp_settings.findUnique({
+            where: { id: CONFIG_IDS.SMTP },
+        });
+        // Don't expose password
+        if (settings) {
+            return { ...settings, smtp_password: settings.smtp_password ? '********' : null };
+        }
+        return settings;
+    }
+
+    async updateSmtpSettings(data: any) {
+        // Only update password if it's not masked
+        if (data.smtp_password === '********') {
+            delete data.smtp_password;
         }
 
+        const settings = await prisma.sps_smtp_settings.upsert({
+            where: { id: CONFIG_IDS.SMTP },
+            update: { ...data, updated_at: new Date() },
+            create: { id: CONFIG_IDS.SMTP, ...data },
+        });
+        return { ...settings, smtp_password: settings.smtp_password ? '********' : null };
+    }
+
+    // =========================================================================
+    // NOTIFICATION SETTINGS
+    // =========================================================================
+
+    async getNotificationSettings() {
+        const settings = await prisma.sps_notification_settings.findUnique({
+            where: { id: CONFIG_IDS.NOTIFICATION },
+        });
+        return settings;
+    }
+
+    async updateNotificationSettings(data: any) {
+        const settings = await prisma.sps_notification_settings.upsert({
+            where: { id: CONFIG_IDS.NOTIFICATION },
+            update: { ...data, updated_at: new Date() },
+            create: { id: CONFIG_IDS.NOTIFICATION, ...data },
+        });
+        return settings;
+    }
+
+    // =========================================================================
+    // EMAIL TEMPLATES
+    // =========================================================================
+
+    async getEmailTemplates(): Promise<any[]> {
+        const templates = await prisma.sps_email_templates.findMany({
+            orderBy: { category: 'asc' },
+        });
+        return templates;
+    }
+
+    async getEmailTemplate(code: string): Promise<any | null> {
+        const template = await prisma.sps_email_templates.findUnique({
+            where: { code },
+        });
+        return template;
+    }
+
+    async updateEmailTemplate(code: string, data: any): Promise<any> {
+        const template = await prisma.sps_email_templates.update({
+            where: { code },
+            data: { ...data, updated_at: new Date() },
+        });
+        return template;
+    }
+
+    async createEmailTemplate(data: any): Promise<any> {
+        const template = await prisma.sps_email_templates.create({
+            data,
+        });
+        return template;
+    }
+
+    async deleteEmailTemplate(code: string) {
+        // Check if it's a system template
+        const existing = await prisma.sps_email_templates.findUnique({
+            where: { code },
+        });
+
+        if (existing?.is_system_template) {
+            throw new Error('Cannot delete system templates');
+        }
+
+        await prisma.sps_email_templates.delete({
+            where: { code },
+        });
+        return true;
+    }
+
+    // =========================================================================
+    // COMBINED SETTINGS (For frontend dashboard)
+    // =========================================================================
+
+    async getAllSettings() {
+        const [
+            system,
+            password,
+            session,
+            login,
+            twoFactor,
+            apiSecurity,
+            smtp,
+            notification,
+        ] = await Promise.all([
+            this.getSystemSettings(),
+            this.getPasswordPolicies(),
+            this.getSessionPolicies(),
+            this.getLoginPolicies(),
+            this.getTwoFactorConfig(),
+            this.getApiSecurityConfig(),
+            this.getSmtpSettings(),
+            this.getNotificationSettings(),
+        ]);
+
         return {
-            max_login_attempts: settings.max_login_attempts ?? 5,
-            account_lock_duration_minutes: settings.account_lock_duration_minutes ?? 15,
-            token_expire_minutes: settings.token_expire_minutes ?? 60,
+            system,
+            password,
+            session,
+            login,
+            twoFactor,
+            apiSecurity,
+            smtp,
+            notification,
         };
     }
 
-    /**
-     * Update system settings
-     */
-    async update(data: Partial<SystemSettings>): Promise<SystemSettings | null> {
-        const updateData: any = {};
+    // =========================================================================
+    // SECURITY SETTINGS (for auth-service)
+    // =========================================================================
 
-        const allowedFields = [
-            'site_title', 'site_logo', 'maintenance_mode', 'default_timezone',
-            'account_lock_duration_minutes', 'token_expire_minutes', 'max_login_attempts',
-            'session_timeout_enabled', 'support_email', 'support_phone',
-            'global_alert_message', 'device_api_url'
-        ];
+    async getSecuritySettings() {
+        const [login, session, password] = await Promise.all([
+            this.getLoginPolicies(),
+            this.getSessionPolicies(),
+            this.getPasswordPolicies(),
+        ]);
 
-        for (const field of allowedFields) {
-            if ((data as any)[field] !== undefined) {
-                updateData[field] = (data as any)[field];
-            }
-        }
-
-        if (Object.keys(updateData).length === 0) return this.get();
-
-        const updated = await prisma.sps_system_settings.update({
-            where: { id: SETTINGS_ID },
-            data: updateData,
-        });
-        return updated as any as SystemSettings;
-    }
-
-    /**
-     * Get public settings (for unauthenticated users)
-     */
-    async getPublicSettings(): Promise<{
-        site_title: string;
-        site_logo: string | null;
-        maintenance_mode: boolean;
-        support_email: string | null;
-        support_phone: string | null;
-        global_alert_message: string | null;
-    } | null> {
-        const settings = await prisma.sps_system_settings.findUnique({
-            where: { id: SETTINGS_ID },
-            select: {
-                site_title: true,
-                site_logo: true,
-                maintenance_mode: true,
-                support_email: true,
-                support_phone: true,
-                global_alert_message: true,
-            },
-        });
-        
-        if (!settings) return null;
-        
         return {
-            site_title: settings.site_title ?? 'SustainPro',
-            site_logo: settings.site_logo,
-            maintenance_mode: settings.maintenance_mode ?? false,
-            support_email: settings.support_email,
-            support_phone: settings.support_phone,
-            global_alert_message: settings.global_alert_message,
+            max_login_attempts: login?.max_login_attempts ?? 5,
+            lockout_duration_minutes: login?.lockout_duration_minutes ?? 30,
+            access_token_expire_minutes: session?.access_token_expire_minutes ?? 60,
+            refresh_token_expire_days: session?.refresh_token_expire_days ?? 7,
+            session_timeout_minutes: session?.session_timeout_minutes ?? 60,
+            idle_timeout_minutes: session?.idle_timeout_minutes ?? 30,
+            min_password_length: password?.min_length ?? 8,
+            require_uppercase: password?.require_uppercase ?? true,
+            require_lowercase: password?.require_lowercase ?? true,
+            require_numbers: password?.require_numbers ?? true,
+            require_special_chars: password?.require_special_chars ?? true,
         };
     }
 }

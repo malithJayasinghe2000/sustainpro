@@ -223,6 +223,7 @@ model sps_organizations {
   sps_service_subscriptions sps_service_subscriptions[]
   sps_tasks                 sps_tasks[]
   sps_users                 sps_users[]
+  sps_api_keys              sps_api_keys[]
 }
 
 model sps_permissions {
@@ -315,22 +316,463 @@ model sps_service_templates {
   sps_service_subscriptions sps_service_subscriptions[]
 }
 
+// =============================================
+// SYSTEM CONFIGURATION TABLES
+// =============================================
+
+// Global System Settings - Core branding and system configuration
 model sps_system_settings {
-  id                            String    @id @default("sps_main_config") @db.VarChar(100)
-  category                      String?   @default("global") @db.VarChar(50)
-  site_title                    String?   @default("SustainPro") @db.VarChar(100)
-  site_logo                     String?
-  maintenance_mode              Boolean?  @default(false)
-  default_timezone              String?   @default("Asia/Colombo") @db.VarChar(100)
-  account_lock_duration_minutes Int?      @default(30)
-  token_expire_minutes          Int?      @default(60)
-  max_login_attempts            Int?      @default(5)
-  session_timeout_enabled       Boolean?  @default(true)
-  support_email                 String?   @db.VarChar(255)
-  support_phone                 String?   @db.VarChar(50)
-  global_alert_message          String?
-  created_at                    DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at                    DateTime? @default(now()) @db.Timestamptz(6)
+  id String @id @default("sps_main_config") @db.VarChar(100)
+
+  // System Branding
+  system_name     String? @default("SustainPro") @db.VarChar(100)
+  site_title      String? @default("SustainPro") @db.VarChar(100)
+  site_tagline    String? @db.VarChar(255)
+  site_logo       String? // URL to logo
+  site_favicon    String? // URL to favicon
+  primary_color   String? @default("#3B82F6") @db.VarChar(20)
+  secondary_color String? @default("#10B981") @db.VarChar(20)
+
+  // Timezone & Locale
+  default_timezone  String? @default("Asia/Dubai") @db.VarChar(100)
+  default_language  String? @default("en") @db.VarChar(10)
+  date_format       String? @default("DD/MM/YYYY") @db.VarChar(50)
+  time_format       String? @default("HH:mm:ss") @db.VarChar(50)
+  datetime_format   String? @default("DD/MM/YYYY HH:mm:ss") @db.VarChar(100)
+  first_day_of_week Int?    @default(0) // 0=Sunday, 1=Monday
+
+  // System Status
+  maintenance_mode     Boolean? @default(false)
+  maintenance_message  String?
+  global_alert_message String?
+  global_alert_type    String?  @default("INFO") @db.VarChar(20) // INFO, WARNING, ERROR
+
+  // Support Contact
+  support_email String? @db.VarChar(255)
+  support_phone String? @db.VarChar(50)
+  support_url   String? @db.VarChar(255)
+
+  // SEO & Meta
+  meta_description String?
+  meta_keywords    String?
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+// Password Policies - Authentication password requirements
+model sps_password_policies {
+  id String @id @default("sps_password_policy") @db.VarChar(100)
+
+  // Minimum Requirements
+  min_length            Int?     @default(8)
+  max_length            Int?     @default(128)
+  require_uppercase     Boolean? @default(true)
+  require_lowercase     Boolean? @default(true)
+  require_numbers       Boolean? @default(true)
+  require_special_chars Boolean? @default(true)
+  special_chars_allowed String?  @default("!@#$%^&*()_+-=[]{}|;:,.<>?") @db.VarChar(100)
+
+  // Password Expiration
+  password_expires     Boolean? @default(false)
+  password_expiry_days Int?     @default(90)
+  expiry_warning_days  Int?     @default(14) // Days before expiry to warn user
+
+  // Password Reuse Prevention
+  prevent_reuse          Boolean? @default(true)
+  reuse_prevention_count Int?     @default(5) // Number of previous passwords to check
+
+  // Password Change Requirements
+  require_change_on_first_login Boolean? @default(true)
+  min_password_age_hours        Int?     @default(0) // Minimum hours before password can be changed again
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+// Session Management Policies
+model sps_session_policies {
+  id String @id @default("sps_session_policy") @db.VarChar(100)
+
+  // Session Timeout
+  session_timeout_enabled Boolean? @default(true)
+  session_timeout_minutes Int?     @default(60)
+  idle_timeout_enabled    Boolean? @default(true)
+  idle_timeout_minutes    Int?     @default(30)
+
+  // Session Limits
+  max_concurrent_sessions Int?     @default(5)
+  enforce_single_session  Boolean? @default(false) // Force logout from other devices
+
+  // Token Settings
+  access_token_expire_minutes Int? @default(60)
+  refresh_token_expire_days   Int? @default(7)
+  remember_me_expire_days     Int? @default(30)
+
+  // Session Security
+  bind_session_to_ip          Boolean? @default(false)
+  bind_session_to_user_agent  Boolean? @default(false)
+  regenerate_session_on_login Boolean? @default(true)
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+// Login Attempt Policies
+model sps_login_policies {
+  id String @id @default("sps_login_policy") @db.VarChar(100)
+
+  // Failed Login Attempts
+  max_login_attempts             Int?     @default(5)
+  lockout_duration_minutes       Int?     @default(30)
+  progressive_lockout            Boolean? @default(true) // Increase lockout duration after repeated failures
+  progressive_lockout_multiplier Float?   @default(2.0)
+  max_lockout_duration_minutes   Int?     @default(1440) // Maximum 24 hours
+
+  // Captcha Settings
+  enable_captcha         Boolean? @default(false)
+  captcha_after_attempts Int?     @default(3) // Show captcha after N failed attempts
+  captcha_provider       String?  @default("RECAPTCHA") @db.VarChar(50) // RECAPTCHA, HCAPTCHA
+  captcha_site_key       String?
+  captcha_secret_key     String?
+
+  // IP-based Blocking
+  enable_ip_blocking        Boolean? @default(true)
+  ip_block_threshold        Int?     @default(10) // Block IP after N failed attempts
+  ip_block_duration_minutes Int?     @default(60)
+
+  // Notification on Suspicious Activity
+  notify_on_lockout          Boolean? @default(true)
+  notify_on_new_device_login Boolean? @default(true)
+  notify_on_password_change  Boolean? @default(true)
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+// Two-Factor Authentication Configuration
+model sps_two_factor_config {
+  id String @id @default("sps_2fa_config") @db.VarChar(100)
+
+  // 2FA Enforcement
+  enabled            Boolean? @default(true)
+  enforce_globally   Boolean? @default(false)
+  enforce_for_admins Boolean? @default(true)
+  grace_period_days  Int?     @default(7) // Days before 2FA is required after enable
+
+  // Available Methods
+  email_method_enabled Boolean? @default(true)
+  sms_method_enabled   Boolean? @default(false)
+  totp_method_enabled  Boolean? @default(true) // Authenticator apps
+
+  // Email OTP Settings
+  email_otp_length         Int? @default(6)
+  email_otp_expiry_minutes Int? @default(10)
+  email_otp_max_attempts   Int? @default(3)
+
+  // SMS OTP Settings  
+  sms_otp_length         Int?    @default(6)
+  sms_otp_expiry_minutes Int?    @default(5)
+  sms_otp_max_attempts   Int?    @default(3)
+  sms_provider           String? @db.VarChar(50) // TWILIO, NEXMO, etc.
+  sms_api_key            String?
+  sms_api_secret         String?
+  sms_sender_id          String? @db.VarChar(20)
+
+  // TOTP Settings
+  totp_issuer    String? @default("SustainPro") @db.VarChar(100)
+  totp_algorithm String? @default("SHA1") @db.VarChar(10)
+  totp_digits    Int?    @default(6)
+  totp_period    Int?    @default(30) // Seconds
+
+  // Recovery Codes
+  recovery_codes_enabled Boolean? @default(true)
+  recovery_codes_count   Int?     @default(10)
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+// API Security Configuration
+model sps_api_security_config {
+  id String @id @default("sps_api_security") @db.VarChar(100)
+
+  // Rate Limiting
+  rate_limit_enabled        Boolean? @default(true)
+  rate_limit_requests       Int?     @default(100) // Requests per window
+  rate_limit_window_minutes Int?     @default(1)
+  rate_limit_by             String?  @default("IP") @db.VarChar(20) // IP, USER, API_KEY
+
+  // API Key Settings
+  api_key_enabled              Boolean? @default(true)
+  api_key_expiry_days          Int?     @default(365)
+  api_key_max_per_user         Int?     @default(5)
+  api_key_require_ip_whitelist Boolean? @default(false)
+
+  // CORS Settings
+  cors_enabled           Boolean? @default(true)
+  cors_allowed_origins   String?  @default("*")
+  cors_allowed_methods   String?  @default("GET,POST,PUT,PATCH,DELETE,OPTIONS")
+  cors_allowed_headers   String?  @default("Content-Type,Authorization,X-API-Key")
+  cors_max_age_seconds   Int?     @default(86400)
+  cors_allow_credentials Boolean? @default(true)
+
+  // API Versioning
+  api_versioning_enabled      Boolean? @default(true)
+  current_api_version         String?  @default("v1") @db.VarChar(20)
+  supported_versions          String?  @default("v1") // Comma-separated list
+  deprecation_warning_enabled Boolean? @default(true)
+
+  // Request Limits
+  max_request_body_size_mb Int? @default(10)
+  request_timeout_seconds  Int? @default(30)
+
+  // Security Headers
+  enable_security_headers Boolean? @default(true)
+  hsts_enabled            Boolean? @default(true)
+  hsts_max_age_seconds    Int?     @default(31536000)
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+// SMTP Email Configuration
+model sps_smtp_settings {
+  id String @id @default("sps_smtp_config") @db.VarChar(100)
+
+  // SMTP Server Settings
+  smtp_enabled         Boolean? @default(true)
+  smtp_host            String?  @db.VarChar(255)
+  smtp_port            Int?     @default(587)
+  smtp_username        String?  @db.VarChar(255)
+  smtp_password        String? // Encrypted
+  smtp_encryption      String?  @default("TLS") @db.VarChar(10) // NONE, SSL, TLS
+  smtp_timeout_seconds Int?     @default(30)
+
+  // Sender Settings
+  from_email     String? @db.VarChar(255)
+  from_name      String? @default("SustainPro") @db.VarChar(100)
+  reply_to_email String? @db.VarChar(255)
+
+  // Email Limits
+  max_emails_per_hour      Int? @default(100)
+  max_emails_per_day       Int? @default(1000)
+  max_recipients_per_email Int? @default(50)
+
+  // Testing
+  test_mode            Boolean? @default(false)
+  test_email_recipient String?  @db.VarChar(255)
+
+  // Connection Health
+  last_connection_test   DateTime? @db.Timestamptz(6)
+  last_connection_status String?   @db.VarChar(50) // SUCCESS, FAILED
+  last_connection_error  String?
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+// Email Templates
+model sps_email_templates {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Template Identification
+  code        String  @unique @db.VarChar(50) // WELCOME, PASSWORD_RESET, 2FA_OTP, etc.
+  name        String  @db.VarChar(100)
+  description String?
+  category    String? @default("SYSTEM") @db.VarChar(50) // SYSTEM, ALERT, TASK, REPORT
+
+  // Template Content
+  subject   String  @db.VarChar(255)
+  body_html String // HTML content
+  body_text String? // Plain text fallback
+
+  // Template Variables (JSON array of available variables)
+  available_variables Json? @default("[]")
+
+  // Settings
+  is_active          Boolean? @default(true)
+  is_system_template Boolean? @default(false) // Cannot be deleted if true
+  language           String?  @default("en") @db.VarChar(10)
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([code], map: "idx_email_templates_code")
+  @@index([category], map: "idx_email_templates_category")
+}
+
+// Notification Settings
+model sps_notification_settings {
+  id String @id @default("sps_notification_config") @db.VarChar(100)
+
+  // Email Notification Frequency
+  email_notifications_enabled Boolean? @default(true)
+  email_frequency             String?  @default("IMMEDIATE") @db.VarChar(20) // IMMEDIATE, HOURLY, DAILY
+  email_batch_size            Int?     @default(10)
+  email_digest_time           String?  @default("09:00") @db.VarChar(10) // For daily digest
+
+  // Quiet Hours
+  quiet_hours_enabled         Boolean? @default(false)
+  quiet_hours_start           String?  @default("22:00") @db.VarChar(10)
+  quiet_hours_end             String?  @default("07:00") @db.VarChar(10)
+  quiet_hours_timezone        String?  @default("UTC") @db.VarChar(100)
+  quiet_hours_override_urgent Boolean? @default(true) // Urgent notifications bypass quiet hours
+
+  // In-App Notifications
+  in_app_notifications_enabled Boolean? @default(true)
+  in_app_auto_dismiss_seconds  Int?     @default(5)
+  in_app_max_visible           Int?     @default(5)
+
+  // Push Notifications
+  push_notifications_enabled Boolean? @default(false)
+  push_provider              String?  @db.VarChar(50) // FCM, APNS, etc.
+  push_api_key               String?
+
+  // Notification Retention
+  retention_days Int? @default(30)
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+// User Password History (for reuse prevention)
+model sps_password_history {
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id       String    @db.Uuid
+  password_hash String
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+
+  sps_users sps_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_password_history_user")
+}
+
+// User 2FA Settings (per-user 2FA configuration)
+model sps_user_two_factor {
+  id      String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id String @unique @db.Uuid
+
+  // 2FA Status
+  is_enabled Boolean?  @default(false)
+  enabled_at DateTime? @db.Timestamptz(6)
+
+  // Active Methods
+  email_enabled Boolean? @default(false)
+  sms_enabled   Boolean? @default(false)
+  totp_enabled  Boolean? @default(false)
+
+  // TOTP Secret (encrypted)
+  totp_secret      String?
+  totp_verified_at DateTime? @db.Timestamptz(6)
+
+  // Backup Phone for SMS
+  backup_phone   String?  @db.VarChar(20)
+  phone_verified Boolean? @default(false)
+
+  // Recovery Codes (encrypted JSON array)
+  recovery_codes              String?
+  recovery_codes_generated_at DateTime? @db.Timestamptz(6)
+  recovery_codes_used         Int?      @default(0)
+
+  // Last Used
+  last_used_method String?   @db.VarChar(20)
+  last_used_at     DateTime? @db.Timestamptz(6)
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  sps_users sps_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+// API Keys
+model sps_api_keys {
+  id              String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id         String  @db.Uuid
+  organization_id String? @db.Uuid
+
+  // Key Details
+  name       String @db.VarChar(100)
+  key_hash   String @unique // Hashed API key
+  key_prefix String @db.VarChar(10) // First few chars for identification
+
+  // Permissions & Scope
+  scopes       Json? @default("[]") // Array of allowed scopes/permissions
+  ip_whitelist Json? @default("[]") // Array of allowed IPs
+
+  // Status
+  is_active  Boolean?  @default(true)
+  expires_at DateTime? @db.Timestamptz(6)
+
+  // Usage Tracking
+  last_used_at DateTime? @db.Timestamptz(6)
+  last_used_ip String?   @db.VarChar(50)
+  usage_count  Int?      @default(0)
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  sps_users         sps_users          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_organizations sps_organizations? @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_api_keys_user")
+  @@index([organization_id], map: "idx_api_keys_org")
+}
+
+// User Sessions (for session management)
+model sps_user_sessions {
+  id      String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id String @db.Uuid
+
+  // Session Details
+  session_token_hash String  @unique
+  device_info        String? // User agent
+  ip_address         String? @db.VarChar(50)
+  location           String? @db.VarChar(255)
+
+  // Status
+  is_active      Boolean? @default(true)
+  is_remember_me Boolean? @default(false)
+
+  // Timestamps
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  last_activity_at DateTime? @default(now()) @db.Timestamptz(6)
+  expires_at       DateTime  @db.Timestamptz(6)
+  revoked_at       DateTime? @db.Timestamptz(6)
+  revoked_reason   String?   @db.VarChar(100)
+
+  sps_users sps_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_user_sessions_user")
+  @@index([expires_at], map: "idx_user_sessions_expires")
+}
+
+// Login Attempts Log (for security tracking)
+model sps_login_attempts {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Attempt Details
+  email      String  @db.VarChar(255)
+  user_id    String? @db.Uuid
+  ip_address String  @db.VarChar(50)
+  user_agent String?
+
+  // Result
+  success        Boolean
+  failure_reason String? @db.VarChar(100) // INVALID_PASSWORD, USER_NOT_FOUND, ACCOUNT_LOCKED, etc.
+
+  // 2FA if applicable
+  two_factor_required Boolean? @default(false)
+  two_factor_method   String?  @db.VarChar(20)
+  two_factor_success  Boolean?
+
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  sps_users sps_users? @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([email], map: "idx_login_attempts_email")
+  @@index([ip_address], map: "idx_login_attempts_ip")
+  @@index([created_at], map: "idx_login_attempts_created")
 }
 
 model sps_task_evidence {
@@ -410,6 +852,13 @@ model sps_users {
   sps_tasks_sps_tasks_assigned_toTosps_users sps_tasks[]               @relation("sps_tasks_assigned_toTosps_users")
   sps_tasks_sps_tasks_created_byTosps_users  sps_tasks[]               @relation("sps_tasks_created_byTosps_users")
   sps_organizations                          sps_organizations?        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // New relations for system configuration
+  sps_password_history sps_password_history[]
+  sps_user_two_factor  sps_user_two_factor?
+  sps_api_keys         sps_api_keys[]
+  sps_user_sessions    sps_user_sessions[]
+  sps_login_attempts   sps_login_attempts[]
 
   @@index([email], map: "idx_users_email")
   @@index([organization_id], map: "idx_users_org")

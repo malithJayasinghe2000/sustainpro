@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useSettings } from '@/contexts/SettingsContext';
+import { getFullImageUrl } from '@/components/ImageUpload';
 import { Sun, Moon } from 'lucide-react';
 import { isAdmin, hasRole, ROLES } from '@/lib/roles';
 import toast, { Toaster, Toast } from 'react-hot-toast';
@@ -14,6 +16,12 @@ export default function LoginPage() {
     const router = useRouter();
     const { login, isAuthenticated, isLoading, user } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const { settings } = useSettings();
+
+    // Get branding from settings
+    const systemName = settings?.system_name || 'SustainPro';
+    const siteTagline = settings?.site_tagline || 'IoT Cloud Platform';
+    const siteLogo = getFullImageUrl(settings?.site_logo); // Convert relative URL to full URL
 
     // ... (state hooks same as before)
     const [email, setEmail] = useState('');
@@ -164,21 +172,32 @@ export default function LoginPage() {
                 {/* Header */}
                 <div className="text-center">
                     <div className="mx-auto flex items-center justify-center mb-6">
-                        {!logoError ? (
+                        {siteLogo && !logoError ? (
                             <img
-                                src="/logo.png"
-                                alt="SustainPro"
+                                src={siteLogo}
+                                alt={systemName}
                                 className="h-16 w-auto object-contain"
-                                onError={() => setLogoError(true)}
+                                onError={() => {
+                                    console.log('Logo failed to load:', siteLogo);
+                                    setLogoError(true);
+                                }}
+                                onLoad={() => console.log('Logo loaded successfully:', siteLogo)}
                             />
                         ) : (
-                            <h1 className="text-3xl font-bold text-primary">SustainPro</h1>
+                            <div className="flex flex-col items-center">
+                                <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary/70 rounded-2xl flex items-center justify-center shadow-lg mb-2">
+                                    <span className="text-3xl font-bold text-primary-foreground">
+                                        {systemName?.charAt(0) || 'S'}
+                                    </span>
+                                </div>
+                                <h1 className="text-2xl font-bold text-primary">{systemName}</h1>
+                            </div>
                         )}
                     </div>
-                    <h2 className="text-xl font-bold text-card-foreground">
-                        IoT Cloud Platform
+                    <h2 className="text-lg font-semibold text-card-foreground">
+                        {siteTagline}
                     </h2>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
+                    <p className="mt-1 text-sm text-muted-foreground">
                         Sign in to your account
                     </p>
                 </div>
@@ -279,7 +298,7 @@ export default function LoginPage() {
             </div>
 
             <p className="absolute bottom-6 text-center text-xs text-muted-foreground w-full">
-                &copy; {new Date().getFullYear()} SustainPro. All rights reserved.
+                &copy; {new Date().getFullYear()} {systemName}. All rights reserved.
             </p>
         </div>
     );
