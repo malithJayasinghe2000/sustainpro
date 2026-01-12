@@ -12,6 +12,7 @@
     "dependencies": {
         "@sustainpro/shared-types": "*",
         "@sustainpro/shared-utils": "*",
+        "@sustainpro/shared-database": "*",
         "jsonwebtoken": "^9.0.0",
         "express-rate-limit": "^8.2.0"
     },

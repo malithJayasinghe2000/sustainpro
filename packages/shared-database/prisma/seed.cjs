@@ -1,0 +1,622 @@
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// prisma/seed.ts
+var import_client = require("@prisma/client");
+var import_argon2 = __toESM(require("argon2"));
+var prisma = new import_client.PrismaClient();
+var DEFAULT_PASSWORD = "Admin@123";
+async function hashPassword(password) {
+  return await import_argon2.default.hash(password, {
+    type: import_argon2.default.argon2id,
+    memoryCost: 65536,
+    timeCost: 3,
+    parallelism: 4
+  });
+}
+async function main() {
+  console.log("\u{1F331} Starting database seeding...\n");
+  const passwordHash = await hashPassword(DEFAULT_PASSWORD);
+  console.log("\u{1F4DD} Seeding system settings and configurations...");
+  await prisma.sps_system_settings.upsert({
+    where: { id: "sps_main_config" },
+    update: {},
+    create: {
+      id: "sps_main_config",
+      system_name: "SustainPro",
+      site_title: "SustainPro IoT Platform",
+      site_tagline: "Smart Sustainability Management",
+      primary_color: "#3B82F6",
+      secondary_color: "#10B981",
+      default_timezone: "Asia/Dubai",
+      default_language: "en",
+      date_format: "DD/MM/YYYY",
+      time_format: "HH:mm:ss",
+      datetime_format: "DD/MM/YYYY HH:mm:ss",
+      first_day_of_week: 0,
+      maintenance_mode: false,
+      support_email: "support@sustainpro.io",
+      support_phone: "+971 4 123 4567",
+      support_url: "https://support.sustainpro.io",
+      meta_description: "SustainPro - IoT Platform for Smart Sustainability Management"
+    }
+  });
+  console.log("\u{1F511} Seeding password policies...");
+  await prisma.sps_password_policies.upsert({
+    where: { id: "sps_password_policy" },
+    update: {},
+    create: {
+      id: "sps_password_policy",
+      min_length: 8,
+      max_length: 128,
+      require_uppercase: true,
+      require_lowercase: true,
+      require_numbers: true,
+      require_special_chars: true,
+      special_chars_allowed: "!@#$%^&*()_+-=[]{}|;:,.<>?",
+      password_expires: false,
+      password_expiry_days: 90,
+      expiry_warning_days: 14,
+      prevent_reuse: true,
+      reuse_prevention_count: 5,
+      require_change_on_first_login: true,
+      min_password_age_hours: 0
+    }
+  });
+  console.log("\u23F1\uFE0F Seeding session policies...");
+  await prisma.sps_session_policies.upsert({
+    where: { id: "sps_session_policy" },
+    update: {},
+    create: {
+      id: "sps_session_policy",
+      session_timeout_enabled: true,
+      session_timeout_minutes: 60,
+      idle_timeout_enabled: true,
+      idle_timeout_minutes: 30,
+      max_concurrent_sessions: 5,
+      enforce_single_session: false,
+      access_token_expire_minutes: 60,
+      refresh_token_expire_days: 7,
+      remember_me_expire_days: 30,
+      bind_session_to_ip: false,
+      bind_session_to_user_agent: false,
+      regenerate_session_on_login: true
+    }
+  });
+  console.log("\u{1F510} Seeding login policies...");
+  await prisma.sps_login_policies.upsert({
+    where: { id: "sps_login_policy" },
+    update: {},
+    create: {
+      id: "sps_login_policy",
+      max_login_attempts: 5,
+      lockout_duration_minutes: 30,
+      progressive_lockout: true,
+      progressive_lockout_multiplier: 2,
+      max_lockout_duration_minutes: 1440,
+      enable_captcha: false,
+      captcha_after_attempts: 3,
+      captcha_provider: "RECAPTCHA",
+      enable_ip_blocking: true,
+      ip_block_threshold: 10,
+      ip_block_duration_minutes: 60,
+      notify_on_lockout: true,
+      notify_on_new_device_login: true,
+      notify_on_password_change: true
+    }
+  });
+  console.log("\u{1F4F1} Seeding 2FA configuration...");
+  await prisma.sps_two_factor_config.upsert({
+    where: { id: "sps_2fa_config" },
+    update: {},
+    create: {
+      id: "sps_2fa_config",
+      enabled: true,
+      enforce_globally: false,
+      enforce_for_admins: true,
+      grace_period_days: 7,
+      email_method_enabled: true,
+      sms_method_enabled: false,
+      totp_method_enabled: true,
+      email_otp_length: 6,
+      email_otp_expiry_minutes: 10,
+      email_otp_max_attempts: 3,
+      sms_otp_length: 6,
+      sms_otp_expiry_minutes: 5,
+      sms_otp_max_attempts: 3,
+      totp_issuer: "SustainPro",
+      totp_algorithm: "SHA1",
+      totp_digits: 6,
+      totp_period: 30,
+      recovery_codes_enabled: true,
+      recovery_codes_count: 10
+    }
+  });
+  console.log("\u{1F6E1}\uFE0F Seeding API security configuration...");
+  await prisma.sps_api_security_config.upsert({
+    where: { id: "sps_api_security" },
+    update: {},
+    create: {
+      id: "sps_api_security",
+      rate_limit_enabled: true,
+      rate_limit_requests: 100,
+      rate_limit_window_minutes: 1,
+      rate_limit_by: "IP",
+      api_key_enabled: true,
+      api_key_expiry_days: 365,
+      api_key_max_per_user: 5,
+      api_key_require_ip_whitelist: false,
+      cors_enabled: true,
+      cors_allowed_origins: "*",
+      cors_allowed_methods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+      cors_allowed_headers: "Content-Type,Authorization,X-API-Key",
+      cors_max_age_seconds: 86400,
+      cors_allow_credentials: true,
+      api_versioning_enabled: true,
+      current_api_version: "v1",
+      supported_versions: "v1",
+      deprecation_warning_enabled: true,
+      max_request_body_size_mb: 10,
+      request_timeout_seconds: 30,
+      enable_security_headers: true,
+      hsts_enabled: true,
+      hsts_max_age_seconds: 31536e3
+    }
+  });
+  console.log("Seeding SMTP settings...");
+  await prisma.sps_smtp_settings.upsert({
+    where: { id: "sps_smtp_config" },
+    update: {},
+    create: {
+      id: "sps_smtp_config",
+      smtp_enabled: true,
+      smtp_host: "smtp.example.com",
+      smtp_port: 587,
+      smtp_username: "",
+      smtp_password: "",
+      smtp_encryption: "TLS",
+      smtp_timeout_seconds: 30,
+      from_email: "noreply@sustainpro.io",
+      from_name: "SustainPro",
+      reply_to_email: "support@sustainpro.io",
+      max_emails_per_hour: 100,
+      max_emails_per_day: 1e3,
+      max_recipients_per_email: 50,
+      test_mode: false
+    }
+  });
+  console.log("\u{1F514} Seeding notification settings...");
+  await prisma.sps_notification_settings.upsert({
+    where: { id: "sps_notification_config" },
+    update: {},
+    create: {
+      id: "sps_notification_config",
+      email_notifications_enabled: true,
+      email_frequency: "IMMEDIATE",
+      email_batch_size: 10,
+      email_digest_time: "09:00",
+      quiet_hours_enabled: false,
+      quiet_hours_start: "22:00",
+      quiet_hours_end: "07:00",
+      quiet_hours_timezone: "Asia/Dubai",
+      quiet_hours_override_urgent: true,
+      in_app_notifications_enabled: true,
+      in_app_auto_dismiss_seconds: 5,
+      in_app_max_visible: 5,
+      push_notifications_enabled: false,
+      retention_days: 30
+    }
+  });
+  console.log("\u{1F4E8} Seeding email templates...");
+  const emailTemplates = [
+    {
+      code: "WELCOME",
+      name: "Welcome Email",
+      category: "SYSTEM",
+      description: "Sent to new users upon account creation",
+      subject: "Welcome to SustainPro - {{userName}}",
+      body_html: `
+                <h1>Welcome to SustainPro!</h1>
+                <p>Dear {{userName}},</p>
+                <p>Your account has been created successfully.</p>
+                <p>You can log in using your email: <strong>{{userEmail}}</strong></p>
+                <p><a href="{{loginUrl}}">Click here to login</a></p>
+                <p>If you have any questions, please contact our support team.</p>
+                <p>Best regards,<br>The SustainPro Team</p>
+            `,
+      body_text: "Welcome to SustainPro! Your account has been created. Login at: {{loginUrl}}",
+      available_variables: JSON.stringify(["userName", "userEmail", "loginUrl", "organizationName"]),
+      is_system_template: true
+    },
+    {
+      code: "PASSWORD_RESET",
+      name: "Password Reset",
+      category: "SYSTEM",
+      description: "Sent when a user requests a password reset",
+      subject: "Password Reset Request - SustainPro",
+      body_html: `
+                <h1>Password Reset Request</h1>
+                <p>Dear {{userName}},</p>
+                <p>We received a request to reset your password.</p>
+                <p>Click the link below to reset your password:</p>
+                <p><a href="{{resetUrl}}">Reset Password</a></p>
+                <p>This link will expire in {{expiryMinutes}} minutes.</p>
+                <p>If you did not request this, please ignore this email.</p>
+                <p>Best regards,<br>The SustainPro Team</p>
+            `,
+      body_text: "Password Reset Request. Reset your password at: {{resetUrl}}. This link expires in {{expiryMinutes}} minutes.",
+      available_variables: JSON.stringify(["userName", "userEmail", "resetUrl", "expiryMinutes"]),
+      is_system_template: true
+    },
+    {
+      code: "2FA_OTP",
+      name: "2FA OTP Email",
+      category: "SYSTEM",
+      description: "Sent for email-based two-factor authentication",
+      subject: "Your Verification Code - SustainPro",
+      body_html: `
+                <h1>Two-Factor Authentication</h1>
+                <p>Dear {{userName}},</p>
+                <p>Your verification code is:</p>
+                <h2 style="font-size: 32px; letter-spacing: 5px; color: #3B82F6;">{{otpCode}}</h2>
+                <p>This code will expire in {{expiryMinutes}} minutes.</p>
+                <p>If you did not request this code, please secure your account immediately.</p>
+                <p>Best regards,<br>The SustainPro Team</p>
+            `,
+      body_text: "Your SustainPro verification code is: {{otpCode}}. This code expires in {{expiryMinutes}} minutes.",
+      available_variables: JSON.stringify(["userName", "otpCode", "expiryMinutes"]),
+      is_system_template: true
+    },
+    {
+      code: "ALERT_NOTIFICATION",
+      name: "Alert Notification",
+      category: "ALERT",
+      description: "Sent when a new alert is triggered",
+      subject: "[{{severity}}] Alert: {{alertName}} - SustainPro",
+      body_html: `
+                <h1>Alert Notification</h1>
+                <p>A new alert has been triggered:</p>
+                <table>
+                    <tr><td><strong>Alert:</strong></td><td>{{alertName}}</td></tr>
+                    <tr><td><strong>Severity:</strong></td><td>{{severity}}</td></tr>
+                    <tr><td><strong>Device:</strong></td><td>{{deviceName}}</td></tr>
+                    <tr><td><strong>Message:</strong></td><td>{{alertMessage}}</td></tr>
+                    <tr><td><strong>Time:</strong></td><td>{{alertTime}}</td></tr>
+                </table>
+                <p><a href="{{alertUrl}}">View Alert Details</a></p>
+            `,
+      body_text: "{{severity}} Alert: {{alertName}}. {{alertMessage}}. View at: {{alertUrl}}",
+      available_variables: JSON.stringify(["alertName", "severity", "deviceName", "alertMessage", "alertTime", "alertUrl"]),
+      is_system_template: true
+    },
+    {
+      code: "TASK_ASSIGNED",
+      name: "Task Assigned",
+      category: "TASK",
+      description: "Sent when a task is assigned to a user",
+      subject: "New Task Assigned: {{taskTitle}} - SustainPro",
+      body_html: `
+                <h1>New Task Assigned</h1>
+                <p>Dear {{userName}},</p>
+                <p>A new task has been assigned to you:</p>
+                <table>
+                    <tr><td><strong>Task:</strong></td><td>{{taskTitle}}</td></tr>
+                    <tr><td><strong>Priority:</strong></td><td>{{taskPriority}}</td></tr>
+                    <tr><td><strong>Due Date:</strong></td><td>{{dueDate}}</td></tr>
+                    <tr><td><strong>Assigned By:</strong></td><td>{{assignedBy}}</td></tr>
+                </table>
+                <p><a href="{{taskUrl}}">View Task Details</a></p>
+            `,
+      body_text: "New Task: {{taskTitle}}. Due: {{dueDate}}. View at: {{taskUrl}}",
+      available_variables: JSON.stringify(["userName", "taskTitle", "taskPriority", "dueDate", "assignedBy", "taskUrl"]),
+      is_system_template: true
+    },
+    {
+      code: "DAILY_REPORT",
+      name: "Daily Report",
+      category: "REPORT",
+      description: "Daily summary report email",
+      subject: "Daily Report: {{reportDate}} - SustainPro",
+      body_html: `
+                <h1>Daily Report</h1>
+                <p>Here is your daily summary for {{reportDate}}:</p>
+                <h2>Alerts Summary</h2>
+                <ul>
+                    <li>Critical: {{criticalAlerts}}</li>
+                    <li>Warning: {{warningAlerts}}</li>
+                    <li>Info: {{infoAlerts}}</li>
+                </ul>
+                <h2>Device Status</h2>
+                <ul>
+                    <li>Online: {{devicesOnline}}</li>
+                    <li>Offline: {{devicesOffline}}</li>
+                </ul>
+                <p><a href="{{dashboardUrl}}">View Full Dashboard</a></p>
+            `,
+      body_text: "Daily Report for {{reportDate}}. Critical: {{criticalAlerts}}, Warnings: {{warningAlerts}}. View dashboard: {{dashboardUrl}}",
+      available_variables: JSON.stringify(["reportDate", "criticalAlerts", "warningAlerts", "infoAlerts", "devicesOnline", "devicesOffline", "dashboardUrl"]),
+      is_system_template: true
+    },
+    {
+      code: "ACCOUNT_LOCKED",
+      name: "Account Locked",
+      category: "SYSTEM",
+      description: "Sent when user account is locked due to failed login attempts",
+      subject: "Account Security Alert - SustainPro",
+      body_html: `
+                <h1>Account Locked</h1>
+                <p>Dear {{userName}},</p>
+                <p>Your account has been temporarily locked due to multiple failed login attempts.</p>
+                <p>Your account will be automatically unlocked after {{lockoutDuration}} minutes.</p>
+                <p>If this was not you, please contact support immediately.</p>
+                <p>Best regards,<br>The SustainPro Team</p>
+            `,
+      body_text: "Your SustainPro account has been locked. It will be unlocked after {{lockoutDuration}} minutes.",
+      available_variables: JSON.stringify(["userName", "lockoutDuration", "lockoutTime", "ipAddress"]),
+      is_system_template: true
+    }
+  ];
+  for (const template of emailTemplates) {
+    await prisma.sps_email_templates.upsert({
+      where: { code: template.code },
+      update: {},
+      create: template
+    });
+  }
+  console.log("\u{1F3E2} Seeding provider organization...");
+  await prisma.sps_organizations.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000001" },
+    update: {},
+    create: {
+      id: "00000000-0000-0000-0000-000000000001",
+      name: "SustainPro Platform",
+      slug: "sustainpro",
+      code: "SPS-ORG-000",
+      type: "PROVIDER",
+      description: "SustainPro IoT Platform Provider"
+    }
+  });
+  console.log("\u{1F3E2} Seeding demo client organization...");
+  await prisma.sps_organizations.upsert({
+    where: { id: "11111111-1111-1111-1111-111111111111" },
+    update: {},
+    create: {
+      id: "11111111-1111-1111-1111-111111111111",
+      name: "ACME Corporation",
+      slug: "acme-corporation",
+      code: "SPS-ORG-001",
+      type: "CLIENT",
+      description: "Leading technology and innovation company",
+      logo_url: "https://via.placeholder.com/200x200?text=ACME",
+      plan_tier: "ENTERPRISE",
+      max_users: 50,
+      max_devices: 100
+    }
+  });
+  console.log("\u{1F464} Seeding users with hashed passwords...");
+  await prisma.sps_users.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000002" },
+    update: {},
+    create: {
+      id: "00000000-0000-0000-0000-000000000002",
+      organization_id: null,
+      code: "SPS-USR-000",
+      email: "superadmin@sustainpro.io",
+      password_hash: passwordHash,
+      full_name: "Platform Super Admin",
+      is_super_admin: true,
+      timezone: "UTC",
+      is_active: true
+    }
+  });
+  await prisma.sps_users.upsert({
+    where: { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+    update: {},
+    create: {
+      id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      organization_id: "11111111-1111-1111-1111-111111111111",
+      code: "USR-001",
+      email: "admin@acme.com",
+      password_hash: passwordHash,
+      full_name: "John Admin",
+      is_super_admin: false,
+      timezone: "UTC",
+      is_active: true
+    }
+  });
+  await prisma.sps_users.upsert({
+    where: { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" },
+    update: {},
+    create: {
+      id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      organization_id: "11111111-1111-1111-1111-111111111111",
+      code: "USR-002",
+      email: "manager@acme.com",
+      password_hash: passwordHash,
+      full_name: "Jane Manager",
+      is_super_admin: false,
+      timezone: "UTC",
+      is_active: true
+    }
+  });
+  await prisma.sps_users.upsert({
+    where: { id: "cccccccc-cccc-cccc-cccc-cccccccccccc" },
+    update: {},
+    create: {
+      id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      organization_id: "11111111-1111-1111-1111-111111111111",
+      code: "USR-003",
+      email: "operator@acme.com",
+      password_hash: passwordHash,
+      full_name: "Bob Operator",
+      is_super_admin: false,
+      timezone: "UTC",
+      is_active: true
+    }
+  });
+  console.log("\u{1F510} Seeding permissions...");
+  const permissions = [
+    { name: "View Dashboard", code: "dashboard.view", description: "View main dashboard", category: "dashboard" },
+    { name: "View Devices", code: "devices.view", description: "View device list", category: "devices" },
+    { name: "Manage Devices", code: "devices.manage", description: "Create, update, delete devices", category: "devices" },
+    { name: "View Events", code: "events.view", description: "View events", category: "events" },
+    { name: "Manage Events", code: "events.manage", description: "Create, update, delete events", category: "events" },
+    { name: "View Users", code: "users.view", description: "View user list", category: "users" },
+    { name: "Manage Users", code: "users.manage", description: "Create, update, delete users", category: "users" },
+    { name: "View Reports", code: "reports.view", description: "View analytics and reports", category: "reports" },
+    { name: "Manage Settings", code: "settings.manage", description: "Manage system settings", category: "settings" },
+    { name: "View Telemetry", code: "telemetry.view", description: "View telemetry data", category: "telemetry" },
+    { name: "Manage Alerts", code: "alerts.manage", description: "Create and manage alert rules", category: "alerts" }
+  ];
+  for (const perm of permissions) {
+    await prisma.sps_permissions.upsert({
+      where: { code: perm.code },
+      update: {},
+      create: perm
+    });
+  }
+  console.log("\u{1F465} Seeding role assignments...");
+  await prisma.sps_role_assignments.deleteMany({
+    where: {
+      user_id: {
+        in: [
+          "00000000-0000-0000-0000-000000000002",
+          "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+          "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        ]
+      }
+    }
+  });
+  await prisma.sps_role_assignments.create({
+    data: {
+      user_id: "00000000-0000-0000-0000-000000000002",
+      role: "SUPER_ADMIN",
+      org_id: null,
+      event_id: null,
+      dept_id: null
+    }
+  });
+  await prisma.sps_role_assignments.create({
+    data: {
+      user_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      role: "ORG_ADMIN",
+      org_id: "11111111-1111-1111-1111-111111111111",
+      event_id: null,
+      dept_id: null
+    }
+  });
+  await prisma.sps_role_assignments.create({
+    data: {
+      user_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      role: "EVENT_MANAGER",
+      org_id: "11111111-1111-1111-1111-111111111111",
+      event_id: null,
+      dept_id: null
+    }
+  });
+  await prisma.sps_role_assignments.create({
+    data: {
+      user_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      role: "OPERATOR",
+      org_id: "11111111-1111-1111-1111-111111111111",
+      event_id: null,
+      dept_id: null
+    }
+  });
+  console.log("\u{1F517} Seeding role permissions...");
+  const allPermissions = await prisma.sps_permissions.findMany();
+  const permissionMap = new Map(allPermissions.map((p) => [p.code, p.id]));
+  const rolePermissionMappings = {
+    "ORG_ADMIN": [
+      "dashboard.view",
+      "devices.view",
+      "devices.manage",
+      "events.view",
+      "events.manage",
+      "users.view",
+      "users.manage",
+      "reports.view",
+      "settings.manage",
+      "telemetry.view",
+      "alerts.manage"
+    ],
+    "EVENT_MANAGER": [
+      "dashboard.view",
+      "events.view",
+      "events.manage",
+      "devices.view",
+      "reports.view",
+      "telemetry.view"
+    ],
+    "DEPT_HEAD": [
+      "dashboard.view",
+      "events.view",
+      "devices.view",
+      "reports.view",
+      "telemetry.view"
+    ],
+    "OPERATOR": [
+      "dashboard.view",
+      "events.view",
+      "devices.view",
+      "telemetry.view"
+    ],
+    "VIEWER": [
+      "dashboard.view",
+      "events.view",
+      "devices.view",
+      "reports.view",
+      "telemetry.view"
+    ]
+  };
+  for (const [role, permCodes] of Object.entries(rolePermissionMappings)) {
+    await prisma.sps_role_permissions.deleteMany({
+      where: { role }
+    });
+    for (const code of permCodes) {
+      const permissionId = permissionMap.get(code);
+      if (permissionId) {
+        await prisma.sps_role_permissions.create({
+          data: {
+            role,
+            permission_id: permissionId
+          }
+        });
+      }
+    }
+  }
+  console.log("\n\u2705 Seeding completed successfully!");
+  console.log("\n\u{1F4CB} Test Credentials:");
+  console.log("   superadmin@sustainpro.io / Admin@123 (Super Admin)");
+  console.log("   admin@acme.com / Admin@123 (Org Admin)");
+  console.log("   manager@acme.com / Admin@123 (Event Manager)");
+  console.log("   operator@acme.com / Admin@123 (Operator)\n");
+}
+main().catch((e) => {
+  console.error("\u274C Seeding failed:", e);
+  process.exit(1);
+}).finally(async () => {
+  await prisma.$disconnect();
+});
