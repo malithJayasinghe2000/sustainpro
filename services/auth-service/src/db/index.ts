@@ -7,7 +7,7 @@ const logger = createLogger({ service: 'auth-service' });
 const pool = new Pool({
     connectionString: config.database.connectionString,
     max: 20,
-    idleTimeoutMillis: 30000,
+    idleTimeoutMillis: 300000,
     connectionTimeoutMillis: 2000,
 });
 
