@@ -10,6 +10,10 @@
     ],
     "scripts": {
         "setup": "node scripts/setup.js",
+        "setup:local": "bash scripts/setup-local.sh",
+        "setup:local:win": "scripts\\setup-local.bat",
+        "setup:docker": "cd docker && docker-compose up -d && cd .. && npm run prisma:generate && npm run db:push && npm run db:seed",
+        "deploy:prod": "bash scripts/deploy-production.sh",
         "dev": "turbo run dev",
         "build": "turbo run build",
         "lint": "turbo run lint",
@@ -18,7 +22,9 @@
         "dev:frontend": "turbo run dev --filter=frontend",
         "build:packages": "turbo run build --filter=@sustainpro/shared-*",
         "prisma:generate": "npm run prisma:generate --workspace=@sustainpro/shared-database",
-        "prisma:studio": "npm run prisma:studio --workspace=@sustainpro/shared-database"
+        "prisma:studio": "npm run prisma:studio --workspace=@sustainpro/shared-database",
+        "db:push": "npm run prisma:push --workspace=@sustainpro/shared-database",
+        "db:seed": "npm run prisma:seed --workspace=@sustainpro/shared-database"
     },
     "devDependencies": {
         "turbo": "^2.3.0",

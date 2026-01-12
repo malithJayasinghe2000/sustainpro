@@ -8,6 +8,13 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Install OpenSSL for Prisma compatibility in Alpine
+RUN apk add --no-cache openssl openssl-dev
+
+# Configure npm for better reliability
+RUN npm config set fetch-timeout 600000 && \
+    npm config set fetch-retries 5
+
 # Copy workspace configuration files first (for layer caching)
 COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 

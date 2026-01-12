@@ -5,30 +5,33 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "clean": "rimraf dist",
-    "prisma:generate": "dotenv -e ../../.env -- prisma generate",
-    "prisma:push": "dotenv -e ../../.env -- prisma db push",
-    "prisma:push:force": "dotenv -e ../../.env -- prisma db push --accept-data-loss",
-    "prisma:studio": "dotenv -e ../../.env -- prisma studio",
-    "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
-    "prisma:migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
-    "prisma:migrate:reset": "dotenv -e ../../.env -- prisma migrate reset",
-    "prisma:seed": "dotenv -e ../../.env -- ts-node prisma/seed.ts",
-    "prisma:migrate:sql": "dotenv -e ../../.env -- node -e \"require('child_process').execSync('psql ' + process.env.DATABASE_URL + ' -f prisma/migrations/20260111_add_system_configuration/migration.sql', {stdio: 'inherit'})\"",
+    "build": "tsc && npm run build:seed",
+    "build:seed": "npx esbuild prisma/seed.ts --bundle --platform=node --outfile=prisma/seed.cjs --external:@prisma/client --external:argon2",
+    "clean": "rimraf dist prisma/seed.cjs",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:push:force": "prisma db push --accept-data-loss",
+    "prisma:studio": "prisma studio",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:reset": "prisma migrate reset",
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed:prod": "node prisma/seed.cjs",
     "db:setup": "npm run prisma:generate && npm run prisma:push:force && npm run prisma:seed",
-    "db:deploy": "npm run prisma:generate && npm run prisma:migrate:deploy && npm run prisma:seed"
+    "db:deploy": "npm run prisma:generate && npm run prisma:push && npm run prisma:seed",
+    "db:deploy:prod": "npm run prisma:generate && npm run prisma:push && npm run prisma:seed:prod"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0"
+    "@prisma/client": "^5.22.0",
+    "argon2": "^0.44.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.3",
-    "argon2": "^0.44.0",
     "dotenv-cli": "^11.0.0",
+    "esbuild": "^0.20.0",
     "prisma": "^5.22.0",
     "rimraf": "^6.0.0",
     "ts-node": "^10.9.2",
