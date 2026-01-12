@@ -101,6 +101,7 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN}
       CORS_ORIGIN: ${CORS_ORIGIN}
+      SERVER_IP: ${SERVER_IP:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,6 +131,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: ${CORS_ORIGIN}
+      SERVER_IP: ${SERVER_IP:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -159,6 +161,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: ${CORS_ORIGIN}
+      SERVER_IP: ${SERVER_IP:-}
     depends_on:
       postgres:
         condition: service_healthy

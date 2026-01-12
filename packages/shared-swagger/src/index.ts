@@ -18,144 +18,160 @@ export interface SwaggerConfig {
 }
 
 /**
- * Base Swagger definition shared across all services
+ * Get base Swagger definition with dynamic server URLs
  */
-const baseSwaggerDefinition = {
-  openapi: '3.0.0',
-  servers: [
+function getBaseSwaggerDefinition() {
+  // Use environment variable for API URL, fallback to localhost for development
+  const serverIp = process.env.SERVER_IP;
+  const apiUrl = process.env.SWAGGER_API_URL ||
+    (serverIp ? `http://${serverIp}:8080/api/v1` : 'http://localhost:8080/api/v1');
+
+  const servers = [
     {
-      url: 'http://localhost:8080/api/v1',
-      description: 'Development (via nginx)',
+      url: apiUrl,
+      description: serverIp ? 'Server (via nginx gateway)' : 'Development (via nginx)',
     },
-    {
-      url: 'https://api.sustainpro.com/api/v1',
+  ];
+
+  // Add production URL if configured
+  const prodUrl = process.env.SWAGGER_PROD_URL;
+  if (prodUrl && prodUrl !== apiUrl) {
+    servers.push({
+      url: prodUrl,
       description: 'Production',
-    },
-  ],
-  components: {
-    securitySchemes: {
-      BearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'JWT access token obtained from /auth/login',
-      },
-      CookieAuth: {
-        type: 'apiKey',
-        in: 'cookie',
-        name: 'refreshToken',
-        description: 'JWT refresh token (httpOnly cookie)',
-      },
-    },
-    schemas: {
-      Error: {
-        type: 'object',
-        properties: {
-          error: {
-            type: 'object',
-            properties: {
-              message: { type: 'string' },
-              code: { type: 'string' },
-              details: { type: 'object' },
-            },
-          },
+    });
+  }
+
+  return {
+    openapi: '3.0.0',
+    servers,
+    components: {
+      securitySchemes: {
+        BearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT access token obtained from /auth/login',
+        },
+        CookieAuth: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'refreshToken',
+          description: 'JWT refresh token (httpOnly cookie)',
         },
       },
-      PaginationMeta: {
-        type: 'object',
-        properties: {
-          total: { type: 'integer', example: 100 },
-          page: { type: 'integer', example: 1 },
-          limit: { type: 'integer', example: 20 },
-          totalPages: { type: 'integer', example: 5 },
-        },
-      },
-    },
-    responses: {
-      UnauthorizedError: {
-        description: 'Access token is missing or invalid',
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/Error' },
-            example: {
-              error: {
-                message: 'Unauthorized',
-                code: 'UNAUTHORIZED',
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            error: {
+              type: 'object',
+              properties: {
+                message: { type: 'string' },
+                code: { type: 'string' },
+                details: { type: 'object' },
               },
             },
           },
         },
+        PaginationMeta: {
+          type: 'object',
+          properties: {
+            total: { type: 'integer', example: 100 },
+            page: { type: 'integer', example: 1 },
+            limit: { type: 'integer', example: 20 },
+            totalPages: { type: 'integer', example: 5 },
+          },
+        },
       },
-      ForbiddenError: {
-        description: 'User does not have required permissions',
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/Error' },
-            example: {
-              error: {
-                message: 'Forbidden',
-                code: 'FORBIDDEN',
+      responses: {
+        UnauthorizedError: {
+          description: 'Access token is missing or invalid',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: {
+                error: {
+                  message: 'Unauthorized',
+                  code: 'UNAUTHORIZED',
+                },
               },
             },
           },
         },
-      },
-      NotFoundError: {
-        description: 'Resource not found',
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/Error' },
-            example: {
-              error: {
-                message: 'Resource not found',
-                code: 'NOT_FOUND',
+        ForbiddenError: {
+          description: 'User does not have required permissions',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: {
+                error: {
+                  message: 'Forbidden',
+                  code: 'FORBIDDEN',
+                },
               },
             },
           },
         },
-      },
-      ValidationError: {
-        description: 'Request validation failed',
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/Error' },
-            example: {
-              error: {
-                message: 'Validation failed',
-                code: 'VALIDATION_ERROR',
-                details: {
-                  email: 'Invalid email format',
+        NotFoundError: {
+          description: 'Resource not found',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: {
+                error: {
+                  message: 'Resource not found',
+                  code: 'NOT_FOUND',
+                },
+              },
+            },
+          },
+        },
+        ValidationError: {
+          description: 'Request validation failed',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: {
+                error: {
+                  message: 'Validation failed',
+                  code: 'VALIDATION_ERROR',
+                  details: {
+                    email: 'Invalid email format',
+                  },
+                },
+              },
+            },
+          },
+        },
+        ServerError: {
+          description: 'Internal server error',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: {
+                error: {
+                  message: 'Internal server error',
+                  code: 'INTERNAL_ERROR',
                 },
               },
             },
           },
         },
       },
-      ServerError: {
-        description: 'Internal server error',
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/Error' },
-            example: {
-              error: {
-                message: 'Internal server error',
-                code: 'INTERNAL_ERROR',
-              },
-            },
-          },
-        },
-      },
     },
-  },
-};
+  };
+}
 
 /**
  * Generate Swagger specification for a microservice
  */
 export function generateSwaggerSpec(config: SwaggerConfig) {
+  const baseDefinition = getBaseSwaggerDefinition();
+
   const options: swaggerJsdoc.Options = {
     definition: {
-      ...baseSwaggerDefinition,
+      ...baseDefinition,
       info: {
         title: config.serviceName,
         version: config.version,
@@ -168,13 +184,6 @@ export function generateSwaggerSpec(config: SwaggerConfig) {
           name: 'Proprietary',
         },
       },
-      servers: [
-        {
-          url: `http://localhost:${config.port}${config.apiPrefix || ''}`,
-          description: 'Direct service access (development)',
-        },
-        ...baseSwaggerDefinition.servers,
-      ],
       tags: config.tags || [],
     },
     // Look for JSDoc comments in route files
