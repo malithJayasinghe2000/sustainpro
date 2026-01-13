@@ -10,10 +10,12 @@
         "clean": "rimraf dist"
     },
     "dependencies": {
+        "amqplib": "^0.10.4",
         "date-fns": "^4.1.0",
         "date-fns-tz": "^3.2.0"
     },
     "devDependencies": {
+        "@types/amqplib": "^0.10.5",
         "rimraf": "^6.0.0",
         "typescript": "^5.7.0"
     }

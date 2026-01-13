@@ -322,10 +322,22 @@ model sps_system_settings {
   site_logo                     String?
   maintenance_mode              Boolean?  @default(false)
   default_timezone              String?   @default("Asia/Colombo") @db.VarChar(100)
+  // Security Settings
   account_lock_duration_minutes Int?      @default(30)
   token_expire_minutes          Int?      @default(60)
+  refresh_token_expire_days     Int?      @default(7)
   max_login_attempts            Int?      @default(5)
   session_timeout_enabled       Boolean?  @default(true)
+  session_timeout_minutes       Int?      @default(30)
+  // 2FA Policy Settings
+  two_factor_required           Boolean?  @default(false)    // Force all users to enable 2FA
+  two_factor_method             String?   @default("email") @db.VarChar(20)  // email, totp, or both
+  otp_expiry_minutes            Int?      @default(10)
+  otp_length                    Int?      @default(6)
+  // Rate Limiting
+  login_rate_limit_attempts     Int?      @default(5)
+  login_rate_limit_window_mins  Int?      @default(15)
+  // Support
   support_email                 String?   @db.VarChar(255)
   support_phone                 String?   @db.VarChar(50)
   global_alert_message          String?
@@ -398,6 +410,17 @@ model sps_users {
   failed_login_attempts                      Int?                      @default(0)
   account_locked_until                       DateTime?                 @db.Timestamptz(6)
   last_login                                 DateTime?                 @db.Timestamptz(6)
+  // 2FA Fields
+  two_factor_enabled                         Boolean?                  @default(false)
+  two_factor_secret                          String?                   @db.VarChar(255)  // Encrypted TOTP secret
+  two_factor_backup_codes                    String?                   @db.Text          // Encrypted backup codes (JSON array)
+  two_factor_verified_at                     DateTime?                 @db.Timestamptz(6)
+  // Email verification
+  email_verified                             Boolean?                  @default(false)
+  email_verified_at                          DateTime?                 @db.Timestamptz(6)
+  // Session management
+  force_password_change                      Boolean?                  @default(false)
+  password_changed_at                        DateTime?                 @db.Timestamptz(6)
   created_at                                 DateTime?                 @default(now()) @db.Timestamptz(6)
   updated_at                                 DateTime?                 @default(now()) @db.Timestamptz(6)
   sps_alerts                                 sps_alerts[]
@@ -413,4 +436,64 @@ model sps_users {
 
   @@index([email], map: "idx_users_email")
   @@index([organization_id], map: "idx_users_org")
+  sps_refresh_tokens                         sps_refresh_tokens[]
+  sps_otp_codes                              sps_otp_codes[]
+  sps_user_sessions                          sps_user_sessions[]
+}
+
+// Refresh Tokens - for secure token storage and revocation
+model sps_refresh_tokens {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id        String    @db.Uuid
+  token_hash     String    @db.VarChar(255)  // Hashed refresh token for security
+  device_info    String?   @db.VarChar(500)  // Browser/device identifier
+  ip_address     String?   @db.VarChar(45)   // IPv4 or IPv6
+  expires_at     DateTime  @db.Timestamptz(6)
+  revoked_at     DateTime? @db.Timestamptz(6)
+  revoked_reason String?   @db.VarChar(100)  // logout, password_change, admin_action, etc.
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  
+  sps_users      sps_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  
+  @@index([user_id], map: "idx_refresh_tokens_user")
+  @@index([token_hash], map: "idx_refresh_tokens_hash")
+  @@index([expires_at], map: "idx_refresh_tokens_expires")
+}
+
+// OTP Codes - for email verification and password reset
+model sps_otp_codes {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id      String    @db.Uuid
+  code_hash    String    @db.VarChar(255)  // Hashed OTP code
+  purpose      String    @db.VarChar(50)   // email_verification, password_reset, login_2fa
+  expires_at   DateTime  @db.Timestamptz(6)
+  used_at      DateTime? @db.Timestamptz(6)
+  attempts     Int       @default(0)       // Track verification attempts
+  max_attempts Int       @default(3)       // Prevent brute force
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  
+  sps_users    sps_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  
+  @@index([user_id], map: "idx_otp_codes_user")
+  @@index([expires_at], map: "idx_otp_codes_expires")
+}
+
+// User Sessions - for session management and timeout handling
+model sps_user_sessions {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id         String    @db.Uuid
+  refresh_token_id String?  @db.Uuid
+  device_info     String?   @db.VarChar(500)
+  ip_address      String?   @db.VarChar(45)
+  user_agent      String?   @db.VarChar(500)
+  last_activity   DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at      DateTime  @db.Timestamptz(6)
+  is_active       Boolean   @default(true)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  
+  sps_users       sps_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  
+  @@index([user_id], map: "idx_user_sessions_user")
+  @@index([last_activity], map: "idx_user_sessions_activity")
+  @@index([is_active], map: "idx_user_sessions_active")
 }

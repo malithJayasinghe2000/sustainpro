@@ -23,12 +23,35 @@ router.get('/public', settingsController.getPublic);
  *   get:
  *     tags: [Settings]
  *     summary: Get security settings
- *     description: Get security settings for login page (no authentication required)
+ *     description: Get security settings (requires authentication for full details)
  *     responses:
  *       200:
  *         description: Security settings retrieved
  */
-router.get('/security', settingsController.getSecurity);
+router.get('/security', authenticateToken, settingsController.getSecurity);
+
+/**
+ * @swagger
+ * /settings/security:
+ *   put:
+ *     tags: [Settings]
+ *     summary: Update security settings
+ *     description: Update security/2FA policy settings (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Security settings updated
+ *       403:
+ *         description: Forbidden - Super Admin required
+ */
+router.put('/security', authenticateToken, requireSuperAdmin, settingsController.updateSecurity);
 
 /**
  * @swagger

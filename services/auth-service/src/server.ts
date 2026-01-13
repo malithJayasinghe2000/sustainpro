@@ -1,16 +1,27 @@
 import app from './app';
 import { config } from './config';
-import { createLogger } from '@sustainpro/shared-utils';
+import { createLogger, initNotificationPublisher, closeNotificationPublisher } from '@sustainpro/shared-utils';
 import { initDatabase, closeDatabase } from '@sustainpro/shared-database';
 
 const logger = createLogger({ service: 'auth-service' });
 
-// Async startup to initialize database
+// Async startup to initialize database and notification publisher
 const startServer = async () => {
     try {
         // Initialize database connection
         await initDatabase();
         logger.info('✅ Database connected successfully');
+
+        // Initialize notification publisher (RabbitMQ)
+        if (config.rabbitmq?.url) {
+            await initNotificationPublisher({
+                url: config.rabbitmq.url,
+                enabled: config.rabbitmq.enabled !== false,
+            });
+            logger.info('✅ Notification publisher connected');
+        } else {
+            logger.warn('⚠️ RabbitMQ not configured - notifications will not be sent');
+        }
 
         // Start server
         const server = app.listen(config.port, '0.0.0.0', () => {
@@ -25,6 +36,8 @@ const startServer = async () => {
 
             server.close(async () => {
                 logger.info('HTTP server closed');
+                await closeNotificationPublisher();
+                logger.info('Notification publisher closed');
                 await closeDatabase();
                 logger.info('Database connection closed');
                 process.exit(0);

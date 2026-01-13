@@ -29,17 +29,42 @@ export const get = async (req: Request, res: Response, next: NextFunction): Prom
 
 /**
  * GET /api/v1/settings/security
- * Public endpoint for login page
+ * Get full security settings (authenticated)
  */
 export const getSecurity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const settings = await settingsService.getSecuritySettings();
+        const settings = await settingsService.getFullSecuritySettings();
 
         res.json({
             success: true,
-            ...settings,
+            settings,
         });
     } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * PUT /api/v1/settings/security
+ * Update security settings (Super Admin only)
+ */
+export const updateSecurity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const settings = await settingsService.updateSecuritySettings(req.body);
+
+        res.json({
+            success: true,
+            settings,
+            message: 'Security settings updated',
+        });
+    } catch (error) {
+        if (error instanceof AppError) {
+            res.status(error.statusCode).json({
+                success: false,
+                error: error.message,
+            });
+            return;
+        }
         next(error);
     }
 };

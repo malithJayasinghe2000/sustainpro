@@ -208,7 +208,7 @@ export default function DashboardPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
                         <StatsCard
                             title="Active Events"
-                            value={orgStructure.events.length}
+                            value={orgStructure.events?.length || 0}
                             subtext="Manage your site events"
                             icon={Calendar}
                             intent="primary"
@@ -216,14 +216,14 @@ export default function DashboardPage() {
                         />
                         <StatsCard
                             title="Total Departments"
-                            value={orgStructure.departments.length}
+                            value={orgStructure.departments?.length || 0}
                             subtext="Organizational units"
                             icon={Building2}
                             intent="default"
                         />
                         <StatsCard
                             title="Service Units"
-                            value={orgStructure.services.length}
+                            value={orgStructure.services?.length || 0}
                             subtext="Across all departments"
                             icon={Layers}
                             intent="primary"
@@ -372,7 +372,7 @@ export default function DashboardPage() {
                                         </div>
 
                                         {/* Quick Access to Service Dashboards */}
-                                        {orgStructure && orgStructure.services.length > 0 && (
+                                        {orgStructure && orgStructure.services?.length > 0 && (
                                             <>
                                                 <div className="pt-4 pb-2">
                                                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Active Dashboards</p>

@@ -159,6 +159,33 @@ export class OrganizationRepository {
             })
         );
 
+        // Get all departments across all events
+        const allDepartments = await prisma.sps_departments.findMany({
+            where: {
+                event_id: { in: events.map(e => e.id) }
+            }
+        });
+
+        // Get all services across all departments
+        const allServices = await prisma.sps_department_services.findMany({
+            where: {
+                department_id: { in: allDepartments.map(d => d.id) }
+            },
+            include: {
+                sps_service_templates: {
+                    select: {
+                        name: true
+                    }
+                }
+            }
+        });
+
+        // Map services with their definition names
+        const servicesWithDetails = allServices.map((svc: any) => ({
+            ...svc,
+            definition_name: svc.sps_service_templates?.name
+        }));
+
         // Get user count
         const userCount = await prisma.sps_users.count({
             where: { organization_id: id }
@@ -172,6 +199,8 @@ export class OrganizationRepository {
         return {
             ...org,
             events: eventsWithDepts,
+            departments: allDepartments,
+            services: servicesWithDetails,
             user_count: userCount,
             device_count: deviceCount,
         };
