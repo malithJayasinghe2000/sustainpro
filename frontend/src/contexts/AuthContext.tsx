@@ -11,6 +11,7 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<void>;
     logout: () => void;
     updateUser: (user: User) => void;
+    setAuthState: (state: { isAuthenticated: boolean; user: User | null; isLoading: boolean }) => void;
     isAuthenticated: boolean;
     isLoading: boolean;
 }
@@ -127,6 +128,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const setAuthState = (state: { isAuthenticated: boolean; user: User | null; isLoading: boolean }) => {
+        if (state.user) {
+            setUser(state.user);
+            localStorage.setItem('user', JSON.stringify(state.user));
+            if (state.user.timezone) {
+                localStorage.setItem('userTimezone', state.user.timezone);
+            }
+            
+            // Get token from localStorage if authenticated
+            if (state.isAuthenticated) {
+                const storedToken = localStorage.getItem('auth_token');
+                if (storedToken) {
+                    setToken(storedToken);
+                }
+            }
+        }
+        setIsLoading(state.isLoading);
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -135,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 login,
                 logout,
                 updateUser,
+                setAuthState,
                 isAuthenticated: !!token,
                 isLoading,
             }}

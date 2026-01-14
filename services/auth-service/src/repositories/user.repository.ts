@@ -223,17 +223,7 @@ export class UserRepository {
         });
     }
 
-    /**
-     * Update user password
-     */
-    async updatePassword(userId: string, passwordHash: string): Promise<void> {
-        await prisma.sps_users.update({
-            where: { id: userId },
-            data: {
-                password_hash: passwordHash,
-            },
-        });
-    }
+
 
     /**
      * Assign role to user
@@ -265,5 +255,105 @@ export class UserRepository {
         } catch (error) {
             return false;
         }
+    }
+
+    /**
+     * Find user by email for auth (includes password)
+     */
+    async findByEmailForAuth(email: string): Promise<UserWithPassword | null> {
+        return this.findByEmail(email);
+    }
+
+    /**
+     * Update user password
+     */
+    async updatePassword(userId: string, passwordHash: string): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                password_hash: passwordHash,
+                password_changed_at: new Date(),
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Update last login timestamp
+     */
+    async updateLastLogin(userId: string): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                last_login: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Update email verification status
+     */
+    async updateEmailVerified(userId: string, verified: boolean): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                email_verified: verified,
+                email_verified_at: verified ? new Date() : null,
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Update 2FA status
+     */
+    async update2FAStatus(userId: string, enabled: boolean): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                two_factor_enabled: enabled,
+                two_factor_verified_at: enabled ? new Date() : null,
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Store 2FA secret for TOTP
+     */
+    async store2FASecret(userId: string, secret: string): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                two_factor_secret: secret,
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Store 2FA backup codes
+     */
+    async store2FABackupCodes(userId: string, backupCodes: string[]): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                two_factor_backup_codes: JSON.stringify(backupCodes),
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Set force password change flag
+     */
+    async setForcePasswordChange(userId: string, force: boolean): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                force_password_change: force,
+                updated_at: new Date(),
+            },
+        });
     }
 }

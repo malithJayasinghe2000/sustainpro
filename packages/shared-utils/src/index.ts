@@ -4,3 +4,4 @@ export * from './errors';
 export * from './timezone';
 export * from './validation';
 export * from './password-validation';
+export * from './notification-publisher';

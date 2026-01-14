@@ -160,27 +160,7 @@ export class OrganizationRepository {
             where: { organization_id: id },
             orderBy: { created_at: 'desc' }
         });
-        // Get event IDs for this organization
-        const eventIds = events.map((e: any) => e.id);
 
-        // Get ALL departments for this org (flat list for dropdowns)
-        const allDepartments = eventIds.length > 0
-            ? await prisma.sps_departments.findMany({
-                where: { event_id: { in: eventIds } },
-                orderBy: { name: 'asc' }
-            })
-            : [];
-
-        // Get department IDs for service lookup
-        const deptIds = allDepartments.map((d: any) => d.id);
-
-        // Get ALL services for this org (flat list for dropdowns)
-        const allServices = deptIds.length > 0
-            ? await prisma.sps_department_services.findMany({
-                where: { department_id: { in: deptIds } },
-                orderBy: { name: 'asc' }
-            })
-            : [];
 
         // Get departments for each event with service count
         const eventsWithDepts = await Promise.all(
@@ -195,6 +175,33 @@ export class OrganizationRepository {
                 return { ...event, departments };
             })
         );
+
+        // Get all departments across all events
+        const allDepartments = await prisma.sps_departments.findMany({
+            where: {
+                event_id: { in: events.map(e => e.id) }
+            }
+        });
+
+        // Get all services across all departments
+        const allServices = await prisma.sps_department_services.findMany({
+            where: {
+                department_id: { in: allDepartments.map(d => d.id) }
+            },
+            include: {
+                sps_service_templates: {
+                    select: {
+                        name: true
+                    }
+                }
+            }
+        });
+
+        // Map services with their definition names
+        const servicesWithDetails = allServices.map((svc: any) => ({
+            ...svc,
+            definition_name: svc.sps_service_templates?.name
+        }));
 
         // Get user count
         const userCount = await prisma.sps_users.count({
@@ -231,8 +238,8 @@ export class OrganizationRepository {
         return {
             ...org,
             events: eventsWithDepts,
-            departments,
-            services,
+            departments: allDepartments,
+            services: servicesWithDetails,
             user_count: userCount,
             device_count: deviceCount,
         };

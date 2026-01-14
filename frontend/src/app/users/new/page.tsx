@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight } from 'lucide-react';
@@ -22,7 +22,7 @@ const STEPS: WizardStep[] = [
     { id: 'REVIEW', label: 'Review & Create' }
 ];
 
-export default function NewUserPage() {
+function NewUserPageContent() {
     const { user: currentUser } = useAuth();
     const router = useRouter();
     const [currentStep, setCurrentStep] = useState<number>(0);
@@ -545,5 +545,13 @@ export default function NewUserPage() {
                 )}
             </SetupWizard>
         </DashboardLayout>
+    );
+}
+
+export default function NewUserPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <NewUserPageContent />
+        </Suspense>
     );
 }

@@ -9,6 +9,7 @@ import { getFullImageUrl } from '@/components/ImageUpload';
 import { Sun, Moon } from 'lucide-react';
 import { isAdmin, hasRole, ROLES } from '@/lib/roles';
 import toast, { Toaster, Toast } from 'react-hot-toast';
+import apiClient from '@/lib/api';
 
 
 
@@ -79,6 +80,17 @@ export default function LoginPage() {
         e.preventDefault();
         setIsSubmitting(true);
         try {
+            const response = await apiClient.post('/auth/login', { email, password });
+            
+            // Check if 2FA is required
+            if (response.data.requiresTwoFactor) {
+                toast.success('Code sent to your email!');
+                // Redirect to 2FA verification page
+                router.push(`/verify-2fa?email=${encodeURIComponent(email)}&token=${response.data.tempToken}`);
+                return;
+            }
+
+            // Normal login without 2FA
             await login(email, password);
             toast.success('Login successful!');
             // Redirect handled by useEffect

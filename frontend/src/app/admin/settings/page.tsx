@@ -1351,7 +1351,7 @@ export default function SystemSettingsPage() {
                     <div>
                         <h1 className="text-2xl font-bold flex items-center gap-2">
                             <Settings className="w-6 h-6 text-primary" />
-                            System Configuration
+                            Security Configuration
                         </h1>
                         <p className="text-muted-foreground text-sm mt-1">
                             Manage global settings, security policies, and platform configuration
