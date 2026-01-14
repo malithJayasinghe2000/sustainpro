@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight } from 'lucide-react';
 import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi } from '@/lib/api';
@@ -51,6 +51,10 @@ export default function NewUserPage() {
 
     // --- Dynamic Fetching Handlers ---
 
+    // Get organization ID from query parameter (when coming from org management page)
+    const searchParams = useSearchParams();
+    const preselectedOrgId = searchParams.get('org');
+
     useEffect(() => {
         if (currentUser?.is_super_admin) {
             organizationsApi.getAll().then(setOrgs).catch(console.error);
@@ -60,19 +64,38 @@ export default function NewUserPage() {
         }
     }, [currentUser]);
 
-    // Unified Fetching for Org Structure (Events, Depts, Services)
+    // Pre-select organization from query parameter
+    useEffect(() => {
+        if (preselectedOrgId && !formData.organization_id) {
+            setFormData(prev => ({ ...prev, organization_id: preselectedOrgId }));
+        }
+    }, [preselectedOrgId]);
+
+    // Fetch events when organization is selected
     useEffect(() => {
         if (formData.organization_id) {
             setIsLoading(true);
+            // Try to get structure first, fallback to individual APIs
             organizationsApi.getStructure(formData.organization_id)
                 .then(data => {
-                    setEvents(data.events || []);
-                    setDepts(data.departments || []);
-                    setServices(data.services || []);
+                    if (data) {
+                        setEvents(data.events || []);
+                        setDepts(data.departments || []);
+                        setServices(data.services || []);
+                    }
                 })
-                .catch(err => {
-                    console.error('Failed to fetch org structure:', err);
-                    setError('Failed to load organization hierarchy');
+                .catch(async (err) => {
+                    console.warn('Structure API failed, using fallback:', err);
+                    // Fallback: fetch events directly
+                    try {
+                        const orgEvents = await eventsApi.getByOrg(formData.organization_id);
+                        setEvents(Array.isArray(orgEvents) ? orgEvents : []);
+                    } catch (e) {
+                        console.warn('Failed to fetch events:', e);
+                        setEvents([]);
+                    }
+                    setDepts([]);
+                    setServices([]);
                 })
                 .finally(() => setIsLoading(false));
         } else {
@@ -450,12 +473,19 @@ export default function NewUserPage() {
         setError('');
     };
 
+    // Get the organization name for breadcrumbs
+    const selectedOrg = orgs.find(o => o.id === formData.organization_id);
+
     return (
         <DashboardLayout>
             <SetupWizard
                 title="Create New User"
                 description="Configure access levels and assign operational contexts."
-                breadcrumbs={[
+                breadcrumbs={preselectedOrgId ? [
+                    { label: 'Organizations', href: '/admin/organizations' },
+                    { label: selectedOrg?.name || 'Organization', href: `/admin/organizations/${preselectedOrgId}` },
+                    { label: 'Create User', href: '#' }
+                ] : [
                     { label: 'Back to Users', href: '/users' },
                     { label: 'Create User', href: '#' }
                 ]}

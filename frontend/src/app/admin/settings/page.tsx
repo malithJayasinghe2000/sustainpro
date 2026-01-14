@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     Save, Settings, Shield, Clock, Key, Lock, Smartphone,
     Globe, Mail, Bell, FileText, RefreshCw, AlertTriangle,
@@ -9,7 +9,9 @@ import {
 import toast, { Toaster } from 'react-hot-toast';
 import DashboardLayout from '@/components/DashboardLayout';
 import ImageUpload from '@/components/ImageUpload';
+import { RichSelect } from '@/components/ui/RichSelect';
 import { useSettings } from '@/contexts/SettingsContext';
+import { getTimezones } from '@/lib/timezones';
 import {
     settingsApi,
     AllSettings,
@@ -208,6 +210,15 @@ export default function SystemSettingsPage() {
     const [smtpSettings, setSmtpSettings] = useState<Partial<SmtpSettings>>({});
     const [notificationSettings, setNotificationSettings] = useState<Partial<NotificationSettings>>({});
 
+    // Get all timezones for dropdown
+    const timezoneOptions = useMemo(() => {
+        return getTimezones().map(tz => ({
+            value: tz.value,
+            label: tz.label,
+            icon: Globe
+        }));
+    }, []);
+
     useEffect(() => {
         fetchAllSettings();
     }, []);
@@ -337,17 +348,14 @@ export default function SystemSettingsPage() {
                 color="green"
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <SelectField
+                <RichSelect
                     label="Default Timezone"
-                    value={systemSettings.default_timezone}
+                    value={systemSettings.default_timezone || 'UTC'}
                     onChange={(v: string) => setSystemSettings({ ...systemSettings, default_timezone: v })}
-                    options={[
-                        { value: 'Asia/Dubai', label: 'Asia/Dubai (GST)' },
-                        { value: 'Asia/Colombo', label: 'Asia/Colombo (IST)' },
-                        { value: 'UTC', label: 'UTC' },
-                        { value: 'America/New_York', label: 'America/New_York (EST)' },
-                        { value: 'Europe/London', label: 'Europe/London (GMT)' },
-                    ]}
+                    options={timezoneOptions}
+                    searchable
+                    placeholder="Search timezones..."
+                    icon={Globe}
                 />
                 <SelectField
                     label="Default Language"

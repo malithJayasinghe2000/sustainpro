@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Building2, Plus, Search, LayoutGrid, List, Users, Smartphone, ChevronRight, Activity, Shield, CreditCard, BadgeCheck, Briefcase } from 'lucide-react';
 import StatsCard from '@/components/StatsCard';
-import { organizationsApi } from '@/lib/api';
+import { organizationsApi, getImageUrl } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Organization } from '@/types/auth';
+import { getPrimaryColor } from '@/lib/theme-parser';
 
 export default function OrganizationsPage() {
     const { user } = useAuth();
@@ -198,18 +199,8 @@ export default function OrganizationsPage() {
 
                             const org = (item as { data: Organization }).data;
 
-                            // Safely extract primary color
-                            let primaryColor = null;
-                            try {
-                                if (typeof org.theme_config === 'string') {
-                                    const parsed = JSON.parse(org.theme_config);
-                                    primaryColor = parsed?.primary;
-                                } else {
-                                    primaryColor = org.theme_config?.primary;
-                                }
-                            } catch (e) {
-                                // Fallback if parsing fails
-                            }
+                            // Get primary color using the theme parser
+                            const primaryColor = getPrimaryColor(org.theme_config, '');
 
                             return (
                                 <div key={org.id} className="group relative flex flex-col h-full min-h-[320px] bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl hover:translate-y-[-2px] transition-all duration-300">
@@ -234,7 +225,7 @@ export default function OrganizationsPage() {
                                         <div className="w-16 h-16 rounded-xl bg-white p-1 shadow-lg flex items-center justify-center border border-border z-10 group-hover:scale-105 transition-transform duration-300">
                                             <div className="w-full h-full rounded-lg bg-white flex items-center justify-center overflow-hidden">
                                                 {org.logo_url ? (
-                                                    <img src={org.logo_url} alt={org.name} className="w-full h-full object-contain p-1" />
+                                                    <img src={getImageUrl(org.logo_url) || ''} alt={org.name} className="w-full h-full object-contain p-1" />
                                                 ) : (
                                                     <span className="text-2xl font-bold text-gray-900">
                                                         {org.name.charAt(0).toUpperCase()}

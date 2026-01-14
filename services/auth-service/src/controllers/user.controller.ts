@@ -83,14 +83,14 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
             email: req.body.email,
             password: req.body.password,
             full_name: req.body.full_name,
-            organizationId: req.body.organization_id,
+            organizationId: req.body.organizationId || req.body.organization_id,
             timezone: req.body.timezone,
         });
 
         // Assign role if provided
         if (req.body.role) {
             await userService.assignRole(user.id, req.body.role, {
-                org_id: req.body.organization_id,
+                org_id: req.body.organizationId || req.body.organization_id,
             });
         }
 

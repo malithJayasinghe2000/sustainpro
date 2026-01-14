@@ -9,7 +9,7 @@ export class OrganizationRepository {
      */
     async findAll(organizationId?: string | null): Promise<Organization[]> {
         const where = organizationId ? { id: organizationId } : {};
-        
+
         const orgs = await prisma.sps_organizations.findMany({
             where,
             orderBy: { created_at: 'desc' }
@@ -19,13 +19,24 @@ export class OrganizationRepository {
     }
 
     /**
-     * Get organization by ID
+     * Get organization by ID or Code
      */
-    async findById(id: string): Promise<Organization | null> {
-        const org = await prisma.sps_organizations.findUnique({
-            where: { id }
-        });
-        
+    async findById(idOrCode: string): Promise<Organization | null> {
+        // Check if it looks like a UUID or an organization code
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrCode);
+
+        let org;
+        if (isUuid) {
+            org = await prisma.sps_organizations.findUnique({
+                where: { id: idOrCode }
+            });
+        } else {
+            // Try finding by code
+            org = await prisma.sps_organizations.findFirst({
+                where: { code: idOrCode }
+            });
+        }
+
         return org as any as Organization | null;
     }
 
@@ -36,7 +47,7 @@ export class OrganizationRepository {
         const org = await prisma.sps_organizations.findFirst({
             where: { slug }
         });
-        
+
         return org as any as Organization | null;
     }
 
@@ -52,11 +63,18 @@ export class OrganizationRepository {
                 type: data.type || 'CLIENT',
                 description: data.description || null,
                 industry: data.industry || null,
+                website: data.website || null,
+                logo_url: data.logo_url || null,
                 timezone: data.timezone || 'UTC',
+                address: data.address || null,
+                city: data.city || null,
+                country: data.country || null,
+                phone: data.phone || null,
                 contact_email: data.contact_email || null,
+                theme_config: data.theme_config || undefined,
             }
         });
-        
+
         return org as any as Organization;
     }
 
@@ -65,7 +83,7 @@ export class OrganizationRepository {
      */
     async update(id: string, data: UpdateOrganizationDto): Promise<Organization | null> {
         const updateData: any = {};
-        
+
         const allowedFields: (keyof UpdateOrganizationDto)[] = [
             'name', 'description', 'industry', 'website', 'logo_url',
             'timezone', 'address', 'city', 'country', 'phone',
@@ -74,9 +92,7 @@ export class OrganizationRepository {
 
         for (const field of allowedFields) {
             if (data[field] !== undefined) {
-                updateData[field] = field === 'theme_config' 
-                    ? JSON.stringify(data[field]) 
-                    : data[field];
+                updateData[field] = data[field];
             }
         }
 
@@ -88,7 +104,7 @@ export class OrganizationRepository {
             where: { id },
             data: updateData
         });
-        
+
         return org as any as Organization;
     }
 
@@ -144,6 +160,27 @@ export class OrganizationRepository {
             where: { organization_id: id },
             orderBy: { created_at: 'desc' }
         });
+        // Get event IDs for this organization
+        const eventIds = events.map((e: any) => e.id);
+
+        // Get ALL departments for this org (flat list for dropdowns)
+        const allDepartments = eventIds.length > 0
+            ? await prisma.sps_departments.findMany({
+                where: { event_id: { in: eventIds } },
+                orderBy: { name: 'asc' }
+            })
+            : [];
+
+        // Get department IDs for service lookup
+        const deptIds = allDepartments.map((d: any) => d.id);
+
+        // Get ALL services for this org (flat list for dropdowns)
+        const allServices = deptIds.length > 0
+            ? await prisma.sps_department_services.findMany({
+                where: { department_id: { in: deptIds } },
+                orderBy: { name: 'asc' }
+            })
+            : [];
 
         // Get departments for each event with service count
         const eventsWithDepts = await Promise.all(
@@ -154,7 +191,7 @@ export class OrganizationRepository {
                     FROM sps_departments d 
                     WHERE d.event_id = ${event.id}
                 ` as any[];
-                
+
                 return { ...event, departments };
             })
         );
@@ -169,9 +206,33 @@ export class OrganizationRepository {
             where: { organization_id: id }
         });
 
+        // Format flat lists for frontend dropdowns
+        const departments = allDepartments.map((d: any) => {
+            const event = events.find((e: any) => e.id === d.event_id);
+            return {
+                id: d.id,
+                name: d.name,
+                event_id: d.event_id,
+                event_name: event?.name
+            };
+        });
+
+        const services = allServices.map((s: any) => {
+            const dept = allDepartments.find((d: any) => d.id === s.department_id);
+            return {
+                id: s.id,
+                name: s.name,
+                department_id: s.department_id,
+                department_name: dept?.name,
+                definition_name: s.definition_name || s.template_name || 'Service'
+            };
+        });
+
         return {
             ...org,
             events: eventsWithDepts,
+            departments,
+            services,
             user_count: userCount,
             device_count: deviceCount,
         };

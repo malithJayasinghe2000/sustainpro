@@ -26,7 +26,7 @@ export default function Navbar() {
     // Get settings values with fallbacks
     const siteTitle = settings?.site_title || 'SPS IoT';
     const siteLogo = settings?.site_logo; // User configured logo from settings
-    const orgLogo = user?.org_logo; // Organization-specific logo
+    const orgLogo = user?.logo_url || user?.org_logo; // Organization-specific logo (backend returns logo_url)
     // Use getFullImageUrl to resolve relative URLs to full URLs, fallback to default logo
     const logo = getFullImageUrl(orgLogo || siteLogo) || '/logo.png';
     const globalAlert = settings?.global_alert_message;
@@ -98,7 +98,8 @@ export default function Navbar() {
 
     // Format time based on settings - supports HH:mm:ss, hh:mm:ss, HH:mm, etc.
     const formatTime = (date: Date) => {
-        const timezone = settings?.default_timezone || getUserTimezone();
+        // Priority: User's org timezone > System default timezone > Browser timezone
+        const timezone = user?.timezone || settings?.default_timezone || getUserTimezone();
         const timeFormat = settings?.time_format || 'HH:mm:ss';
 
         // Get time parts in the specified timezone
@@ -144,7 +145,8 @@ export default function Navbar() {
 
     // Format date based on settings - supports patterns like DD/MM/YYYY, YYYY-MM-DD, etc.
     const formatDate = (date: Date) => {
-        const timezone = settings?.default_timezone || getUserTimezone();
+        // Priority: User's org timezone > System default timezone > Browser timezone
+        const timezone = user?.timezone || settings?.default_timezone || getUserTimezone();
         const dateFormat = settings?.date_format || 'DD/MM/YYYY';
 
         // Get date parts in the specified timezone

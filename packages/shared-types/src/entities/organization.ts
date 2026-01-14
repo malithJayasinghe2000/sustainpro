@@ -38,8 +38,19 @@ export interface CreateOrganizationDto {
     type?: OrganizationType;
     description?: string;
     industry?: string;
+    website?: string;
+    logo_url?: string;
     timezone?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    phone?: string;
     contact_email?: string;
+    theme_config?: Record<string, any>;
+    // Admin user details (for creating org admin during org creation)
+    admin_name?: string;
+    admin_email?: string;
+    admin_password?: string;
 }
 
 export interface UpdateOrganizationDto {

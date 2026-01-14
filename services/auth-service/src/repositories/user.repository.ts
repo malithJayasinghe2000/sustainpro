@@ -16,6 +16,7 @@ export class UserRepository {
                         name: true,
                         logo_url: true,
                         theme_config: true,
+                        timezone: true,
                     },
                 },
             },
@@ -28,6 +29,8 @@ export class UserRepository {
             org_name: user.sps_organizations?.name,
             logo_url: user.sps_organizations?.logo_url,
             theme_config: user.sps_organizations?.theme_config,
+            // Use org timezone if user doesn't have their own
+            timezone: user.timezone || user.sps_organizations?.timezone || 'UTC',
         } as any as UserWithPassword;
     }
 
@@ -43,6 +46,7 @@ export class UserRepository {
                         name: true,
                         logo_url: true,
                         theme_config: true,
+                        timezone: true,
                     },
                 },
             },
@@ -56,6 +60,8 @@ export class UserRepository {
             org_name: user.sps_organizations?.name,
             logo_url: user.sps_organizations?.logo_url,
             theme_config: user.sps_organizations?.theme_config,
+            // Use org timezone if user doesn't have their own
+            timezone: user.timezone || user.sps_organizations?.timezone || 'UTC',
         } as any as User;
     }
 
@@ -71,15 +77,36 @@ export class UserRepository {
                         name: true,
                     },
                 },
+                sps_role_assignments: {
+                    select: {
+                        role: true,
+                        org_id: true,
+                        event_id: true,
+                    },
+                },
             },
             orderBy: { created_at: 'desc' },
         });
 
+        // Role code to display name mapping
+        const roleDisplayNames: Record<string, string> = {
+            'ORG_ADMIN': 'Organization Admin',
+            'EVENT_MANAGER': 'Event Manager',
+            'DEPT_HEAD': 'Department Head',
+            'SERVICE_SUPERVISOR': 'Service Supervisor',
+            'TECHNICIAN': 'Technician',
+            'VIEWER': 'Viewer',
+        };
+
         return users.map((user: any) => {
             const { password_hash, ...userWithoutPassword } = user;
+            // Get the primary role (first role assignment)
+            const primaryRoleCode = user.sps_role_assignments?.[0]?.role;
             return {
                 ...userWithoutPassword,
                 org_name: user.sps_organizations?.name,
+                role_code: primaryRoleCode || null,
+                role_name: primaryRoleCode ? (roleDisplayNames[primaryRoleCode] || primaryRoleCode) : null,
             } as User;
         });
     }

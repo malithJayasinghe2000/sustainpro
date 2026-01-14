@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Building2, Globe, MapPin, Phone, Mail, Upload, Loader2, X, User, UserCog, CheckCircle2, Clock, Briefcase, Shield } from 'lucide-react';
 import { organizationsApi, uploadApi } from '@/lib/api';
@@ -10,6 +10,8 @@ import { RichSelect } from '@/components/ui/RichSelect';
 import { Textarea } from '@/components/ui/Textarea';
 import SetupWizard from '@/components/SetupWizard';
 import { PasswordInput, PasswordStrength } from '@/components/ui/PasswordInput';
+import { getTimezones } from '@/lib/timezones';
+import { useSettings } from '@/contexts/SettingsContext';
 
 interface WizardStep {
     id: 'PROFILE' | 'BRANDING' | 'LOCATION' | 'ADMIN' | 'REVIEW';
@@ -26,13 +28,26 @@ const STEPS: WizardStep[] = [
 
 export default function NewOrganizationPage() {
     const router = useRouter();
+    const { settings } = useSettings();
     const [currentStep, setCurrentStep] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(false);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+    // Get all timezones with icons
+    const timezoneOptions = useMemo(() => {
+        return getTimezones().map(tz => ({
+            value: tz.value,
+            label: tz.label,
+            icon: Globe
+        }));
+    }, []);
+
     // Image upload state (deferred until final submit)
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string>('');
+
+    // Default timezone from system settings
+    const defaultTimezone = settings?.default_timezone || 'UTC';
 
     // New Org Form State
     const [newOrg, setNewOrg] = useState({
@@ -50,12 +65,19 @@ export default function NewOrganizationPage() {
         vat_id: '',
         billing_email: '',
         // logo_url removed - will be set after upload on submit
-        timezone: 'UTC',
+        timezone: defaultTimezone,
         theme_color: '#0d9488',
         admin_password: '',
         admin_password_confirm: '',
         admin_full_name: ''
     });
+
+    // Update timezone when settings load
+    useEffect(() => {
+        if (settings?.default_timezone && newOrg.timezone === 'UTC') {
+            setNewOrg(prev => ({ ...prev, timezone: settings.default_timezone }));
+        }
+    }, [settings?.default_timezone]);
 
     // Cleanup preview URL on unmount to prevent memory leaks
     useEffect(() => {
@@ -286,16 +308,9 @@ export default function NewOrganizationPage() {
                         label="Timezone"
                         value={newOrg.timezone}
                         onChange={val => setNewOrg({ ...newOrg, timezone: val })}
-                        options={[
-                            { value: 'UTC', label: 'UTC (Coordinated Universal Time)', icon: Clock },
-                            { value: 'America/New_York', label: 'America/New_York (Eastern Time)', icon: Globe },
-                            { value: 'America/Chicago', label: 'America/Chicago (Central Time)', icon: Globe },
-                            { value: 'America/Los_Angeles', label: 'America/Los_Angeles (Pacific Time)', icon: Globe },
-                            { value: 'Europe/London', label: 'Europe/London (GMT/BST)', icon: Globe },
-                            { value: 'Asia/Dubai', label: 'Asia/Dubai (GST)', icon: Globe },
-                            { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)', icon: Globe },
-                            { value: 'Asia/Singapore', label: 'Asia/Singapore (SGT)', icon: Globe }
-                        ]}
+                        options={timezoneOptions}
+                        searchable
+                        placeholder="Search timezones..."
                     />
                     <div>
                         <label className="label-compact">Theme Color</label>
