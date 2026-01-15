@@ -22,8 +22,12 @@ import { cn } from '../../lib/utils';
 interface User {
     id: string;
     email: string;
+    full_name?: string;
     roles: { role: string }[];
+    role_code?: string;
+    role_name?: string;
     is_active: boolean;
+    force_password_change?: boolean;
     created_at: string;
     last_login_at?: string;
     org_name?: string; // For Super Admin view
@@ -159,7 +163,7 @@ export default function UsersPage() {
         setIsSubmitting(true);
         try {
             await usersApi.create(newUser);
-            toast.success('User created successfully');
+            toast.success('User created! They will receive login credentials via email.');
             setIsModalOpen(false);
             setNewUser({ email: '', id: '', password: '', confirmPassword: '', role: 'viewer', timezone: 'Asia/Colombo', adminPassword: '' });
             fetchUsers();
@@ -223,7 +227,7 @@ export default function UsersPage() {
             (user.org_name && user.org_name.toLowerCase().includes(searchQuery.toLowerCase()));
 
         // Role Filter
-        const matchesRole = roleFilter === 'ALL' || user.roles.some(r => r.role === roleFilter);
+        const matchesRole = roleFilter === 'ALL' || user.role_code === roleFilter;
 
         // Org Filter (Super Admin only)
         const matchesOrg = orgFilter === 'ALL' || user.org_name === orgFilter;
@@ -248,7 +252,7 @@ export default function UsersPage() {
 
             const orgGroup = grouped.get(orgName)!;
             // Assuming simplified single role for grouping, or primary role
-            const primaryRole = u.roles?.[0]?.role || 'NO_ROLE';
+            const primaryRole = u.role_code || 'NO_ROLE';
 
             if (!orgGroup.roles.has(primaryRole)) {
                 orgGroup.roles.set(primaryRole, []);
@@ -530,6 +534,7 @@ export default function UsersPage() {
                                         {isSuperAdmin && <th className="px-4 py-3">Organization</th>}
                                         <th className="px-4 py-3">Role</th>
                                         <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Password</th>
                                         <th className="px-4 py-3">Created</th>
                                         <th className="px-4 py-3">Last Login</th>
                                         <th className="px-4 py-3 text-right">Actions</th>
@@ -538,7 +543,7 @@ export default function UsersPage() {
                                 <tbody className="divide-y divide-border/50">
                                     {isLoading ? (
                                         <tr>
-                                            <td colSpan={isSuperAdmin ? 6 : 5} className="text-center py-12 text-muted-foreground">
+                                            <td colSpan={isSuperAdmin ? 8 : 7} className="text-center py-12 text-muted-foreground">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                                                     <span className="text-xs">Loading users...</span>
@@ -547,7 +552,7 @@ export default function UsersPage() {
                                         </tr>
                                     ) : filteredUsers.length === 0 ? (
                                         <tr>
-                                            <td colSpan={isSuperAdmin ? 6 : 5} className="text-center py-12 text-muted-foreground">
+                                            <td colSpan={isSuperAdmin ? 8 : 7} className="text-center py-12 text-muted-foreground">
                                                 <div className="flex flex-col items-center gap-2 opacity-60">
                                                     <Search className="w-8 h-8" />
                                                     <p className="text-sm font-medium">No users found</p>
@@ -583,10 +588,13 @@ export default function UsersPage() {
                                                 )}
                                                 <td className="px-4 py-3">
                                                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-background/50 text-xs font-medium">
-                                                        {user.roles?.[0]?.role === 'ORG_ADMIN' && <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500/10" />}
-                                                        {user.roles?.[0]?.role === 'EVENT_MANAGER' && <UserCog className="w-3.5 h-3.5 text-blue-500" />}
-                                                        {user.roles?.[0]?.role === 'TECHNICIAN' && <Settings className="w-3.5 h-3.5 text-purple-500" />}
-                                                        <span className="capitalize text-foreground/90">{user.roles?.[0]?.role?.replace(/_/g, ' ') || 'User'}</span>
+                                                        {user.role_code === 'ORG_ADMIN' && <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500/10" />}
+                                                        {user.role_code === 'EVENT_MANAGER' && <UserCog className="w-3.5 h-3.5 text-blue-500" />}
+                                                        {user.role_code === 'TECHNICIAN' && <Settings className="w-3.5 h-3.5 text-purple-500" />}
+                                                        {user.role_code === 'DEPT_HEAD' && <UserIcon className="w-3.5 h-3.5 text-teal-500" />}
+                                                        {user.role_code === 'SERVICE_SUPERVISOR' && <Activity className="w-3.5 h-3.5 text-orange-500" />}
+                                                        {user.role_code === 'VIEWER' && <Eye className="w-3.5 h-3.5 text-gray-500" />}
+                                                        <span className="capitalize text-foreground/90">{user.role_name || user.role_code?.replace(/_/g, ' ') || 'No Role'}</span>
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3">
@@ -596,6 +604,19 @@ export default function UsersPage() {
                                                         <div className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                                                         {user.is_active ? 'Active' : 'Inactive'}
                                                     </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {user.force_password_change ? (
+                                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-amber-500/10 text-amber-600 border-amber-500/20">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                                            Pending
+                                                        </div>
+                                                    ) : (
+                                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-muted/50 text-muted-foreground border-border">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
+                                                            Set
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-3 text-xs text-muted-foreground">
                                                     <TimeDisplay timestamp={user.created_at} format="short" />

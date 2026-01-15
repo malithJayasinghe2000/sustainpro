@@ -8,7 +8,7 @@ interface InactivityTimerProps {
     children: React.ReactNode;
 }
 
-const INACTIVITY_TIMEOUT = 2 * 60 * 1000; // 2 minutes in milliseconds
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
 const WARNING_TIME = 10 * 1000; // 10 seconds warning
 
 export default function InactivityTimer({ children }: InactivityTimerProps) {

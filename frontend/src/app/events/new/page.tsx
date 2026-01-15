@@ -15,8 +15,10 @@ import SetupWizard from '@/components/SetupWizard';
 import { Input } from '@/components/ui/Input';
 import { RichSelect } from '@/components/ui/RichSelect';
 import { Textarea } from '@/components/ui/Textarea';
-import { PasswordInput, PasswordStrength } from '@/components/ui/PasswordInput';
+import { PasswordInput } from '@/components/ui/PasswordInput';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
 import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
 
@@ -84,12 +86,15 @@ export default function NewEventPage() {
         confirmPassword: ''
     });
 
+    // Validating password against policies
+    const { isValid: isPasswordValid } = usePasswordValidation(managerData.password);
+
     // Image Upload State
     const [imagePreview, setImagePreview] = useState<string>('');
 
     useEffect(() => {
         if (currentUser?.is_super_admin) {
-            organizationsApi.getAll().then(setOrgs).catch(console.error);
+            organizationsApi.getAll({ limit: 1000 }).then(res => setOrgs(res.data)).catch(console.error);
         } else if (currentUser?.organization_id) {
             setFormData(prev => ({ ...prev, organization_id: currentUser.organization_id }));
         }
@@ -155,7 +160,7 @@ export default function NewEventPage() {
             if (!managerData.full_name) errors.full_name = "Full name is required";
             if (!managerData.email) errors.email = "Email is required";
             if (!managerData.password) errors.password = "Password is required";
-            if (managerData.password.length < 8) errors.password = "Password must be at least 8 characters";
+            if (!isPasswordValid) errors.password = "Password does not meet requirements";
             if (managerData.password && managerData.password !== managerData.confirmPassword) {
                 errors.confirmPassword = "Passwords do not match";
             }
@@ -209,23 +214,30 @@ export default function NewEventPage() {
                     });
                 } catch (userError: any) {
                     console.error("User creation failed:", userError);
+                    const errorMsg = `Event created, but manager creation failed: ${userError.response?.data?.error || userError.message}`;
                     setFieldErrors(prev => ({
                         ...prev,
-                        submit: `Event created, but manager creation failed: ${userError.response?.data?.error || userError.message}`
+                        submit: errorMsg
                     }));
+                    toast.error('Manager Creation Failed', { description: errorMsg });
                     setIsLoading(false);
                     return; // Stop here, don't redirect
                 }
             }
 
             // Success
+            toast.success('Event Created', {
+                description: `${formData.name} has been created successfully.${createManager ? ' Manager credentials have been sent via email.' : ''}`
+            });
             router.push('/events');
         } catch (error: any) {
             console.error('Submit Error:', error);
+            const errorMsg = error.response?.data?.error || 'Failed to create event';
             setFieldErrors(prev => ({
                 ...prev,
-                submit: error.response?.data?.error || 'Failed to create event'
+                submit: errorMsg
             }));
+            toast.error('Event Creation Failed', { description: errorMsg });
         } finally {
             setIsLoading(false);
         }

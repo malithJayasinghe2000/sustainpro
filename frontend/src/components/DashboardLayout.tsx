@@ -9,6 +9,7 @@ import MaintenancePage from '@/components/MaintenancePage';
 import { getRoleLabel, hasRole, isAdmin, ROLES } from '@/lib/roles';
 import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User } from 'lucide-react';
 import { applyOrganizationTheme } from '@/lib/theme-utils';
+import { getPrimaryColor } from '@/lib/theme-parser';
 
 interface MenuItem {
     name: string;
@@ -38,8 +39,11 @@ export default function DashboardLayout({ children }: SidebarProps) {
         }
 
         // Apply Global Organization Theme
-        if (user?.theme_config?.primary) {
-            applyOrganizationTheme(user.theme_config.primary);
+        if (user?.theme_config) {
+            const primaryColor = getPrimaryColor(user.theme_config, '');
+            if (primaryColor) {
+                applyOrganizationTheme(primaryColor);
+            }
         }
     }, [isLoading, isAuthenticated, router, user?.theme_config]);
 

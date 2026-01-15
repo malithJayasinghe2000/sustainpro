@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight } from 'lucide-react';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
+import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight, Info } from 'lucide-react';
 import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { RichSelect } from '@/components/ui/RichSelect';
 import { hasRole } from '@/lib/roles';
 import SetupWizard from '@/components/SetupWizard';
+import { toast } from 'sonner';
 
 interface WizardStep {
     id: 'ROLE' | 'CONTEXT' | 'ACCOUNT' | 'REVIEW';
@@ -22,14 +24,14 @@ const STEPS: WizardStep[] = [
     { id: 'REVIEW', label: 'Review & Create' }
 ];
 
-export default function NewUserPage() {
+function NewUserPageContent() {
     const { user: currentUser } = useAuth();
     const router = useRouter();
     const [currentStep, setCurrentStep] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Form State
+    // Form State (password is REQUIRED - will be sent to user via email)
     const [formData, setFormData] = useState({
         role: '',
         organization_id: '',
@@ -38,9 +40,12 @@ export default function NewUserPage() {
         service_id: '',
         email: '',
         full_name: '',
-        password: '',
+        password: '', // REQUIRED - admin sets password, sent to user via email
         confirmPassword: ''
     });
+
+    // Validating password against policies
+    const { isValid: isPasswordValid } = usePasswordValidation(formData.password);
 
     // Reference Data
     const [orgs, setOrgs] = useState<any[]>([]);
@@ -51,28 +56,51 @@ export default function NewUserPage() {
 
     // --- Dynamic Fetching Handlers ---
 
+    // Get organization ID from query parameter (when coming from org management page)
+    const searchParams = useSearchParams();
+    const preselectedOrgId = searchParams.get('org');
+
     useEffect(() => {
         if (currentUser?.is_super_admin) {
-            organizationsApi.getAll().then(setOrgs).catch(console.error);
+            organizationsApi.getAll({ limit: 1000 }).then(res => setOrgs(res.data)).catch(console.error);
         } else if (currentUser?.organization_id) {
             // Pre-select org for non-super admins
             setFormData(prev => ({ ...prev, organization_id: currentUser.organization_id }));
         }
     }, [currentUser]);
 
-    // Unified Fetching for Org Structure (Events, Depts, Services)
+    // Pre-select organization from query parameter
+    useEffect(() => {
+        if (preselectedOrgId && !formData.organization_id) {
+            setFormData(prev => ({ ...prev, organization_id: preselectedOrgId }));
+        }
+    }, [preselectedOrgId]);
+
+    // Fetch events when organization is selected
     useEffect(() => {
         if (formData.organization_id) {
             setIsLoading(true);
+            // Try to get structure first, fallback to individual APIs
             organizationsApi.getStructure(formData.organization_id)
                 .then(data => {
-                    setEvents(data.events || []);
-                    setDepts(data.departments || []);
-                    setServices(data.services || []);
+                    if (data) {
+                        setEvents(data.events || []);
+                        setDepts(data.departments || []);
+                        setServices(data.services || []);
+                    }
                 })
-                .catch(err => {
-                    console.error('Failed to fetch org structure:', err);
-                    setError('Failed to load organization hierarchy');
+                .catch(async (err) => {
+                    console.warn('Structure API failed, using fallback:', err);
+                    // Fallback: fetch events directly
+                    try {
+                        const orgEvents = await eventsApi.getByOrg(formData.organization_id);
+                        setEvents(Array.isArray(orgEvents) ? orgEvents : []);
+                    } catch (e) {
+                        console.warn('Failed to fetch events:', e);
+                        setEvents([]);
+                    }
+                    setDepts([]);
+                    setServices([]);
                 })
                 .finally(() => setIsLoading(false));
         } else {
@@ -413,10 +441,25 @@ export default function NewUserPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Password Requirements */}
+            <PasswordRequirements password={formData.password} />
         </div>
     );
 
     const handleSubmit = async () => {
+        // Password is REQUIRED
+        if (!formData.password || formData.password.trim() === '') {
+            setError("Password is required. This password will be sent to the user via email.");
+            return;
+        }
+
+        if (!isPasswordValid) {
+            setError("Password does not meet requirements.");
+            return;
+        }
+
+        // Password must match confirmation
         if (formData.password !== formData.confirmPassword) {
             setError("Passwords do not match");
             return;
@@ -425,10 +468,13 @@ export default function NewUserPage() {
         try {
             setIsLoading(true);
             setError('');
+
+            // Send form data - password is sent to user via email
             await usersApi.create(formData);
 
-            // Redirect based on role? Or just standard users page?
-            // "it showld be that current user link" -> Likely /users
+            // Show success message
+            toast.success('User created! They will receive login credentials via email.');
+
             router.push('/users');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to create user');
@@ -450,12 +496,19 @@ export default function NewUserPage() {
         setError('');
     };
 
+    // Get the organization name for breadcrumbs
+    const selectedOrg = orgs.find(o => o.id === formData.organization_id);
+
     return (
         <DashboardLayout>
             <SetupWizard
                 title="Create New User"
                 description="Configure access levels and assign operational contexts."
-                breadcrumbs={[
+                breadcrumbs={preselectedOrgId ? [
+                    { label: 'Organizations', href: '/admin/organizations' },
+                    { label: selectedOrg?.name || 'Organization', href: `/admin/organizations/${preselectedOrgId}` },
+                    { label: 'Create User', href: '#' }
+                ] : [
                     { label: 'Back to Users', href: '/users' },
                     { label: 'Create User', href: '#' }
                 ]}
@@ -515,5 +568,13 @@ export default function NewUserPage() {
                 )}
             </SetupWizard>
         </DashboardLayout>
+    );
+}
+
+export default function NewUserPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <NewUserPageContent />
+        </Suspense>
     );
 }

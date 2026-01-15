@@ -37,8 +37,61 @@ export const updateSystemSettings = async (req: Request, res: Response, next: Ne
         handleError(error, res, next);
     }
 };
+/**
+ * GET /api/v1/settings/security
+ * Get full security settings (authenticated)
+ */
+export const getSecurity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const settings = await settingsService.getFullSecuritySettings();
+
+        res.json({
+            success: true,
+            settings,
+        });
+    } catch (error) {
+        handleError(error, res, next);
+    }
+};
 
 export const getPublicSettings = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const settings = await settingsService.getPublicSettings();
+        res.json({ success: true, data: settings });
+    } catch (error) {
+        handleError(error, res, next);
+    }
+};
+/**
+ * PUT /api/v1/settings/security
+ * Update security settings (Super Admin only)
+ */
+export const updateSecurity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const settings = await settingsService.updateSecuritySettings(req.body);
+
+        res.json({
+            success: true,
+            settings,
+            message: 'Security settings updated',
+        });
+    } catch (error) {
+        if (error instanceof AppError) {
+            res.status(error.statusCode).json({
+                success: false,
+                error: error.message,
+            });
+            return;
+        }
+        next(error);
+    }
+};
+
+/**
+ * GET /api/v1/settings/public
+ * Public endpoint for site config
+ */
+export const getPublic = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const settings = await settingsService.getPublicSettings();
         res.json({ success: true, data: settings });

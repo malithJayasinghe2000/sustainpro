@@ -18,7 +18,7 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('auth_token');
-        if (token) {
+        if (token && !config.headers.Authorization) {
             config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
@@ -92,6 +92,28 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
+
+/**
+ * Get full image URL for images stored on the API server
+ * Handles both relative paths (/api/v1/images/...) and absolute URLs
+ */
+export const getImageUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+
+    // If it's already a full URL (http/https), return as-is
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url;
+    }
+
+    // If it's a relative API path, prefix with API base (without /api/v1)
+    if (url.startsWith('/api/')) {
+        const apiOrigin = API_BASE_URL.replace('/api/v1', '');
+        return `${apiOrigin}${url}`;
+    }
+
+    // For other relative paths, use the full base URL
+    return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
 // Auth API functions
 export const authApi = {
@@ -631,9 +653,9 @@ export const departmentServicesApi = {
 };
 
 export const organizationsApi = {
-    getAll: async () => {
-        const response = await apiClient.get('/organizations');
-        return response.data.data;
+    getAll: async (params?: { page?: number; limit?: number; search?: string }) => {
+        const response = await apiClient.get('/organizations', { params });
+        return response.data;
     },
     getById: async (id: string) => {
         const response = await apiClient.get(`/organizations/${id}`);
@@ -641,11 +663,11 @@ export const organizationsApi = {
     },
     getOne: async (id: string) => {
         const response = await apiClient.get(`/organizations/${id}`);
-        return response.data;
+        return response.data.data;
     },
     getStructure: async (id: string) => {
         const response = await apiClient.get(`/organizations/${id}/structure`);
-        return response.data;
+        return response.data.data;
     },
     create: async (data: any) => {
         const response = await apiClient.post('/organizations', data);

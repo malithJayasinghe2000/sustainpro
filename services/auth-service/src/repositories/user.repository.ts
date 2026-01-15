@@ -16,6 +16,7 @@ export class UserRepository {
                         name: true,
                         logo_url: true,
                         theme_config: true,
+                        timezone: true,
                     },
                 },
             },
@@ -28,6 +29,8 @@ export class UserRepository {
             org_name: user.sps_organizations?.name,
             logo_url: user.sps_organizations?.logo_url,
             theme_config: user.sps_organizations?.theme_config,
+            // Use org timezone if user doesn't have their own
+            timezone: user.timezone || user.sps_organizations?.timezone || 'UTC',
         } as any as UserWithPassword;
     }
 
@@ -43,6 +46,7 @@ export class UserRepository {
                         name: true,
                         logo_url: true,
                         theme_config: true,
+                        timezone: true,
                     },
                 },
             },
@@ -56,6 +60,8 @@ export class UserRepository {
             org_name: user.sps_organizations?.name,
             logo_url: user.sps_organizations?.logo_url,
             theme_config: user.sps_organizations?.theme_config,
+            // Use org timezone if user doesn't have their own
+            timezone: user.timezone || user.sps_organizations?.timezone || 'UTC',
         } as any as User;
     }
 
@@ -71,15 +77,43 @@ export class UserRepository {
                         name: true,
                     },
                 },
+                sps_role_assignments: {
+                    select: {
+                        role: true,
+                        org_id: true,
+                        event_id: true,
+                    },
+                },
             },
             orderBy: { created_at: 'desc' },
         });
 
+        // Role code to display name mapping
+        const roleDisplayNames: Record<string, string> = {
+            'ORG_ADMIN': 'Organization Admin',
+            'EVENT_MANAGER': 'Event Manager',
+            'DEPT_HEAD': 'Department Head',
+            'SERVICE_SUPERVISOR': 'Service Supervisor',
+            'TECHNICIAN': 'Technician',
+            'VIEWER': 'Viewer',
+        };
+
         return users.map((user: any) => {
             const { password_hash, ...userWithoutPassword } = user;
+            // Map role assignments to the format expected by frontend
+            const roles = (user.sps_role_assignments || []).map((ra: any) => ({
+                role: ra.role,
+                org_id: ra.org_id,
+                event_id: ra.event_id,
+            }));
+            // Get the primary role (first role assignment)
+            const primaryRoleCode = user.sps_role_assignments?.[0]?.role;
             return {
                 ...userWithoutPassword,
                 org_name: user.sps_organizations?.name,
+                roles, // Array of role assignments for frontend
+                role_code: primaryRoleCode || null,
+                role_name: primaryRoleCode ? (roleDisplayNames[primaryRoleCode] || primaryRoleCode) : null,
             } as User;
         });
     }
@@ -94,6 +128,7 @@ export class UserRepository {
         organization_id?: string;
         timezone?: string;
         code?: string;
+        force_password_change?: boolean;
     }): Promise<User> {
         const user = await prisma.sps_users.create({
             data: {
@@ -103,6 +138,7 @@ export class UserRepository {
                 organization_id: data.organization_id,
                 timezone: data.timezone || 'UTC',
                 code: data.code,
+                force_password_change: data.force_password_change ?? false,
             },
         });
 
@@ -196,17 +232,7 @@ export class UserRepository {
         });
     }
 
-    /**
-     * Update user password
-     */
-    async updatePassword(userId: string, passwordHash: string): Promise<void> {
-        await prisma.sps_users.update({
-            where: { id: userId },
-            data: {
-                password_hash: passwordHash,
-            },
-        });
-    }
+
 
     /**
      * Assign role to user
@@ -220,10 +246,10 @@ export class UserRepository {
             data: {
                 user_id: userId,
                 role,
-                org_id: context.org_id,
-                event_id: context.event_id,
-                dept_id: context.dept_id,
-                service_id: context.service_id,
+                org_id: context.org_id || null, // Convert empty string to null
+                event_id: context.event_id || null,
+                dept_id: context.dept_id || null,
+                service_id: context.service_id || null,
             },
         }) as any as RoleAssignment;
     }
@@ -238,5 +264,106 @@ export class UserRepository {
         } catch (error) {
             return false;
         }
+    }
+
+    /**
+     * Find user by email for auth (includes password)
+     */
+    async findByEmailForAuth(email: string): Promise<UserWithPassword | null> {
+        return this.findByEmail(email);
+    }
+
+    /**
+     * Update user password (also clears force_password_change flag)
+     */
+    async updatePassword(userId: string, passwordHash: string): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                password_hash: passwordHash,
+                password_changed_at: new Date(),
+                force_password_change: false, // Clear the flag after password change
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Update last login timestamp
+     */
+    async updateLastLogin(userId: string): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                last_login: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Update email verification status
+     */
+    async updateEmailVerified(userId: string, verified: boolean): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                email_verified: verified,
+                email_verified_at: verified ? new Date() : null,
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Update 2FA status
+     */
+    async update2FAStatus(userId: string, enabled: boolean): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                two_factor_enabled: enabled,
+                two_factor_verified_at: enabled ? new Date() : null,
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Store 2FA secret for TOTP
+     */
+    async store2FASecret(userId: string, secret: string): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                two_factor_secret: secret,
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Store 2FA backup codes
+     */
+    async store2FABackupCodes(userId: string, backupCodes: string[]): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                two_factor_backup_codes: JSON.stringify(backupCodes),
+                updated_at: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Set force password change flag
+     */
+    async setForcePasswordChange(userId: string, force: boolean): Promise<void> {
+        await prisma.sps_users.update({
+            where: { id: userId },
+            data: {
+                force_password_change: force,
+                updated_at: new Date(),
+            },
+        });
     }
 }

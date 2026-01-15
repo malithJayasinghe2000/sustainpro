@@ -50,6 +50,39 @@ router.get('/password-rules', settingsController.getPublicPasswordPolicies);
  *     summary: Get all settings
  *     description: Get all system configuration settings (Super Admin only)
  */
+router.get('/security', authenticateToken, settingsController.getSecurity);
+
+/**
+ * @swagger
+ * /settings/security:
+ *   put:
+ *     tags: [Settings]
+ *     summary: Update security settings
+ *     description: Update security/2FA policy settings (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Security settings updated
+ *       403:
+ *         description: Forbidden - Super Admin required
+ */
+router.put('/security', authenticateToken, requireSuperAdmin, settingsController.updateSecurity);
+
+/**
+ * @swagger
+ * /settings:
+ *   get:
+ *     tags: [Settings]
+ *     summary: Get all settings
+ *     description: Get all system configuration settings (Super Admin only)
+ */
 router.get('/', authenticateToken, requireSuperAdmin, settingsController.getAllSettings);
 
 // -------------------------------------------------------------------------

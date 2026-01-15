@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Building2, Globe, MapPin, Phone, Mail, Upload, Loader2, X, User, UserCog, CheckCircle2, Clock, Briefcase, Shield } from 'lucide-react';
 import { organizationsApi, uploadApi } from '@/lib/api';
@@ -9,7 +9,11 @@ import { Input } from '@/components/ui/Input';
 import { RichSelect } from '@/components/ui/RichSelect';
 import { Textarea } from '@/components/ui/Textarea';
 import SetupWizard from '@/components/SetupWizard';
-import { PasswordInput, PasswordStrength } from '@/components/ui/PasswordInput';
+import { PasswordInput } from '@/components/ui/PasswordInput';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
+import { getTimezones } from '@/lib/timezones';
+import { useSettings } from '@/contexts/SettingsContext';
+import { toast } from 'sonner';
 
 interface WizardStep {
     id: 'PROFILE' | 'BRANDING' | 'LOCATION' | 'ADMIN' | 'REVIEW';
@@ -26,13 +30,26 @@ const STEPS: WizardStep[] = [
 
 export default function NewOrganizationPage() {
     const router = useRouter();
+    const { settings } = useSettings();
     const [currentStep, setCurrentStep] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(false);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+    // Get all timezones with icons
+    const timezoneOptions = useMemo(() => {
+        return getTimezones().map(tz => ({
+            value: tz.value,
+            label: tz.label,
+            icon: Globe
+        }));
+    }, []);
+
     // Image upload state (deferred until final submit)
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string>('');
+
+    // Default timezone from system settings
+    const defaultTimezone = settings?.default_timezone || 'UTC';
 
     // New Org Form State
     const [newOrg, setNewOrg] = useState({
@@ -50,12 +67,22 @@ export default function NewOrganizationPage() {
         vat_id: '',
         billing_email: '',
         // logo_url removed - will be set after upload on submit
-        timezone: 'UTC',
+        timezone: defaultTimezone,
         theme_color: '#0d9488',
         admin_password: '',
         admin_password_confirm: '',
         admin_full_name: ''
     });
+
+    // Validating password against policies
+    const { isValid: isPasswordValid } = usePasswordValidation(newOrg.admin_password);
+
+    // Update timezone when settings load
+    useEffect(() => {
+        if (settings?.default_timezone && newOrg.timezone === 'UTC') {
+            setNewOrg(prev => ({ ...prev, timezone: settings.default_timezone }));
+        }
+    }, [settings?.default_timezone]);
 
     // Cleanup preview URL on unmount to prevent memory leaks
     useEffect(() => {
@@ -77,7 +104,7 @@ export default function NewOrganizationPage() {
             if (!newOrg.admin_full_name.trim()) errors.admin_full_name = 'Admin full name is required';
             if (!newOrg.contact_email.trim()) errors.contact_email = 'Admin email is required';
             if (!newOrg.admin_password) errors.admin_password = 'Password is required';
-            if (newOrg.admin_password.length < 8) errors.admin_password = 'Password must be at least 8 characters';
+            if (!isPasswordValid) errors.admin_password = 'Password does not meet requirements';
             if (!newOrg.admin_password_confirm) errors.admin_password_confirm = 'Please confirm password';
             if (newOrg.admin_password !== newOrg.admin_password_confirm) {
                 errors.admin_password_confirm = 'Passwords do not match';
@@ -110,7 +137,9 @@ export default function NewOrganizationPage() {
                     const uploadResponse = await uploadApi.uploadImage(logoFile);
                     logoUrl = uploadResponse.url;
                 } catch (uploadError: any) {
-                    setFieldErrors({ logo: uploadError.response?.data?.error || 'Failed to upload logo' });
+                    const errorMsg = uploadError.response?.data?.error || 'Failed to upload logo';
+                    setFieldErrors({ logo: errorMsg });
+                    toast.error('Logo Upload Failed', { description: errorMsg });
                     setIsLoading(false);
                     return; // Don't proceed if logo upload fails
                 }
@@ -138,9 +167,15 @@ export default function NewOrganizationPage() {
                 URL.revokeObjectURL(logoPreview);
             }
 
+            toast.success('Organization Created', {
+                description: `${newOrg.name} has been created successfully. Admin credentials have been sent via email.`
+            });
+
             router.push('/admin/organizations');
         } catch (err: any) {
-            setFieldErrors({ submit: err.response?.data?.error || 'Failed to create organization' });
+            const errorMsg = err.response?.data?.error || 'Failed to create organization';
+            setFieldErrors({ submit: errorMsg });
+            toast.error('Creation Failed', { description: errorMsg });
         } finally {
             setIsLoading(false);
         }
@@ -286,16 +321,9 @@ export default function NewOrganizationPage() {
                         label="Timezone"
                         value={newOrg.timezone}
                         onChange={val => setNewOrg({ ...newOrg, timezone: val })}
-                        options={[
-                            { value: 'UTC', label: 'UTC (Coordinated Universal Time)', icon: Clock },
-                            { value: 'America/New_York', label: 'America/New_York (Eastern Time)', icon: Globe },
-                            { value: 'America/Chicago', label: 'America/Chicago (Central Time)', icon: Globe },
-                            { value: 'America/Los_Angeles', label: 'America/Los_Angeles (Pacific Time)', icon: Globe },
-                            { value: 'Europe/London', label: 'Europe/London (GMT/BST)', icon: Globe },
-                            { value: 'Asia/Dubai', label: 'Asia/Dubai (GST)', icon: Globe },
-                            { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST)', icon: Globe },
-                            { value: 'Asia/Singapore', label: 'Asia/Singapore (SGT)', icon: Globe }
-                        ]}
+                        options={timezoneOptions}
+                        searchable
+                        placeholder="Search timezones..."
                     />
                     <div>
                         <label className="label-compact">Theme Color</label>
@@ -388,15 +416,8 @@ export default function NewOrganizationPage() {
                         />
                     </div>
 
-                    {/* Password Strength - Full Width */}
-                    {newOrg.admin_password && (
-                        <div className="pt-2 border-t border-dashed border-border/50">
-                            <PasswordStrength
-                                password={newOrg.admin_password}
-                                confirmPassword={newOrg.admin_password_confirm}
-                            />
-                        </div>
-                    )}
+                    {/* Password Requirements - Dynamic from API */}
+                    <PasswordRequirements password={newOrg.admin_password} />
                 </div>
                 {/* Right Column - 40% - Role Card */}
                 <div className="lg:col-span-2">

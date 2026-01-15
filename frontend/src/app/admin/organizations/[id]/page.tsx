@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { organizationsApi, usersApi, devicesApi } from '@/lib/api';
+import { organizationsApi, usersApi, devicesApi, getImageUrl } from '@/lib/api';
 import { Organization } from '@/types/auth';
+import { getPrimaryColor } from '@/lib/theme-parser';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import ImageUpload from '@/components/ImageUpload';
 import {
     ArrowLeft,
     Building2,
@@ -26,7 +28,8 @@ import {
     CheckCircle,
     XCircle,
     Save,
-    AlertTriangle
+    AlertTriangle,
+    Palette
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -140,6 +143,40 @@ export default function OrganizationDetailsPage() {
         }
     };
 
+    const handleCreateUser = async () => {
+        if (!org?.id) return;
+        if (!newUserForm.email || !newUserForm.password || !newUserForm.full_name) {
+            toast.warning('Please fill in all required fields.');
+            return;
+        }
+
+        try {
+            setIsCreatingUser(true);
+            await usersApi.create({
+                email: newUserForm.email,
+                password: newUserForm.password,
+                full_name: newUserForm.full_name,
+                organizationId: org.id,
+                role: newUserForm.role
+            });
+            toast.success('User created! They will receive login credentials via email.');
+            setShowCreateUserModal(false);
+            setNewUserForm({ email: '', full_name: '', password: '', role: 'ORG_ADMIN' });
+
+            // Refresh users list
+            const allUsers = await usersApi.getAll();
+            const usersList = Array.isArray(allUsers) ? allUsers : (allUsers.data || []);
+            const orgUsers = usersList.filter((u: any) => u.organization_id === org.id);
+            setUsers(orgUsers);
+        } catch (error: any) {
+            console.error('Failed to create user:', error);
+            const msg = error.response?.data?.error || 'Failed to create user';
+            toast.error(msg);
+        } finally {
+            setIsCreatingUser(false);
+        }
+    };
+
     if (isLoading) {
         return (
             <DashboardLayout>
@@ -162,6 +199,9 @@ export default function OrganizationDetailsPage() {
             </DashboardLayout>
         );
     }
+
+    // Get organization's primary color using the theme parser
+    const orgPrimaryColor = getPrimaryColor(org?.theme_config);
 
     // Helper Components
     const StatCard = ({ label, value, icon: Icon, color }: any) => (
@@ -338,13 +378,18 @@ export default function OrganizationDetailsPage() {
                         <div className="h-full">
                             {/* Branding Preview */}
                             <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm h-full">
-                                <div className="h-24 bg-gradient-to-br from-primary to-black relative">
+                                <div
+                                    className="h-24 relative"
+                                    style={{
+                                        background: `linear-gradient(to bottom right, ${orgPrimaryColor}, #000000)`
+                                    }}
+                                >
                                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
                                 </div>
                                 <div className="px-6 pb-6 -mt-10 relative">
                                     <div className="w-20 h-20 bg-white rounded-xl shadow-lg flex items-center justify-center p-2 mb-4 border border-border">
                                         {org.logo_url ? (
-                                            <img src={org.logo_url} className="w-full h-full object-contain" alt="Logo" />
+                                            <img src={getImageUrl(org.logo_url) || ''} className="w-full h-full object-contain" alt="Logo" />
                                         ) : (
                                             <span className="text-2xl font-bold text-gray-900">{org.name.charAt(0)}</span>
                                         )}
@@ -390,7 +435,7 @@ export default function OrganizationDetailsPage() {
                                 <Users className="w-5 h-5 text-primary" />
                                 Organization Users
                             </h3>
-                            <Button size="sm">
+                            <Button size="sm" onClick={() => router.push(`/users/new?org=${org.id}`)}>
                                 <Plus className="w-4 h-4 mr-2" /> Add User
                             </Button>
                         </div>
@@ -425,8 +470,15 @@ export default function OrganizationDetailsPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs font-medium border border-blue-500/20">
-                                                        {user.is_super_admin ? 'Super Admin' : 'Member'}
+                                                    <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${user.is_super_admin
+                                                        ? 'bg-purple-500/10 text-purple-600 border-purple-500/20'
+                                                        : user.role_name
+                                                            ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                                                            : 'bg-gray-500/10 text-gray-500 border-gray-500/20'
+                                                        }`}>
+                                                        {user.is_super_admin
+                                                            ? 'Super Admin'
+                                                            : user.role_name || 'No Role'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4">
@@ -568,6 +620,64 @@ export default function OrganizationDetailsPage() {
                                             value={editForm.website || ''}
                                             onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
                                         />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Branding Section */}
+                            <div className="bg-card border border-border rounded-xl shadow-sm">
+                                <div className="p-6 border-b border-border">
+                                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                                        <Palette className="w-5 h-5 text-primary" />
+                                        Branding
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground">Customize logo and brand colors.</p>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    {/* Logo Upload */}
+                                    <div>
+                                        <ImageUpload
+                                            label="Organization Logo"
+                                            value={editForm.logo_url}
+                                            onChange={(url: string) => setEditForm({ ...editForm, logo_url: url })}
+                                            placeholder="Upload organization logo"
+                                            folder="organizations"
+                                        />
+                                    </div>
+
+                                    {/* Theme Color Picker */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground">Brand Color</label>
+                                        <div className="flex items-center gap-4">
+                                            <input
+                                                type="color"
+                                                value={getPrimaryColor(editForm.theme_config)}
+                                                onChange={(e) => setEditForm({
+                                                    ...editForm,
+                                                    theme_config: { primary: e.target.value }
+                                                })}
+                                                className="w-14 h-14 rounded-lg cursor-pointer border border-input overflow-hidden p-1 bg-background"
+                                            />
+                                            <div className="flex-1">
+                                                <Input
+                                                    value={getPrimaryColor(editForm.theme_config)}
+                                                    onChange={(e) => setEditForm({
+                                                        ...editForm,
+                                                        theme_config: { primary: e.target.value }
+                                                    })}
+                                                    placeholder="#0d9488"
+                                                    className="font-mono uppercase"
+                                                />
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    This color will be used for the dashboard theme when organization users log in.
+                                                </p>
+                                            </div>
+                                            <div
+                                                className="w-14 h-14 rounded-lg border border-input shadow-inner"
+                                                style={{ backgroundColor: getPrimaryColor(editForm.theme_config) }}
+                                                title="Color Preview"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>

@@ -34,7 +34,8 @@ export const authenticateToken = (
         return;
     }
 
-    const secret = process.env.JWT_SECRET;
+    // Use the same fallback as auth-service config to ensure consistency
+    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
     if (!secret) {
         console.error('JWT_SECRET not configured');
         res.status(500).json({

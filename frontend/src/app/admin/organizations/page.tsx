@@ -4,30 +4,22 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Building2, Plus, Search, LayoutGrid, List, Users, Smartphone, ChevronRight, Activity, Shield, CreditCard, BadgeCheck, Briefcase } from 'lucide-react';
 import StatsCard from '@/components/StatsCard';
-import { organizationsApi } from '@/lib/api';
+import { organizationsApi, getImageUrl } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Organization } from '@/types/auth';
+import { getPrimaryColor } from '@/lib/theme-parser';
 
 export default function OrganizationsPage() {
     const { user } = useAuth();
     const router = useRouter();
     const [orgs, setOrgs] = useState<Organization[]>([]);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
+    // const [error, setError] = useState(''); // Removed unused error state if needed, or keep
     const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
     const [searchQuery, setSearchQuery] = useState('');
-
-    // Filter Organizations
-    const filteredOrgs = orgs.filter(org => {
-        if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
-        return (
-            org.name.toLowerCase().includes(q) ||
-            org.code.toLowerCase().includes(q) ||
-            org.industry?.toLowerCase().includes(q)
-        );
-    });
 
     // Chunking Helper for Grid Layout (4 items per row)
     const chunkArray = (arr: any[], size: number) => {
@@ -39,35 +31,33 @@ export default function OrganizationsPage() {
     };
 
     // Prepare display items (AddNew button is first item)
-    // We'll treat the "Add New" button as a special item in the first chunk
-    // But since it's a React Node, we can't just mix it easily in a clean data map.
-    // Instead, let's render chunks of the DATA, and handle the first card conditionally?
-    // User wants "Add New" to be part of the grid flow.
-    // So the sequence is: [Add New Card, Org1, Org2, Org3] -> Separator -> [Org4, Org5, Org6, Org7] -> Separator
-
-    // Let's create a unified list of "items" to render
+    // Only in Grid View do we mix the add button. In table view it's a separate button usually.
     const allItems = [
         { type: 'ADD_NEW' },
-        ...filteredOrgs.map(org => ({ type: 'ORG', data: org }))
+        ...orgs.map(org => ({ type: 'ORG', data: org }))
     ];
 
     const itemChunks = chunkArray(allItems, 4);
 
     useEffect(() => {
-        if (!user?.is_super_admin) {
-            // Let backend block or handle
-        }
-        fetchOrgs();
-    }, [user, router]);
+        const delayDebounceFn = setTimeout(() => {
+            fetchOrgs();
+        }, 300); // Debounce search
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [user, router, page, searchQuery]);
 
     const fetchOrgs = async () => {
         try {
             setIsLoading(true);
-            const data = await organizationsApi.getAll();
-            setOrgs(data);
+            const response: any = await organizationsApi.getAll({ page, limit: 7, search: searchQuery });
+            if (response.data) {
+                setOrgs(response.data);
+                setTotalPages(response.totalPages || 1);
+            }
         } catch (err) {
             console.error(err);
-            setError('Failed to fetch organizations.');
+            // setError('Failed to fetch organizations.');
         } finally {
             setIsLoading(false);
         }
@@ -198,18 +188,8 @@ export default function OrganizationsPage() {
 
                             const org = (item as { data: Organization }).data;
 
-                            // Safely extract primary color
-                            let primaryColor = null;
-                            try {
-                                if (typeof org.theme_config === 'string') {
-                                    const parsed = JSON.parse(org.theme_config);
-                                    primaryColor = parsed?.primary;
-                                } else {
-                                    primaryColor = org.theme_config?.primary;
-                                }
-                            } catch (e) {
-                                // Fallback if parsing fails
-                            }
+                            // Get primary color using the theme parser
+                            const primaryColor = getPrimaryColor(org.theme_config, '');
 
                             return (
                                 <div key={org.id} className="group relative flex flex-col h-full min-h-[320px] bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl hover:translate-y-[-2px] transition-all duration-300">
@@ -234,7 +214,7 @@ export default function OrganizationsPage() {
                                         <div className="w-16 h-16 rounded-xl bg-white p-1 shadow-lg flex items-center justify-center border border-border z-10 group-hover:scale-105 transition-transform duration-300">
                                             <div className="w-full h-full rounded-lg bg-white flex items-center justify-center overflow-hidden">
                                                 {org.logo_url ? (
-                                                    <img src={org.logo_url} alt={org.name} className="w-full h-full object-contain p-1" />
+                                                    <img src={getImageUrl(org.logo_url) || ''} alt={org.name} className="w-full h-full object-contain p-1" />
                                                 ) : (
                                                     <span className="text-2xl font-bold text-gray-900">
                                                         {org.name.charAt(0).toUpperCase()}
@@ -365,7 +345,30 @@ export default function OrganizationsPage() {
                         </div>
                     </div>
                 )}
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-8">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1 || isLoading}
+                            className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Previous
+                        </button>
+                        <span className="text-sm font-medium text-muted-foreground">
+                            Page {page} of {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={page >= totalPages || isLoading}
+                            className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Next
+                        </button>
+                    </div>
+                )}
             </div>
-        </DashboardLayout>
+        </DashboardLayout >
     );
 }
