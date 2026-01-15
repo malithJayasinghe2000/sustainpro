@@ -1,12 +1,16 @@
 import app from './app';
 import { config } from './config';
-import { connectRabbitMQ, closeRabbitMQ } from './messaging/consumer';
 import { createLogger } from '@sustainpro/shared-utils';
+import { connectRabbitMQ, closeRabbitMQ } from './messaging/consumer';
+import { initDatabase, closeDatabase } from '@sustainpro/shared-database';
 
 const logger = createLogger({ service: 'notification-service' });
 
 async function startServer(): Promise<void> {
     try {
+        // Initialize Database connection
+        await initDatabase();
+
         // Connect to RabbitMQ for message consumption
         await connectRabbitMQ();
 
@@ -21,12 +25,13 @@ async function startServer(): Promise<void> {
         // Graceful shutdown
         const shutdown = async (signal: string) => {
             logger.info(`${signal} received, shutting down gracefully...`);
-            
+
             server.close(async () => {
                 logger.info('HTTP server closed');
-                
+
                 await closeRabbitMQ();
-                
+                await closeDatabase();
+
                 logger.info('Shutdown complete');
                 process.exit(0);
             });

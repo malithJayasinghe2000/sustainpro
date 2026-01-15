@@ -147,6 +147,11 @@ class EmailService {
             bcc: options.bcc,
         };
 
+        // Lazy initialization if not configured yet (e.g. valid DB settings added later or startup failed)
+        if (!this.transporter || !this.isConfigured) {
+            await this.initialize();
+        }
+
         if (!this.transporter || !this.isConfigured) {
             // Log email in development when no transporter
             logger.info('📧 Email (not sent - no transporter)', {
