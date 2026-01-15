@@ -145,10 +145,10 @@ async function handleEmailNotification(routingKey: string, payload: any): Promis
 
             case 'generic':
                 result = await emailService.send({
-                    to: payload.email,
-                    subject: payload.subject,
-                    html: payload.html,
-                    text: payload.text,
+                    to: payload.email || payload.to,
+                    subject: payload.subject || payload.data?.subject || 'Notification',
+                    html: payload.html || payload.data?.html,
+                    text: payload.text || payload.data?.text,
                 });
                 break;
 

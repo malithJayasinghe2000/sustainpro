@@ -255,6 +255,20 @@ export const updateSmtpSettings = async (req: Request, res: Response, next: Next
     }
 };
 
+export const sendTestEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { recipient } = req.body;
+        if (!recipient) {
+            res.status(400).json({ success: false, error: 'Recipient email is required' });
+            return;
+        }
+        await settingsService.sendTestEmail(recipient);
+        res.json({ success: true, message: `Test email sent to ${recipient}` });
+    } catch (error) {
+        handleError(error, res, next);
+    }
+};
+
 // =========================================================================
 // NOTIFICATION SETTINGS
 // =========================================================================

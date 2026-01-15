@@ -1,6 +1,6 @@
 import { SettingsRepository, SecuritySettings } from '../repositories/settings.repository';
 import { SystemSettings } from '@sustainpro/shared-types';
-import { NotFoundError, createLogger } from '@sustainpro/shared-utils';
+import { NotFoundError, createLogger, publishNotification } from '@sustainpro/shared-utils';
 
 const logger = createLogger({ service: 'core-service' });
 
@@ -163,6 +163,21 @@ export class SettingsService {
         return settings;
     }
 
+    async sendTestEmail(recipient: string) {
+        await publishNotification({
+            type: 'generic',
+            to: recipient,
+            email: recipient, // for compatibility
+            data: {
+                subject: 'SustainPro: SMTP Configuration Test',
+                text: 'Congratulations! Your SMTP configuration is working correctly.',
+                html: '<div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;"><h2>SMTP Test Successful</h2><p>Your email settings are configured correctly.</p></div>'
+            }
+        });
+        logger.info('Test email requested', { recipient });
+        return true;
+    }
+
     // =========================================================================
     // NOTIFICATION SETTINGS
     // =========================================================================
@@ -223,5 +238,5 @@ export class SettingsService {
         return this.repo.getAllSettings();
     }
 
-   
+
 }
