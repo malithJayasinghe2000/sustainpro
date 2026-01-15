@@ -236,6 +236,32 @@ model sps_permissions {
   sps_role_permissions sps_role_permissions[]
 }
 
+// =============================================
+// ROLES TABLE - Centralized Role Definitions
+// =============================================
+// This table defines all available roles in the system.
+// The 'code' field is used as a reference key in:
+//   - sps_role_assignments.role (which user has which role)
+//   - sps_role_permissions.role (which role has which permissions)
+// This allows dynamic role management while preserving existing functionality.
+
+model sps_roles {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code        String    @unique @db.VarChar(50) // e.g., "ORG_ADMIN", "EVENT_MANAGER"
+  name        String    @db.VarChar(100) // e.g., "Organization Admin"
+  description String? // Role description
+  level       Int       @default(0) // Hierarchy level (0=highest, higher=lower rank)
+  icon        String?   @db.VarChar(50) // Icon name for UI (e.g., "Building2", "Calendar")
+  color       String?   @db.VarChar(20) // Color for UI (e.g., "#3B82F6")
+  is_system   Boolean   @default(false) // System roles cannot be deleted
+  is_active   Boolean   @default(true) // Can be disabled without deletion
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([code], map: "idx_roles_code")
+  @@index([level], map: "idx_roles_level")
+}
+
 model sps_role_assignments {
   id                      String                   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user_id                 String                   @db.Uuid

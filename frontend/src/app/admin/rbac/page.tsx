@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Shield, Save, Check, Lock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { rbacApi } from '@/lib/api';
+import { rbacApi, rolesApi, Role } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/roles';
 import { toast } from 'sonner';
 
@@ -25,6 +25,7 @@ export default function RBACPage() {
     const [selectedRole, setSelectedRole] = useState<string>(ROLES.ORG_ADMIN);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
 
     // Group permissions by module
     const groupedPermissions = permissions.reduce((acc, perm) => {
@@ -46,12 +47,22 @@ export default function RBACPage() {
     const fetchData = async () => {
         try {
             setIsLoading(true);
-            const [perms, maps] = await Promise.all([
+            const [perms, maps, roles] = await Promise.all([
                 rbacApi.getPermissions(),
-                rbacApi.getMappings()
+                rbacApi.getMappings(),
+                rolesApi.getAll().catch(() => []) // Fallback to empty if API fails
             ]);
             setPermissions(perms);
             setMappings(maps);
+
+            // Filter out SUPER_ADMIN from role list (permissions managed differently)
+            const filteredRoles = roles.filter(r => r.code !== 'SUPER_ADMIN');
+            setAvailableRoles(filteredRoles);
+
+            // Set default selected role if available
+            if (filteredRoles.length > 0 && !filteredRoles.find(r => r.code === selectedRole)) {
+                setSelectedRole(filteredRoles[0].code);
+            }
         } catch (error) {
             toast.error('Failed to load RBAC configuration');
             console.error(error);
@@ -163,18 +174,35 @@ export default function RBACPage() {
                             Select Role
                         </label>
                         <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm flex flex-col">
-                            {Object.values(ROLES).filter(r => r !== 'SUPER_ADMIN').map((role) => (
-                                <button
-                                    key={role}
-                                    onClick={() => setSelectedRole(role)}
-                                    className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors border-l-4 ${selectedRole === role
-                                        ? 'bg-primary/5 border-l-primary text-primary'
-                                        : 'border-l-transparent text-foreground/70 hover:bg-muted hover:text-foreground'
-                                        }`}
-                                >
-                                    {ROLE_LABELS[role]}
-                                </button>
-                            ))}
+                            {availableRoles.length > 0 ? (
+                                availableRoles.map((role) => (
+                                    <button
+                                        key={role.code}
+                                        onClick={() => setSelectedRole(role.code)}
+                                        className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors border-l-4 ${selectedRole === role.code
+                                            ? 'bg-primary/5 border-l-primary text-primary'
+                                            : 'border-l-transparent text-foreground/70 hover:bg-muted hover:text-foreground'
+                                            }`}
+                                        style={selectedRole === role.code && role.color ? { borderLeftColor: role.color } : undefined}
+                                    >
+                                        {role.name}
+                                    </button>
+                                ))
+                            ) : (
+                                // Fallback to static ROLES if API roles not loaded
+                                Object.values(ROLES).filter(r => r !== 'SUPER_ADMIN').map((role) => (
+                                    <button
+                                        key={role}
+                                        onClick={() => setSelectedRole(role)}
+                                        className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors border-l-4 ${selectedRole === role
+                                            ? 'bg-primary/5 border-l-primary text-primary'
+                                            : 'border-l-transparent text-foreground/70 hover:bg-muted hover:text-foreground'
+                                            }`}
+                                    >
+                                        {ROLE_LABELS[role]}
+                                    </button>
+                                ))
+                            )}
                         </div>
 
                         <div className="p-4 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200 rounded-xl border border-amber-200 dark:border-amber-800 text-xs mt-4">
@@ -192,7 +220,9 @@ export default function RBACPage() {
                         <div className="bg-card border border-border rounded-xl !shadow-none overflow-hidden">
                             <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-muted/10">
                                 <div>
-                                    <h2 className="font-semibold text-lg">{ROLE_LABELS[selectedRole]}</h2>
+                                    <h2 className="font-semibold text-lg">
+                                        {availableRoles.find(r => r.code === selectedRole)?.name || ROLE_LABELS[selectedRole]}
+                                    </h2>
                                     <p className="text-xs text-muted-foreground">Managing {mappings[selectedRole]?.length || 0} permissions</p>
                                 </div>
                                 <button

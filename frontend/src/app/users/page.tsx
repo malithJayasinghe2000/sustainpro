@@ -6,15 +6,16 @@ import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import Modal from '@/components/Modal';
 import TimeDisplay from '@/components/TimeDisplay';
-import { usersApi } from '@/lib/api';
+import { usersApi, rolesApi, Role } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { ROLE_LEVELS, ROLE_LABELS } from '@/lib/roles';
 
 import { RichSelect } from '@/components/ui/RichSelect';
 import {
     Plus, Search, Trash2, Shield, ShieldAlert, User as UserIcon, Users,
     MoreVertical, X, AlertTriangle, Pencil, Crown, UserCog, Eye,
     CheckCircle2, XCircle, Building2, Filter, LayoutList, ListTree,
-    ChevronRight, ChevronDown, Activity, Settings, Calendar
+    ChevronRight, ChevronDown, ChevronLeft, Activity, Settings, Calendar
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
@@ -37,18 +38,8 @@ interface User {
 
 type ViewMode = 'table' | 'tree';
 
-// Role Hierarchy Definition for Sorting/Grouping
-const ROLE_PRIORITY: Record<string, number> = {
-    'SUPER_ADMIN': 0,
-    'ORG_ADMIN': 1,
-    'EVENT_MANAGER': 2,
-    'DEPT_HEAD': 3,
-    'SERVICE_SUPERVISOR': 4,
-    'TECHNICIAN': 5,
-    'VIEWER': 6
-};
-
-const getRolePriority = (role?: string) => ROLE_PRIORITY[role || 'VIEWER'] ?? 99;
+// Use centralized ROLE_LEVELS from roles.ts for consistency
+const getRolePriority = (role?: string) => ROLE_LEVELS[role || 'VIEWER'] ?? 99;
 
 export default function UsersPage() {
     const { user, isLoading: authLoading } = useAuth();
@@ -56,6 +47,12 @@ export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [pagination, setPagination] = useState({
+        page: 1,
+        limit: 10,
+        total: 0,
+        pages: 0
+    });
 
     // View State
     const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -64,6 +61,7 @@ export default function UsersPage() {
     // Filters
     const [roleFilter, setRoleFilter] = useState('ALL');
     const [orgFilter, setOrgFilter] = useState('ALL');
+    const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
 
     // Create Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -86,6 +84,13 @@ export default function UsersPage() {
     const [passwordError, setPasswordError] = useState('');
     const [passwordStrength, setPasswordStrength] = useState(0);
 
+    // Fetch available roles for filter
+    useEffect(() => {
+        rolesApi.getAll()
+            .then(roles => setAvailableRoles(roles.filter(r => r.code !== 'SUPER_ADMIN')))
+            .catch(err => console.error('Failed to fetch roles:', err));
+    }, []);
+
     // Permission Check: Allow Super Admin OR Org Admin
     useEffect(() => {
         if (!authLoading && user) {
@@ -96,11 +101,20 @@ export default function UsersPage() {
         }
     }, [user, authLoading, router]);
 
+    // Fetch users when filters or page changes
     useEffect(() => {
-        if (user) {
-            fetchUsers();
+        if (user && !authLoading) {
+            const timeoutId = setTimeout(() => {
+                fetchUsers();
+            }, 300); // 300ms debounce
+            return () => clearTimeout(timeoutId);
         }
-    }, [user]);
+    }, [user, authLoading, pagination.page, searchQuery, roleFilter, orgFilter]);
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, page: 1 }));
+    }, [searchQuery, roleFilter, orgFilter]);
 
     // Auto-generate User ID when modal opens
     useEffect(() => {
@@ -115,12 +129,27 @@ export default function UsersPage() {
 
 
     const fetchUsers = async () => {
+        setIsLoading(true);
         try {
-            const data = await usersApi.getAll();
+            const data = await usersApi.getAll({
+                page: pagination.page,
+                limit: pagination.limit,
+                search: searchQuery,
+                role: roleFilter === 'ALL' ? undefined : roleFilter,
+                organization_id: orgFilter === 'ALL' ? undefined : orgFilter
+            });
             if (data.success) {
                 setUsers(data.data);
+                if (data.meta) {
+                    setPagination(prev => ({
+                        ...prev,
+                        total: data.meta.total,
+                        pages: data.meta.pages
+                    }));
+                }
             }
         } catch (error) {
+            console.error(error);
             toast.error('Failed to load users');
         } finally {
             setIsLoading(false);
@@ -208,32 +237,37 @@ export default function UsersPage() {
         image: logo // This might be undefined depending on earlier fix, but let's assume valid
     }));
 
-    // Role Options with Icons
-    const roleOptions = [
-        { value: 'ALL', label: 'All Roles', icon: Users },
-        { value: 'ORG_ADMIN', label: 'Org Admin', icon: Crown },
-        { value: 'EVENT_MANAGER', label: 'Event Manager', icon: UserCog },
-        { value: 'DEPT_HEAD', label: 'Dept Head', icon: UserIcon },
-        { value: 'SERVICE_SUPERVISOR', label: 'Supervisor', icon: Eye },
-        { value: 'TECHNICIAN', label: 'Technician', icon: Shield },
-        { value: 'VIEWER', label: 'Viewer', icon: Eye }
-    ];
+    // Role Options - dynamically built from API or fallback to static
+    const roleOptions = useMemo(() => {
+        const defaultOption = { value: 'ALL', label: 'All Roles', icon: Users };
 
-    const filteredUsers = users.filter(user => {
-        // Text Search
-        const matchesSearch =
-            user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            user.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (user.org_name && user.org_name.toLowerCase().includes(searchQuery.toLowerCase()));
+        if (availableRoles.length > 0) {
+            // Use dynamic roles from API
+            return [
+                defaultOption,
+                ...availableRoles.map(role => ({
+                    value: role.code,
+                    label: role.name,
+                    icon: Users // Could map icons dynamically too, but keeping simple
+                }))
+            ];
+        }
 
-        // Role Filter
-        const matchesRole = roleFilter === 'ALL' || user.role_code === roleFilter;
+        // Fallback to static options
+        return [
+            defaultOption,
+            { value: 'ORG_ADMIN', label: 'Org Admin', icon: Crown },
+            { value: 'EVENT_MANAGER', label: 'Event Manager', icon: UserCog },
+            { value: 'DEPT_HEAD', label: 'Dept Head', icon: UserIcon },
+            { value: 'SERVICE_SUPERVISOR', label: 'Supervisor', icon: Eye },
+            { value: 'TECHNICIAN', label: 'Technician', icon: Shield },
+            { value: 'SERVICE_SUPPLIER', label: 'Service Supplier', icon: Shield },
+            { value: 'VIEWER', label: 'Viewer', icon: Eye }
+        ];
+    }, [availableRoles]);
 
-        // Org Filter (Super Admin only)
-        const matchesOrg = orgFilter === 'ALL' || user.org_name === orgFilter;
-
-        return matchesSearch && matchesRole && matchesOrg;
-    });
+    // Server-side filtering is now used, so we just use the users array directly
+    const filteredUsers = users;
 
     const isSuperAdmin = user?.is_super_admin;
 
@@ -525,135 +559,161 @@ export default function UsersPage() {
 
                 {/* Content View */}
                 {viewMode === 'tree' ? renderTreeView() : (
-                    <div className="bg-card border border-border rounded-lg overflow-hidden text-sm shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div className="overflow-x-auto custom-scrollbar">
-                            <table className="data-table w-full text-left">
-                                <thead className="bg-muted/40 text-xs uppercase text-muted-foreground font-semibold">
-                                    <tr>
-                                        <th className="px-4 py-3">User Info</th>
-                                        {isSuperAdmin && <th className="px-4 py-3">Organization</th>}
-                                        <th className="px-4 py-3">Role</th>
-                                        <th className="px-4 py-3">Status</th>
-                                        <th className="px-4 py-3">Password</th>
-                                        <th className="px-4 py-3">Created</th>
-                                        <th className="px-4 py-3">Last Login</th>
-                                        <th className="px-4 py-3 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border/50">
-                                    {isLoading ? (
+                    <>
+                        <div className="bg-card border border-border rounded-lg overflow-hidden text-sm shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="overflow-x-auto custom-scrollbar">
+                                <table className="data-table w-full text-left">
+                                    <thead className="bg-muted/40 text-xs uppercase text-muted-foreground font-semibold">
                                         <tr>
-                                            <td colSpan={isSuperAdmin ? 8 : 7} className="text-center py-12 text-muted-foreground">
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                                    <span className="text-xs">Loading users...</span>
-                                                </div>
-                                            </td>
+                                            <th className="px-4 py-3">User Info</th>
+                                            {isSuperAdmin && <th className="px-4 py-3">Organization</th>}
+                                            <th className="px-4 py-3">Role</th>
+                                            <th className="px-4 py-3">Status</th>
+                                            <th className="px-4 py-3">Password</th>
+                                            <th className="px-4 py-3">Created</th>
+                                            <th className="px-4 py-3">Last Login</th>
+                                            <th className="px-4 py-3 text-right">Actions</th>
                                         </tr>
-                                    ) : filteredUsers.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={isSuperAdmin ? 8 : 7} className="text-center py-12 text-muted-foreground">
-                                                <div className="flex flex-col items-center gap-2 opacity-60">
-                                                    <Search className="w-8 h-8" />
-                                                    <p className="text-sm font-medium">No users found</p>
-                                                    <p className="text-xs">Try adjusting your filters or search query.</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredUsers.map((user) => (
-                                            <tr key={user.id} className="hover:bg-muted/30 transition-colors">
-                                                <td className="px-4 py-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs border border-primary/20 shrink-0">
-                                                            {user.email[0].toUpperCase()}
-                                                        </div>
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-sm font-semibold text-foreground truncate max-w-[200px]" title={user.email}>{user.email}</span>
-                                                            <span className="text-[10px] text-muted-foreground font-mono">{user.id}</span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                {isSuperAdmin && (
-                                                    <td className="px-4 py-3">
-                                                        {user.org_name ? (
-                                                            <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
-                                                                <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                                                                {user.org_name}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground italic">Global / None</span>
-                                                        )}
-                                                    </td>
-                                                )}
-                                                <td className="px-4 py-3">
-                                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-background/50 text-xs font-medium">
-                                                        {user.role_code === 'ORG_ADMIN' && <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500/10" />}
-                                                        {user.role_code === 'EVENT_MANAGER' && <UserCog className="w-3.5 h-3.5 text-blue-500" />}
-                                                        {user.role_code === 'TECHNICIAN' && <Settings className="w-3.5 h-3.5 text-purple-500" />}
-                                                        {user.role_code === 'DEPT_HEAD' && <UserIcon className="w-3.5 h-3.5 text-teal-500" />}
-                                                        {user.role_code === 'SERVICE_SUPERVISOR' && <Activity className="w-3.5 h-3.5 text-orange-500" />}
-                                                        {user.role_code === 'VIEWER' && <Eye className="w-3.5 h-3.5 text-gray-500" />}
-                                                        <span className="capitalize text-foreground/90">{user.role_name || user.role_code?.replace(/_/g, ' ') || 'No Role'}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${user.is_active
-                                                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                                                        : 'bg-rose-500/10 text-rose-600 border-rose-500/20'}`}>
-                                                        <div className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                                        {user.is_active ? 'Active' : 'Inactive'}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {user.force_password_change ? (
-                                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-amber-500/10 text-amber-600 border-amber-500/20">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                                            Pending
-                                                        </div>
-                                                    ) : (
-                                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-muted/50 text-muted-foreground border-border">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
-                                                            Set
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-xs text-muted-foreground">
-                                                    <TimeDisplay timestamp={user.created_at} format="short" />
-                                                </td>
-                                                <td className="px-4 py-3 text-xs text-muted-foreground">
-                                                    <TimeDisplay
-                                                        timestamp={user.last_login_at}
-                                                        format="relative"
-                                                        fallback="Never"
-                                                        className="font-medium"
-                                                    />
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <button
-                                                            onClick={() => toast('Edit functionality coming soon', { icon: '🚧' })}
-                                                            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-all"
-                                                            title="Edit User"
-                                                        >
-                                                            <Pencil className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteUser(user)}
-                                                            className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-all"
-                                                            title="Delete User"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
+                                    </thead>
+                                    <tbody className="divide-y divide-border/50">
+                                        {isLoading ? (
+                                            <tr>
+                                                <td colSpan={isSuperAdmin ? 8 : 7} className="text-center py-12 text-muted-foreground">
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                                        <span className="text-xs">Loading users...</span>
                                                     </div>
                                                 </td>
                                             </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+                                        ) : filteredUsers.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={isSuperAdmin ? 8 : 7} className="text-center py-12 text-muted-foreground">
+                                                    <div className="flex flex-col items-center gap-2 opacity-60">
+                                                        <Search className="w-8 h-8" />
+                                                        <p className="text-sm font-medium">No users found</p>
+                                                        <p className="text-xs">Try adjusting your filters or search query.</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            filteredUsers.map((user) => (
+                                                <tr key={user.id} className="hover:bg-muted/30 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs border border-primary/20 shrink-0">
+                                                                {user.email[0].toUpperCase()}
+                                                            </div>
+                                                            <div className="flex flex-col min-w-0">
+                                                                <span className="text-sm font-semibold text-foreground truncate max-w-[200px]" title={user.email}>{user.email}</span>
+                                                                <span className="text-[10px] text-muted-foreground font-mono">{user.id}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    {isSuperAdmin && (
+                                                        <td className="px-4 py-3">
+                                                            {user.org_name ? (
+                                                                <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+                                                                    <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                                                                    {user.org_name}
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-xs text-muted-foreground italic">Global / None</span>
+                                                            )}
+                                                        </td>
+                                                    )}
+                                                    <td className="px-4 py-3">
+                                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-background/50 text-xs font-medium">
+                                                            {user.role_code === 'ORG_ADMIN' && <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500/10" />}
+                                                            {user.role_code === 'EVENT_MANAGER' && <UserCog className="w-3.5 h-3.5 text-blue-500" />}
+                                                            {user.role_code === 'TECHNICIAN' && <Settings className="w-3.5 h-3.5 text-purple-500" />}
+                                                            {user.role_code === 'DEPT_HEAD' && <UserIcon className="w-3.5 h-3.5 text-teal-500" />}
+                                                            {user.role_code === 'SERVICE_SUPERVISOR' && <Activity className="w-3.5 h-3.5 text-orange-500" />}
+                                                            {user.role_code === 'VIEWER' && <Eye className="w-3.5 h-3.5 text-gray-500" />}
+                                                            <span className="capitalize text-foreground/90">{user.role_name || user.role_code?.replace(/_/g, ' ') || 'No Role'}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${user.is_active
+                                                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                                            : 'bg-rose-500/10 text-rose-600 border-rose-500/20'}`}>
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                                            {user.is_active ? 'Active' : 'Inactive'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {user.force_password_change ? (
+                                                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-amber-500/10 text-amber-600 border-amber-500/20">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                                                Pending
+                                                            </div>
+                                                        ) : (
+                                                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-muted/50 text-muted-foreground border-border">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
+                                                                Set
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                                                        <TimeDisplay timestamp={user.created_at} format="short" />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                                                        <TimeDisplay
+                                                            timestamp={user.last_login_at}
+                                                            format="relative"
+                                                            fallback="Never"
+                                                            className="font-medium"
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <button
+                                                                onClick={() => toast('Edit functionality coming soon', { icon: '🚧' })}
+                                                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-all"
+                                                                title="Edit User"
+                                                            >
+                                                                <Pencil className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteUser(user)}
+                                                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-all"
+                                                                title="Delete User"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
+
+                        {/* Pagination Controls */}
+                        {pagination.pages > 1 && (
+                            <div className="flex items-center justify-center gap-2 mt-8">
+                                <button
+                                    onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
+                                    disabled={pagination.page === 1 || isLoading}
+                                    className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Previous
+                                </button>
+                                <span className="text-sm font-medium text-muted-foreground">
+                                    Page {pagination.page} of {pagination.pages}
+                                </span>
+                                <button
+                                    onClick={() => setPagination(prev => ({ ...prev, page: Math.min(pagination.pages, prev.page + 1) }))}
+                                    disabled={pagination.page >= pagination.pages || isLoading}
+                                    className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        )}
+
+                    </>
                 )}
 
                 {/* Keeping the Delete Modal as is for now */}
@@ -725,7 +785,7 @@ export default function UsersPage() {
                         </div>
                     )}
                 </Modal>
-            </div>
-        </DashboardLayout>
+            </div >
+        </DashboardLayout >
     );
 }

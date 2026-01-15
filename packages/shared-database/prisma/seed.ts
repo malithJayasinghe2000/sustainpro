@@ -539,6 +539,100 @@ async function main() {
     }
 
     // ==================================================================================
+    // 5.5 ROLES - Centralized Role Definitions
+    // ==================================================================================
+    console.log('👔 Seeding roles...');
+
+    const roles = [
+        {
+            code: 'SUPER_ADMIN',
+            name: 'Super Admin',
+            description: 'Platform-wide super administrator with full system access',
+            level: 0,
+            icon: 'ShieldAlert',
+            color: '#EF4444',
+            is_system: true,
+        },
+        {
+            code: 'ORG_ADMIN',
+            name: 'Organization Admin',
+            description: 'Full control over a specific organization, its settings, and all sub-resources',
+            level: 1,
+            icon: 'Building2',
+            color: '#8B5CF6',
+            is_system: true,
+        },
+        {
+            code: 'EVENT_MANAGER',
+            name: 'Event Manager',
+            description: 'Manages a specific event, its departments, and services',
+            level: 2,
+            icon: 'Calendar',
+            color: '#3B82F6',
+            is_system: true,
+        },
+        {
+            code: 'DEPT_HEAD',
+            name: 'Department Head',
+            description: 'Oversees a specific department (e.g., Security, Sanitation) within an event',
+            level: 3,
+            icon: 'Users',
+            color: '#14B8A6',
+            is_system: true,
+        },
+        {
+            code: 'SERVICE_SUPERVISOR',
+            name: 'Service Supervisor',
+            description: 'Manages specific service deployments and technicians',
+            level: 4,
+            icon: 'Activity',
+            color: '#F97316',
+            is_system: true,
+        },
+        {
+            code: 'TECHNICIAN',
+            name: 'Onsite Technician',
+            description: 'Ground-level access to manage devices and view local telemetry',
+            level: 5,
+            icon: 'Settings',
+            color: '#A855F7',
+            is_system: true,
+        },
+        {
+            code: 'SERVICE_SUPPLIER',
+            name: 'Service Supplier',
+            description: 'External supplier with limited access to assigned services',
+            level: 5,
+            icon: 'Truck',
+            color: '#06B6D4',
+            is_system: true,
+        },
+        {
+            code: 'VIEWER',
+            name: 'Organizer Viewer',
+            description: 'Read-only access to dashboards and reports',
+            level: 6,
+            icon: 'Eye',
+            color: '#6B7280',
+            is_system: true,
+        },
+    ];
+
+    for (const role of roles) {
+        await prisma.sps_roles.upsert({
+            where: { code: role.code },
+            update: {
+                name: role.name,
+                description: role.description,
+                level: role.level,
+                icon: role.icon,
+                color: role.color,
+            },
+            create: role,
+        });
+    }
+
+    // ==================================================================================
     // 6. ROLE ASSIGNMENTS
     // ==================================================================================
     console.log('👥 Seeding role assignments...');
@@ -617,13 +711,19 @@ async function main() {
             'users.view', 'users.manage', 'reports.view', 'settings.manage', 'telemetry.view', 'alerts.manage'
         ],
         'EVENT_MANAGER': [
-            'dashboard.view', 'events.view', 'events.manage', 'devices.view', 'reports.view', 'telemetry.view'
+            'dashboard.view', 'events.view', 'events.manage', 'devices.view', 'reports.view', 'telemetry.view', 'users.view'
         ],
         'DEPT_HEAD': [
             'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view'
         ],
-        'OPERATOR': [
+        'SERVICE_SUPERVISOR': [
+            'dashboard.view', 'events.view', 'devices.view', 'devices.manage', 'telemetry.view', 'alerts.manage'
+        ],
+        'TECHNICIAN': [
             'dashboard.view', 'events.view', 'devices.view', 'telemetry.view'
+        ],
+        'SERVICE_SUPPLIER': [
+            'dashboard.view', 'devices.view', 'telemetry.view'
         ],
         'VIEWER': [
             'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view'

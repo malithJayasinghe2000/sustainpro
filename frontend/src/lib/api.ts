@@ -150,8 +150,8 @@ export const authApi = {
 
 // Users API functions
 export const usersApi = {
-    getAll: async () => {
-        const response = await apiClient.get('/users');
+    getAll: async (params?: { page?: number; limit?: number; search?: string; role?: string; organization_id?: string }) => {
+        const response = await apiClient.get('/users', { params });
         return response.data;
     },
 
@@ -803,4 +803,47 @@ export const adminApi = {
         const response = await apiClient.get('/admin/system-health');
         return response.data;
     }
+};
+
+// Role definitions from sps_roles table
+export interface Role {
+    id: string;
+    code: string;
+    name: string;
+    description: string | null;
+    level: number;
+    icon: string | null;
+    color: string | null;
+    is_system: boolean;
+    is_active: boolean;
+}
+
+export const rolesApi = {
+    /**
+     * Get all active roles
+     */
+    getAll: async (): Promise<Role[]> => {
+        const response = await apiClient.get('/roles');
+        return response.data.data || response.data || [];
+    },
+
+    /**
+     * Get only roles that the current user can assign (based on hierarchy)
+     */
+    getAssignable: async (): Promise<Role[]> => {
+        const response = await apiClient.get('/roles', { params: { assignable: true } });
+        return response.data.data || response.data || [];
+    },
+
+    /**
+     * Get a specific role by code
+     */
+    getByCode: async (code: string): Promise<Role | null> => {
+        try {
+            const response = await apiClient.get(`/roles/${code}`);
+            return response.data.data || response.data;
+        } catch (error) {
+            return null;
+        }
+    },
 };
