@@ -1,39 +1,54 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { User, Shield, Key, Mail, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
+import { User, Shield, Key, Mail, CheckCircle2, XCircle, Loader2, Info, Building2, ArrowLeft, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
+import { toast } from 'sonner';
+
+// Define the sections for the profile page
+interface ProfileSection {
+    id: string;
+    label: string;
+}
+
+const SECTIONS: ProfileSection[] = [
+    { id: 'ACCOUNT', label: 'Account Information' },
+    { id: 'SECURITY', label: 'Two-Factor Authentication' },
+    { id: 'PASSWORD', label: 'Change Password' }
+];
 
 export default function ProfilePage() {
     const { user } = useAuth();
+    const router = useRouter();
+    const [currentSection, setCurrentSection] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
     const [passwordForDisable, setPasswordForDisable] = useState('');
     const [showPasswordInput, setShowPasswordInput] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+
+    const { isValid: isPasswordValid } = usePasswordValidation(newPassword);
 
     useEffect(() => {
-        // Get user's 2FA status from auth context
         setTwoFactorEnabled(user?.two_factor_enabled || false);
     }, [user]);
 
     const handleEnable2FA = async () => {
         setLoading(true);
-        setMessage(null);
-        
+
         try {
-            const response = await api.post('/auth/2fa/enable');
+            await api.post('/auth/2fa/enable');
             setTwoFactorEnabled(true);
-            setMessage({ 
-                type: 'success', 
-                text: '✅ Two-Factor Authentication enabled! A confirmation email has been sent.' 
+            toast.success('Two-Factor Authentication enabled successfully', {
+                description: 'A confirmation email has been sent to your inbox.'
             });
         } catch (error: any) {
-            setMessage({ 
-                type: 'error', 
-                text: error.response?.data?.error || 'Failed to enable 2FA' 
+            toast.error('Failed to enable 2FA', {
+                description: error.response?.data?.error || 'Please try again later.'
             });
         } finally {
             setLoading(false);
@@ -42,28 +57,25 @@ export default function ProfilePage() {
 
     const handleDisable2FA = async () => {
         if (!passwordForDisable) {
-            setMessage({ type: 'error', text: 'Please enter your password' });
+            toast.error('Password required', {
+                description: 'Please enter your password to disable 2FA.'
+            });
             return;
         }
 
         setLoading(true);
-        setMessage(null);
-        
+
         try {
-            const response = await api.post('/auth/2fa/disable', {
+            await api.post('/auth/2fa/disable', {
                 password: passwordForDisable
             });
             setTwoFactorEnabled(false);
             setShowPasswordInput(false);
             setPasswordForDisable('');
-            setMessage({ 
-                type: 'success', 
-                text: '✅ Two-Factor Authentication disabled successfully' 
-            });
+            toast.success('Two-Factor Authentication disabled');
         } catch (error: any) {
-            setMessage({ 
-                type: 'error', 
-                text: error.response?.data?.error || 'Failed to disable 2FA. Check your password.' 
+            toast.error('Failed to disable 2FA', {
+                description: error.response?.data?.error || 'Check your password and try again.'
             });
         } finally {
             setLoading(false);
@@ -78,258 +90,347 @@ export default function ProfilePage() {
         const confirmPassword = formData.get('confirmPassword') as string;
 
         if (newPassword !== confirmPassword) {
-            setMessage({ type: 'error', text: 'New passwords do not match' });
+            toast.error('Passwords do not match');
             return;
         }
 
-        if (newPassword.length < 8) {
-            setMessage({ type: 'error', text: 'Password must be at least 8 characters' });
+        if (!isPasswordValid) {
+            toast.error('Password does not meet requirements');
             return;
         }
 
         setLoading(true);
-        setMessage(null);
 
         try {
             await api.post('/auth/change-password', {
                 currentPassword,
                 newPassword
             });
-            setMessage({ type: 'success', text: '✅ Password changed successfully' });
+            toast.success('Password changed successfully');
             (e.target as HTMLFormElement).reset();
         } catch (error: any) {
-            setMessage({ 
-                type: 'error', 
-                text: error.response?.data?.error || 'Failed to change password' 
+            toast.error('Failed to change password', {
+                description: error.response?.data?.error || 'Please check your current password.'
             });
         } finally {
             setLoading(false);
         }
     };
 
+    // Section: Account Information
+    const renderAccountSection = () => (
+        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+            <h2 className="header-section">Account Information</h2>
+            <p className="text-sm text-muted-foreground -mt-4">Your profile details and organization information.</p>
+
+            <div className="bg-muted/30 rounded-lg border border-border divide-y divide-border">
+                <div className="flex items-center gap-4 p-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <User className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                        <p className="text-xs text-muted-foreground">Full Name</p>
+                        <p className="font-medium text-foreground">{user?.full_name || '-'}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-4 p-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Mail className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                        <p className="text-xs text-muted-foreground">Email Address</p>
+                        <p className="font-medium text-foreground">{user?.email || '-'}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-4 p-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Building2 className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                        <p className="text-xs text-muted-foreground">Organization</p>
+                        <p className="font-medium text-foreground">{user?.org_name || '-'}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
+    // Section: Two-Factor Authentication
+    const renderSecuritySection = () => (
+        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+            <h2 className="header-section">Two-Factor Authentication</h2>
+            <p className="text-sm text-muted-foreground -mt-4">
+                Add an extra layer of security to your account by requiring a verification code in addition to your password.
+            </p>
+
+            {/* 2FA Status */}
+            <div className="bg-muted/30 rounded-lg border border-border p-4">
+                <div className="flex items-start gap-4">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${twoFactorEnabled
+                        ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                        : 'bg-zinc-500/10 text-zinc-500'
+                        }`}>
+                        <Shield className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                            <p className="font-medium text-foreground">Current Status</p>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shadow-sm ${twoFactorEnabled
+                                ? 'bg-green-600 text-white border border-green-600'
+                                : 'bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700'
+                                }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${twoFactorEnabled ? 'bg-white' : 'bg-zinc-400'}`} />
+                                {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            {twoFactorEnabled
+                                ? 'Your account takes advantage of an extra layer of security.'
+                                : 'Enable 2FA to protect your account from unauthorized access.'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* 2FA Controls */}
+            {!twoFactorEnabled ? (
+                <button
+                    onClick={handleEnable2FA}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                >
+                    {loading ? (
+                        <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Enabling...
+                        </>
+                    ) : (
+                        <>
+                            <Shield className="w-4 h-4" />
+                            Enable Two-Factor Authentication
+                        </>
+                    )}
+                </button>
+            ) : (
+                <div className="space-y-4">
+                    {!showPasswordInput ? (
+                        <button
+                            onClick={() => setShowPasswordInput(true)}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors font-medium text-sm"
+                        >
+                            Disable Two-Factor Authentication
+                        </button>
+                    ) : (
+                        <div className="space-y-4 max-w-sm">
+                            <div>
+                                <label className="label-compact">Enter your password to disable 2FA</label>
+                                <div className="relative">
+                                    <Key className="icon-input" />
+                                    <input
+                                        type="password"
+                                        value={passwordForDisable}
+                                        onChange={(e) => setPasswordForDisable(e.target.value)}
+                                        placeholder="Your password"
+                                        className="input-compactWithIcon"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handleDisable2FA}
+                                    disabled={loading}
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Disabling...
+                                        </>
+                                    ) : (
+                                        'Confirm Disable'
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowPasswordInput(false);
+                                        setPasswordForDisable('');
+                                    }}
+                                    className="px-5 py-2.5 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors font-medium text-sm"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+        </div>
+    );
+
+    // Section: Change Password
+    const renderPasswordSection = () => (
+        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+            <h2 className="header-section">Change Password</h2>
+            <p className="text-sm text-muted-foreground -mt-4">
+                Update your password regularly to keep your account secure.
+            </p>
+
+            <form onSubmit={handlePasswordChange} className="space-y-5 max-w-md">
+                <div>
+                    <label className="label-compact">Current Password</label>
+                    <div className="relative">
+                        <Key className="icon-input" />
+                        <input
+                            type="password"
+                            name="currentPassword"
+                            required
+                            className="input-compactWithIcon"
+                            placeholder="Enter current password"
+                        />
+                    </div>
+                </div>
+                <div>
+                    <label className="label-compact">New Password</label>
+                    <div className="relative">
+                        <Key className="icon-input" />
+                        <input
+                            type="password"
+                            name="newPassword"
+                            required
+                            minLength={8}
+                            className="input-compactWithIcon"
+                            placeholder="Enter new password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                {/* Password Requirements - Dynamic from API */}
+                <PasswordRequirements password={newPassword} />
+                <div>
+                    <label className="label-compact">Confirm New Password</label>
+                    <div className="relative">
+                        <Key className="icon-input" />
+                        <input
+                            type="password"
+                            name="confirmPassword"
+                            required
+                            minLength={8}
+                            className="input-compactWithIcon"
+                            placeholder="Confirm new password"
+                        />
+                    </div>
+                </div>
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                >
+                    {loading ? (
+                        <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Changing Password...
+                        </>
+                    ) : (
+                        'Change Password'
+                    )}
+                </button>
+            </form>
+        </div>
+    );
+
+    // Render current section content
+    const renderSectionContent = () => {
+        switch (currentSection) {
+            case 0:
+                return renderAccountSection();
+            case 1:
+                return renderSecuritySection();
+            case 2:
+                return renderPasswordSection();
+            default:
+                return renderAccountSection();
+        }
+    };
+
     return (
         <DashboardLayout>
-            <div className="page-padding max-w-4xl mx-auto">
-                <div className="mb-6">
-                    <h1 className="page-header-title">
-                        <User className="w-7 h-7 text-primary" />
-                        User Profile
-                    </h1>
-                    <p className="page-header-subtext">Manage your account settings and security preferences</p>
-                </div>
-
-                {/* Message Alert */}
-                {message && (
-                    <div className={`mb-4 p-4 rounded-lg border ${
-                        message.type === 'success' 
-                            ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400'
-                            : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
-                    }`}>
-                        {message.text}
+            <div className="page-padding max-w-[1600px] mx-auto py-6">
+                {/* Header with Breadcrumb */}
+                <div className="flex flex-col gap-4 mb-8">
+                    {/* Breadcrumb */}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <button
+                            onClick={() => router.push('/dashboard')}
+                            className="hover:text-foreground transition-colors flex items-center gap-1"
+                        >
+                            <ArrowLeft className="w-3 h-3" />
+                            Dashboard
+                        </button>
+                        <span>/</span>
+                        <span className="text-foreground font-medium">User Profile</span>
                     </div>
-                )}
 
-                {/* User Info Card */}
-                <div className="bg-card border border-border rounded-xl p-6 mb-6">
-                    <div className="flex items-start gap-4">
-                        <div className="p-3 rounded-full bg-primary/10">
-                            <User className="w-6 h-6 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                            <h2 className="text-lg font-semibold text-foreground mb-1">Account Information</h2>
-                            <div className="space-y-2 text-sm">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-muted-foreground">Name:</span>
-                                    <span className="text-foreground font-medium">{user?.full_name}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Mail className="w-4 h-4 text-muted-foreground" />
-                                    <span className="text-muted-foreground">Email:</span>
-                                    <span className="text-foreground">{user?.email}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-muted-foreground">Organization:</span>
-                                    <span className="text-foreground">{user?.org_name}</span>
-                                </div>
-                            </div>
-                        </div>
+                    {/* Title */}
+                    <div>
+                        <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                            User Profile
+                        </h1>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            Manage your account settings and security preferences.
+                        </p>
                     </div>
                 </div>
 
-                {/* Two-Factor Authentication Card */}
-                <div className="bg-card border border-border rounded-xl p-6 mb-6">
-                    <div className="flex items-start gap-4">
-                        <div className="p-3 rounded-full bg-primary/10">
-                            <Shield className="w-6 h-6 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                            <h2 className="text-lg font-semibold text-foreground mb-1">Two-Factor Authentication</h2>
-                            <p className="text-sm text-muted-foreground mb-4">
-                                Add an extra layer of security to your account by requiring a verification code in addition to your password.
-                            </p>
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    {/* Section Sidebar */}
+                    <div className="hidden lg:block space-y-1">
+                        {SECTIONS.map((section, idx) => {
+                            const isActive = currentSection === idx;
 
-                            {/* 2FA Status */}
-                            <div className="flex items-center gap-3 mb-4 p-3 bg-muted/50 rounded-lg">
-                                {twoFactorEnabled ? (
-                                    <>
-                                        <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                        <span className="text-sm font-medium text-foreground">2FA is currently enabled</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <XCircle className="w-5 h-5 text-muted-foreground" />
-                                        <span className="text-sm font-medium text-foreground">2FA is currently disabled</span>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* 2FA Controls */}
-                            {!twoFactorEnabled ? (
+                            return (
                                 <button
-                                    onClick={handleEnable2FA}
-                                    disabled={loading}
-                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    key={section.id}
+                                    onClick={() => setCurrentSection(idx)}
+                                    className={`w-full relative flex items-center gap-3 p-2.5 rounded-lg transition-all duration-300 text-left ${isActive
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                                        }`}
                                 >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Enabling...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Shield className="w-4 h-4" />
-                                            Enable Two-Factor Authentication
-                                        </>
-                                    )}
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${isActive
+                                        ? 'bg-white text-primary'
+                                        : 'bg-muted border border-border'
+                                        }`}>
+                                        {idx + 1}
+                                    </div>
+                                    <span className="font-medium text-sm">{section.label}</span>
                                 </button>
-                            ) : (
-                                <div className="space-y-3">
-                                    {!showPasswordInput ? (
-                                        <button
-                                            onClick={() => setShowPasswordInput(true)}
-                                            className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors"
-                                        >
-                                            Disable Two-Factor Authentication
-                                        </button>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="block text-sm font-medium text-foreground mb-2">
-                                                    Enter your password to disable 2FA:
-                                                </label>
-                                                <input
-                                                    type="password"
-                                                    value={passwordForDisable}
-                                                    onChange={(e) => setPasswordForDisable(e.target.value)}
-                                                    placeholder="Your password"
-                                                    className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                                                />
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={handleDisable2FA}
-                                                    disabled={loading}
-                                                    className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                                >
-                                                    {loading ? (
-                                                        <>
-                                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                                            Disabling...
-                                                        </>
-                                                    ) : (
-                                                        'Confirm Disable'
-                                                    )}
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setShowPasswordInput(false);
-                                                        setPasswordForDisable('');
-                                                    }}
-                                                    className="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors"
-                                                >
-                                                    Cancel
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg dark:bg-blue-900/20 dark:border-blue-800">
-                                <p className="text-xs text-blue-800 dark:text-blue-400">
-                                    <strong>How it works:</strong> When 2FA is enabled, you'll receive a 6-digit verification code via email every time you log in. This code expires after 10 minutes.
-                                </p>
-                            </div>
-                        </div>
+                            );
+                        })}
                     </div>
-                </div>
 
-                {/* Change Password Card */}
-                <div className="bg-card border border-border rounded-xl p-6">
-                    <div className="flex items-start gap-4">
-                        <div className="p-3 rounded-full bg-primary/10">
-                            <Key className="w-6 h-6 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                            <h2 className="text-lg font-semibold text-foreground mb-1">Change Password</h2>
-                            <p className="text-sm text-muted-foreground mb-4">
-                                Update your password regularly to keep your account secure.
-                            </p>
+                    {/* Main Content Area */}
+                    <div className="lg:col-span-3">
+                        <div className="bg-card border border-border rounded-xl p-8 min-h-[400px]">
+                            {/* Mobile Section Tabs */}
+                            <div className="lg:hidden flex gap-2 mb-6 overflow-x-auto pb-2 -mx-2 px-2">
+                                {SECTIONS.map((section, idx) => (
+                                    <button
+                                        key={section.id}
+                                        onClick={() => setCurrentSection(idx)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${currentSection === idx
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted text-muted-foreground hover:text-foreground'
+                                            }`}
+                                    >
+                                        {section.label}
+                                    </button>
+                                ))}
+                            </div>
 
-                            <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground mb-2">
-                                        Current Password
-                                    </label>
-                                    <input
-                                        type="password"
-                                        name="currentPassword"
-                                        required
-                                        className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground mb-2">
-                                        New Password
-                                    </label>
-                                    <input
-                                        type="password"
-                                        name="newPassword"
-                                        required
-                                        minLength={8}
-                                        className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                                    />
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Minimum 8 characters
-                                    </p>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground mb-2">
-                                        Confirm New Password
-                                    </label>
-                                    <input
-                                        type="password"
-                                        name="confirmPassword"
-                                        required
-                                        minLength={8}
-                                        className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Changing Password...
-                                        </>
-                                    ) : (
-                                        'Change Password'
-                                    )}
-                                </button>
-                            </form>
+                            {renderSectionContent()}
                         </div>
                     </div>
                 </div>

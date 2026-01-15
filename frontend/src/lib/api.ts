@@ -18,7 +18,7 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('auth_token');
-        if (token) {
+        if (token && !config.headers.Authorization) {
             config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
@@ -653,9 +653,9 @@ export const departmentServicesApi = {
 };
 
 export const organizationsApi = {
-    getAll: async () => {
-        const response = await apiClient.get('/organizations');
-        return response.data.data;
+    getAll: async (params?: { page?: number; limit?: number; search?: string }) => {
+        const response = await apiClient.get('/organizations', { params });
+        return response.data;
     },
     getById: async (id: string) => {
         const response = await apiClient.get(`/organizations/${id}`);

@@ -159,7 +159,7 @@ export class AuthService {
         // Generate and store refresh token securely
         const refreshTokenValue = this.generateSecureToken();
         const refreshTokenExpiry = new Date(Date.now() + config.jwt.refreshTokenExpireDays * 24 * 60 * 60 * 1000);
-        
+
         const tokenRecord = await this.refreshTokenRepo.create({
             userId: user.id,
             token: refreshTokenValue,
@@ -200,6 +200,7 @@ export class AuthService {
                 roles,
                 permissions,
                 two_factor_enabled: (user as any).two_factor_enabled || false,
+                force_password_change: (user as any).force_password_change || false,
             },
         };
     }
@@ -210,7 +211,7 @@ export class AuthService {
     async verify2FA(tempToken: string, code: string, context: { deviceInfo?: string; ipAddress?: string; userAgent?: string }) {
         try {
             const decoded = jwt.verify(tempToken, config.jwt.secret) as { id: string; purpose: string };
-            
+
             if (decoded.purpose !== '2fa_pending') {
                 throw new ForbiddenError('Invalid verification token');
             }
@@ -243,7 +244,7 @@ export class AuthService {
     async refreshToken(refreshTokenValue: string, context?: { deviceInfo?: string; ipAddress?: string }) {
         // Find the token in database
         const tokenRecord = await this.refreshTokenRepo.findValidToken(refreshTokenValue);
-        
+
         if (!tokenRecord) {
             logger.warn('Refresh token not found or invalid');
             throw new ForbiddenError('Invalid refresh token');
@@ -315,7 +316,7 @@ export class AuthService {
     async revokeSession(userId: string, tokenId: string): Promise<boolean> {
         const tokens = await this.refreshTokenRepo.getActiveTokensForUser(userId);
         const token = tokens.find(t => t.id === tokenId);
-        
+
         if (!token) {
             throw new NotFoundError('Session', tokenId);
         }
@@ -344,47 +345,32 @@ export class AuthService {
 
     /**
      * Change user password
+     * If user has force_password_change flag, current password is not required
      */
     async changePassword(userId: string, currentPassword: string, newPassword: string) {
-        const user = await this.userRepo.findByEmailForAuth(userId);
-        if (!user) {
-            // Try finding by ID
-            const userById = await this.userRepo.findById(userId);
-            if (!userById) {
-                throw new NotFoundError('User', userId);
+        const userById = await this.userRepo.findById(userId);
+        if (!userById) {
+            throw new NotFoundError('User', userId);
+        }
+
+        // Get user with password hash
+        const userWithPassword = await this.userRepo.findByEmail(userById.email);
+        if (!userWithPassword) {
+            throw new NotFoundError('User', userId);
+        }
+
+        // Check if this is a forced password change (admin-created user first login)
+        const isForcePasswordChange = (userById as any).force_password_change === true;
+
+        // If not a forced change, verify current password
+        if (!isForcePasswordChange) {
+            if (!currentPassword) {
+                throw new BadRequestError('Current password is required');
             }
-            // Get password hash for verification
-            const userWithPassword = await this.userRepo.findByEmail(userById.email);
-            if (!userWithPassword) {
-                throw new NotFoundError('User', userId);
-            }
-            
             const validPass = await argon2.verify(userWithPassword.password_hash, currentPassword);
             if (!validPass) {
                 throw new UnauthorizedError('Current password is incorrect');
             }
-
-            const newHash = await argon2.hash(newPassword);
-            await this.userRepo.updatePassword(userId, newHash);
-
-            // Revoke all refresh tokens (force re-login)
-            await this.refreshTokenRepo.revokeAllForUser(userId, 'password_change');
-            
-            // Send notification via notification service
-            await publishNotification({
-                type: 'password_changed',
-                to: userById.email,
-                data: { userName: userById.full_name },
-                metadata: { userId, source: 'auth-service' },
-            });
-
-            logger.info('Password changed', { userId });
-            return { success: true };
-        }
-
-        const validPass = await argon2.verify(user.password_hash, currentPassword);
-        if (!validPass) {
-            throw new UnauthorizedError('Current password is incorrect');
         }
 
         // Validate new password against configured policies
@@ -395,16 +381,16 @@ export class AuthService {
 
         // Revoke all refresh tokens (force re-login)
         await this.refreshTokenRepo.revokeAllForUser(userId, 'password_change');
-        
+
         // Send notification via notification service
         await publishNotification({
             type: 'password_changed',
-            to: user.email,
-            data: { userName: user.full_name },
+            to: userById.email,
+            data: { userName: userById.full_name },
             metadata: { userId, source: 'auth-service' },
         });
 
-        logger.info('Password changed', { userId });
+        logger.info('Password changed', { userId, isForcePasswordChange });
         return { success: true };
     }
 
@@ -413,10 +399,10 @@ export class AuthService {
      */
     async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
         const user = await this.userRepo.findByEmail(email);
-        
+
         // Always return success message to prevent email enumeration
         const successMessage = 'If an account exists with this email, a password reset code will be sent.';
-        
+
         if (!user) {
             logger.warn('Password reset requested for non-existent email', { email });
             return { success: true, message: successMessage };
@@ -458,7 +444,7 @@ export class AuthService {
      */
     async resetPassword(email: string, code: string, newPassword: string): Promise<{ success: boolean }> {
         const user = await this.userRepo.findByEmail(email);
-        
+
         if (!user) {
             throw new BadRequestError('Invalid email or verification code');
         }
@@ -475,7 +461,7 @@ export class AuthService {
 
         // Revoke all refresh tokens
         await this.refreshTokenRepo.revokeAllForUser(user.id, 'password_reset');
-        
+
         // Send notification via notification service
         await publishNotification({
             type: 'password_changed',
@@ -640,5 +626,12 @@ export class AuthService {
 
         logger.info('Cleanup completed', { tokens, otps, sessions });
         return { tokens, otps, sessions };
+    }
+
+    /**
+     * Get password policies for frontend validation
+     */
+    async getPasswordPolicies() {
+        return passwordValidationService.getPolicies();
     }
 }

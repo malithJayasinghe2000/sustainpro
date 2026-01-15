@@ -9,9 +9,11 @@ import { Input } from '@/components/ui/Input';
 import { RichSelect } from '@/components/ui/RichSelect';
 import { Textarea } from '@/components/ui/Textarea';
 import SetupWizard from '@/components/SetupWizard';
-import { PasswordInput, PasswordStrength } from '@/components/ui/PasswordInput';
+import { PasswordInput } from '@/components/ui/PasswordInput';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
 import { getTimezones } from '@/lib/timezones';
 import { useSettings } from '@/contexts/SettingsContext';
+import { toast } from 'sonner';
 
 interface WizardStep {
     id: 'PROFILE' | 'BRANDING' | 'LOCATION' | 'ADMIN' | 'REVIEW';
@@ -72,6 +74,9 @@ export default function NewOrganizationPage() {
         admin_full_name: ''
     });
 
+    // Validating password against policies
+    const { isValid: isPasswordValid } = usePasswordValidation(newOrg.admin_password);
+
     // Update timezone when settings load
     useEffect(() => {
         if (settings?.default_timezone && newOrg.timezone === 'UTC') {
@@ -99,7 +104,7 @@ export default function NewOrganizationPage() {
             if (!newOrg.admin_full_name.trim()) errors.admin_full_name = 'Admin full name is required';
             if (!newOrg.contact_email.trim()) errors.contact_email = 'Admin email is required';
             if (!newOrg.admin_password) errors.admin_password = 'Password is required';
-            if (newOrg.admin_password.length < 8) errors.admin_password = 'Password must be at least 8 characters';
+            if (!isPasswordValid) errors.admin_password = 'Password does not meet requirements';
             if (!newOrg.admin_password_confirm) errors.admin_password_confirm = 'Please confirm password';
             if (newOrg.admin_password !== newOrg.admin_password_confirm) {
                 errors.admin_password_confirm = 'Passwords do not match';
@@ -132,7 +137,9 @@ export default function NewOrganizationPage() {
                     const uploadResponse = await uploadApi.uploadImage(logoFile);
                     logoUrl = uploadResponse.url;
                 } catch (uploadError: any) {
-                    setFieldErrors({ logo: uploadError.response?.data?.error || 'Failed to upload logo' });
+                    const errorMsg = uploadError.response?.data?.error || 'Failed to upload logo';
+                    setFieldErrors({ logo: errorMsg });
+                    toast.error('Logo Upload Failed', { description: errorMsg });
                     setIsLoading(false);
                     return; // Don't proceed if logo upload fails
                 }
@@ -160,9 +167,15 @@ export default function NewOrganizationPage() {
                 URL.revokeObjectURL(logoPreview);
             }
 
+            toast.success('Organization Created', {
+                description: `${newOrg.name} has been created successfully. Admin credentials have been sent via email.`
+            });
+
             router.push('/admin/organizations');
         } catch (err: any) {
-            setFieldErrors({ submit: err.response?.data?.error || 'Failed to create organization' });
+            const errorMsg = err.response?.data?.error || 'Failed to create organization';
+            setFieldErrors({ submit: errorMsg });
+            toast.error('Creation Failed', { description: errorMsg });
         } finally {
             setIsLoading(false);
         }
@@ -403,15 +416,8 @@ export default function NewOrganizationPage() {
                         />
                     </div>
 
-                    {/* Password Strength - Full Width */}
-                    {newOrg.admin_password && (
-                        <div className="pt-2 border-t border-dashed border-border/50">
-                            <PasswordStrength
-                                password={newOrg.admin_password}
-                                confirmPassword={newOrg.admin_password_confirm}
-                            />
-                        </div>
-                    )}
+                    {/* Password Requirements - Dynamic from API */}
+                    <PasswordRequirements password={newOrg.admin_password} />
                 </div>
                 {/* Right Column - 40% - Role Card */}
                 <div className="lg:col-span-2">

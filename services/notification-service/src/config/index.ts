@@ -26,7 +26,7 @@ export const config = {
 
     // RabbitMQ - Message Broker
     rabbitmq: {
-        url: process.env.RABBITMQ_URL || 'amqp://sustainpro:sustainpro_dev@localhost:5672',
+        url: process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5700',
         enabled: process.env.RABBITMQ_ENABLED !== 'false',
         // Queue names for different notification types
         queues: {

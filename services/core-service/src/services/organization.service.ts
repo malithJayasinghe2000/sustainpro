@@ -14,8 +14,11 @@ export class OrganizationService {
     /**
      * Get all organizations
      */
-    async getAll(organizationId?: string | null): Promise<Organization[]> {
-        return this.repo.findAll(organizationId);
+    async getAll(
+        organizationId?: string | null,
+        params?: { page?: number; limit?: number; search?: string }
+    ): Promise<{ data: Organization[]; total: number }> {
+        return this.repo.findAll(organizationId, params);
     }
 
     /**

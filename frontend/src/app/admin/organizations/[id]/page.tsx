@@ -159,7 +159,7 @@ export default function OrganizationDetailsPage() {
                 organizationId: org.id,
                 role: newUserForm.role
             });
-            toast.success('User created successfully');
+            toast.success('User created! They will receive login credentials via email.');
             setShowCreateUserModal(false);
             setNewUserForm({ email: '', full_name: '', password: '', role: 'ORG_ADMIN' });
 
@@ -471,10 +471,10 @@ export default function OrganizationDetailsPage() {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${user.is_super_admin
-                                                            ? 'bg-purple-500/10 text-purple-600 border-purple-500/20'
-                                                            : user.role_name
-                                                                ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
-                                                                : 'bg-gray-500/10 text-gray-500 border-gray-500/20'
+                                                        ? 'bg-purple-500/10 text-purple-600 border-purple-500/20'
+                                                        : user.role_name
+                                                            ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                                                            : 'bg-gray-500/10 text-gray-500 border-gray-500/20'
                                                         }`}>
                                                         {user.is_super_admin
                                                             ? 'Super Admin'

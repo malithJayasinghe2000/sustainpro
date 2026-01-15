@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight } from 'lucide-react';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
+import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight, Info } from 'lucide-react';
 import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { RichSelect } from '@/components/ui/RichSelect';
 import { hasRole } from '@/lib/roles';
 import SetupWizard from '@/components/SetupWizard';
+import { toast } from 'sonner';
 
 interface WizardStep {
     id: 'ROLE' | 'CONTEXT' | 'ACCOUNT' | 'REVIEW';
@@ -29,7 +31,7 @@ function NewUserPageContent() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Form State
+    // Form State (password is REQUIRED - will be sent to user via email)
     const [formData, setFormData] = useState({
         role: '',
         organization_id: '',
@@ -38,9 +40,12 @@ function NewUserPageContent() {
         service_id: '',
         email: '',
         full_name: '',
-        password: '',
+        password: '', // REQUIRED - admin sets password, sent to user via email
         confirmPassword: ''
     });
+
+    // Validating password against policies
+    const { isValid: isPasswordValid } = usePasswordValidation(formData.password);
 
     // Reference Data
     const [orgs, setOrgs] = useState<any[]>([]);
@@ -57,7 +62,7 @@ function NewUserPageContent() {
 
     useEffect(() => {
         if (currentUser?.is_super_admin) {
-            organizationsApi.getAll().then(setOrgs).catch(console.error);
+            organizationsApi.getAll({ limit: 1000 }).then(res => setOrgs(res.data)).catch(console.error);
         } else if (currentUser?.organization_id) {
             // Pre-select org for non-super admins
             setFormData(prev => ({ ...prev, organization_id: currentUser.organization_id }));
@@ -436,10 +441,25 @@ function NewUserPageContent() {
                     </div>
                 </div>
             </div>
+
+            {/* Password Requirements */}
+            <PasswordRequirements password={formData.password} />
         </div>
     );
 
     const handleSubmit = async () => {
+        // Password is REQUIRED
+        if (!formData.password || formData.password.trim() === '') {
+            setError("Password is required. This password will be sent to the user via email.");
+            return;
+        }
+
+        if (!isPasswordValid) {
+            setError("Password does not meet requirements.");
+            return;
+        }
+
+        // Password must match confirmation
         if (formData.password !== formData.confirmPassword) {
             setError("Passwords do not match");
             return;
@@ -448,10 +468,13 @@ function NewUserPageContent() {
         try {
             setIsLoading(true);
             setError('');
+
+            // Send form data - password is sent to user via email
             await usersApi.create(formData);
 
-            // Redirect based on role? Or just standard users page?
-            // "it showld be that current user link" -> Likely /users
+            // Show success message
+            toast.success('User created! They will receive login credentials via email.');
+
             router.push('/users');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to create user');

@@ -207,7 +207,8 @@ router.post(
     '/change-password',
     authenticateToken,
     [
-        body('currentPassword').notEmpty().withMessage('Current password required'),
+        // currentPassword is optional when force_password_change is true (handled in service)
+        body('currentPassword').optional(),
         body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
     ],
     authController.changePassword
@@ -377,5 +378,18 @@ router.post(
     ],
     authController.disable2FA
 );
+
+/**
+ * @swagger
+ * /auth/password-policy:
+ *   get:
+ *     tags: [Authentication]
+ *     summary: Get password policy
+ *     description: Get password requirements for validation (public endpoint)
+ *     responses:
+ *       200:
+ *         description: Password policy retrieved
+ */
+router.get('/password-policy', authController.getPasswordPolicy);
 
 export default router;

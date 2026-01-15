@@ -6,6 +6,11 @@ export const config = {
     port: parseInt(process.env.PORT || '5000'),
     nodeEnv: process.env.NODE_ENV || 'development',
 
+    // App URLs
+    app: {
+        frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+    },
+
     // Database
     database: {
         connectionString: process.env.DATABASE_URL || 'postgresql://sustainpro:sustainpro_dev@localhost:5432/sustainpro',
@@ -54,7 +59,7 @@ export const config = {
 
     // RabbitMQ (for notification publishing)
     rabbitmq: {
-        url: process.env.RABBITMQ_URL || 'amqp://sustainpro:sustainpro_dev@localhost:5672',
+        url: process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5700',
         enabled: process.env.RABBITMQ_ENABLED !== 'false',
     },
 

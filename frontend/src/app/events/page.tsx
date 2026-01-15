@@ -32,8 +32,8 @@ export default function EventsPage() {
 
     const fetchOrgs = async () => {
         try {
-            const data = await organizationsApi.getAll();
-            setOrgs(Array.isArray(data) ? data : []);
+            const response = await organizationsApi.getAll({ limit: 1000 });
+            setOrgs(response.data || []);
         } catch (err) {
             console.error('Failed to fetch orgs', err);
         }

@@ -59,13 +59,24 @@ interface GenericEmailNotification {
     text?: string;
 }
 
-type NotificationPayload = 
-    | OtpNotification 
-    | PasswordChangedNotification 
-    | TwoFactorNotification 
-    | WelcomeNotification 
+interface WelcomeCredentialsNotification {
+    type: 'welcome_credentials';
+    email: string;
+    userName: string;
+    userEmail: string;
+    tempPassword: string;
+    loginUrl: string;
+    isTemporaryPassword: boolean;
+}
+
+type NotificationPayload =
+    | OtpNotification
+    | PasswordChangedNotification
+    | TwoFactorNotification
+    | WelcomeNotification
     | AlertNotification
-    | GenericEmailNotification;
+    | GenericEmailNotification
+    | WelcomeCredentialsNotification;
 
 /**
  * Handle incoming notification message from RabbitMQ
@@ -97,7 +108,7 @@ async function handleEmailNotification(routingKey: string, payload: any): Promis
     try {
         // Determine notification type from routing key or payload
         const notificationType = payload.type || extractTypeFromRoutingKey(routingKey);
-        
+
         let result;
 
         switch (notificationType) {
@@ -141,6 +152,10 @@ async function handleEmailNotification(routingKey: string, payload: any): Promis
                 });
                 break;
 
+            case 'welcome_credentials':
+                result = await sendWelcomeCredentialsEmail(payload);
+                break;
+
             default:
                 logger.warn('Unknown email notification type', { notificationType, routingKey });
                 return false;
@@ -148,7 +163,7 @@ async function handleEmailNotification(routingKey: string, payload: any): Promis
 
         return result.success;
     } catch (error) {
-        logger.error('Error handling email notification', { 
+        logger.error('Error handling email notification', {
             error: (error as Error).message,
             routingKey,
         });
@@ -163,7 +178,7 @@ async function sendOtpEmail(payload: any) {
     const purpose = payload.purpose || payload.data?.purpose || 'login_2fa';
     const email = payload.to || payload.email; // Support both 'to' and 'email' fields
     const code = payload.code || payload.data?.code; // Support both direct and nested code
-    
+
     const html = templates.generateOtpEmailHtml({
         code,
         purpose,
@@ -198,7 +213,7 @@ async function sendOtpEmail(payload: any) {
  */
 async function sendPasswordChangedEmail(payload: any) {
     const email = payload.to || payload.email; // Support both 'to' and 'email' fields
-    
+
     const html = templates.generatePasswordChangedHtml({
         recipientName: payload.recipientName || payload.data?.userName,
         ipAddress: payload.ipAddress,
@@ -222,7 +237,7 @@ async function sendPasswordChangedEmail(payload: any) {
  */
 async function sendTwoFactorEmail(payload: any) {
     const email = payload.to || payload.email; // Support both 'to' and 'email' fields
-    
+
     const html = templates.generateTwoFactorStatusHtml({
         enabled: payload.enabled,
         recipientName: payload.recipientName || payload.data?.userName,
@@ -249,7 +264,7 @@ async function sendTwoFactorEmail(payload: any) {
  */
 async function sendWelcomeEmail(payload: any) {
     const email = payload.to || payload.email; // Support both 'to' and 'email' fields
-    
+
     const html = templates.generateWelcomeHtml({
         recipientName: payload.recipientName || payload.data?.userName,
         organizationName: payload.organizationName,
@@ -308,6 +323,31 @@ async function sendAlertEmail(payload: any) {
 }
 
 /**
+ * Send welcome credentials email (for admin-created users)
+ */
+async function sendWelcomeCredentialsEmail(payload: any) {
+    const email = payload.to || payload.email;
+
+    const data = {
+        userName: payload.data?.userName || payload.userName || 'User',
+        userEmail: payload.data?.userEmail || payload.userEmail || email,
+        tempPassword: payload.data?.tempPassword || payload.tempPassword,
+        loginUrl: payload.data?.loginUrl || payload.loginUrl || 'https://sustainpro.io/login',
+        isTemporaryPassword: payload.data?.isTemporaryPassword ?? payload.isTemporaryPassword ?? true,
+    };
+
+    const html = templates.generateWelcomeCredentialsHtml(data);
+    const text = templates.generateWelcomeCredentialsText(data);
+
+    return emailService.send({
+        to: email,
+        subject: 'Your SustainPro Account Has Been Created',
+        html,
+        text,
+    });
+}
+
+/**
  * Extract notification type from routing key
  */
 function extractTypeFromRoutingKey(routingKey: string): string {
@@ -315,21 +355,21 @@ function extractTypeFromRoutingKey(routingKey: string): string {
     // notification.email.otp -> otp
     // user.password_changed -> password_changed
     // alert.critical -> alert.critical
-    
+
     const parts = routingKey.split('.');
-    
+
     if (parts[0] === 'notification' && parts.length >= 3) {
         return parts[2];
     }
-    
+
     if (parts[0] === 'user' && parts.length >= 2) {
         return parts[1];
     }
-    
+
     if (parts[0] === 'alert') {
         return routingKey;
     }
-    
+
     return routingKey;
 }
 

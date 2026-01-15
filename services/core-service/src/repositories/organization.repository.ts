@@ -7,15 +7,56 @@ export class OrganizationRepository {
     /**
      * Get all organizations
      */
-    async findAll(organizationId?: string | null): Promise<Organization[]> {
-        const where = organizationId ? { id: organizationId } : {};
+    async findAll(
+        organizationId?: string | null,
+        params?: { page?: number; limit?: number; search?: string }
+    ): Promise<{ data: Organization[]; total: number }> {
+        const where: any = organizationId ? { id: organizationId } : {};
 
-        const orgs = await prisma.sps_organizations.findMany({
-            where,
-            orderBy: { created_at: 'desc' }
-        });
+        if (params?.search) {
+            const searchLower = params.search.toLowerCase();
+            if (!organizationId) {
+                // Only filter by fields if not fetching a specific ID (or combine?)
+                // If specific ID is requested, search is redundant but harmless unless filtered out
+                where.OR = [
+                    { name: { contains: params.search, mode: 'insensitive' } },
+                    { code: { contains: params.search, mode: 'insensitive' } },
+                    { industry: { contains: params.search, mode: 'insensitive' } },
+                    { slug: { contains: params.search, mode: 'insensitive' } }
+                ];
+            }
+        }
 
-        return orgs as any as Organization[];
+        // Default pagination
+        const page = params?.page || 1;
+        const limit = params?.limit || 10;
+        const skip = (page - 1) * limit;
+
+        const [orgs, total] = await Promise.all([
+            prisma.sps_organizations.findMany({
+                where,
+                orderBy: { created_at: 'desc' },
+                skip,
+                take: limit,
+                include: {
+                    _count: {
+                        select: {
+                            sps_users: true,
+                            sps_devices: true
+                        }
+                    }
+                }
+            }),
+            prisma.sps_organizations.count({ where })
+        ]);
+
+        const data = orgs.map(org => ({
+            ...org,
+            user_count: org._count.sps_users,
+            device_count: org._count.sps_devices,
+        })) as any as Organization[];
+
+        return { data, total };
     }
 
     /**
@@ -28,16 +69,38 @@ export class OrganizationRepository {
         let org;
         if (isUuid) {
             org = await prisma.sps_organizations.findUnique({
-                where: { id: idOrCode }
+                where: { id: idOrCode },
+                include: {
+                    _count: {
+                        select: {
+                            sps_users: true,
+                            sps_devices: true
+                        }
+                    }
+                }
             });
         } else {
             // Try finding by code
             org = await prisma.sps_organizations.findFirst({
-                where: { code: idOrCode }
+                where: { code: idOrCode },
+                include: {
+                    _count: {
+                        select: {
+                            sps_users: true,
+                            sps_devices: true
+                        }
+                    }
+                }
             });
         }
 
-        return org as any as Organization | null;
+        if (!org) return null;
+
+        return {
+            ...org,
+            user_count: org._count.sps_users,
+            device_count: org._count.sps_devices
+        } as any as Organization;
     }
 
     /**
@@ -45,10 +108,24 @@ export class OrganizationRepository {
      */
     async findBySlug(slug: string): Promise<Organization | null> {
         const org = await prisma.sps_organizations.findFirst({
-            where: { slug }
+            where: { slug },
+            include: {
+                _count: {
+                    select: {
+                        sps_users: true,
+                        sps_devices: true
+                    }
+                }
+            }
         });
 
-        return org as any as Organization | null;
+        if (!org) return null;
+
+        return {
+            ...org,
+            user_count: org._count.sps_users,
+            device_count: org._count.sps_devices
+        } as any as Organization;
     }
 
     /**

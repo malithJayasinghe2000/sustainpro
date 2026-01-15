@@ -13,11 +13,22 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
         const orgId = req.user?.organization_id;
 
         // Super admin sees all, others see only their org
-        const organizations = await orgService.getAll(isSuperAdmin ? null : orgId);
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const search = req.query.search as string;
+
+        const { data, total } = await orgService.getAll(
+            isSuperAdmin ? null : orgId,
+            { page, limit, search }
+        );
 
         res.json({
             success: true,
-            data: organizations,
+            data,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
         });
     } catch (error) {
         next(error);

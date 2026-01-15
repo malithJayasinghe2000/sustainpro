@@ -2,7 +2,7 @@ import amqp, { ChannelModel, Channel } from 'amqplib';
 import { logger } from './logger';
 
 export interface NotificationMessage {
-    type: 'otp' | 'password_reset' | 'password_changed' | '2fa_enabled' | '2fa_disabled' | 'welcome' | 'account_locked' | 'login_alert' | 'custom';
+    type: 'otp' | 'password_reset' | 'password_changed' | '2fa_enabled' | '2fa_disabled' | 'welcome' | 'welcome_credentials' | 'account_locked' | 'login_alert' | 'custom';
     to: string;
     data: Record<string, any>;
     template?: string;
@@ -92,7 +92,7 @@ class NotificationPublisher {
 
         this.reconnectAttempts++;
         logger.info(`[RabbitMQ Publisher] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.config.maxRetries}`);
-        
+
         setTimeout(() => {
             this.connect();
         }, this.config.reconnectInterval);

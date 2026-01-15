@@ -26,6 +26,8 @@ export interface Organization {
     theme_config: Record<string, any>;
     created_at: Date;
     updated_at: Date;
+    user_count?: number;
+    device_count?: number;
 }
 
 export type OrganizationType = 'CLIENT' | 'PROVIDER' | 'PARTNER';

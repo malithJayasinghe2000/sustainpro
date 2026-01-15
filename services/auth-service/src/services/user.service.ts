@@ -1,18 +1,47 @@
 import argon2 from 'argon2';
+import crypto from 'crypto';
 import { UserRepository } from '../repositories/user.repository';
 import { passwordValidationService } from './password-validation.service';
 import {
     NotFoundError,
     BadRequestError,
     ConflictError,
-    createLogger
+    createLogger,
+    publishNotification,
 } from '@sustainpro/shared-utils';
 import { CreateUserDto, UpdateUserDto, User } from '@sustainpro/shared-types';
+import { config } from '../config';
 
 const logger = createLogger({ service: 'auth-service' });
 
 export class UserService {
     private userRepo = new UserRepository();
+
+    /**
+     * Generate a secure random password
+     */
+    private generateTempPassword(length: number = 12): string {
+        const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+        const numbers = '0123456789';
+        const special = '@#$%&*!';
+        const all = uppercase + lowercase + numbers + special;
+
+        // Ensure at least one of each type
+        let password = '';
+        password += uppercase[crypto.randomInt(0, uppercase.length)];
+        password += lowercase[crypto.randomInt(0, lowercase.length)];
+        password += numbers[crypto.randomInt(0, numbers.length)];
+        password += special[crypto.randomInt(0, special.length)];
+
+        // Fill the rest randomly
+        for (let i = 4; i < length; i++) {
+            password += all[crypto.randomInt(0, all.length)];
+        }
+
+        // Shuffle the password
+        return password.split('').sort(() => crypto.randomInt(-1, 2)).join('');
+    }
 
     /**
      * Get all users (filtered by org for non-super-admins)
@@ -33,24 +62,35 @@ export class UserService {
     }
 
     /**
-     * Create new user
+     * Create new user (admin-created)
+     * - Admin must provide password
+     * - Always send welcome email with credentials
+     * - Always set force_password_change = true (user must set their own password on first login)
      */
-    async create(data: CreateUserDto & { organizationId?: string }): Promise<User> {
+    async create(data: CreateUserDto & { organizationId?: string; sendWelcomeEmail?: boolean }): Promise<User> {
         // Check for existing email
         const existing = await this.userRepo.findByEmail(data.email);
         if (existing) {
             throw new ConflictError('Email already in use');
         }
 
+        // Password is REQUIRED for admin-created users
+        if (!data.password || data.password.trim() === '') {
+            throw new BadRequestError('Password is required');
+        }
+
+        const passwordToUse = data.password;
+
         // Validate password against configured policies
-        await passwordValidationService.validatePasswordStrength(data.password);
+        await passwordValidationService.validatePasswordStrength(passwordToUse);
 
         // Hash password
-        const passwordHash = await argon2.hash(data.password);
+        const passwordHash = await argon2.hash(passwordToUse);
 
         // Generate user code
         const code = await this.generateUserCode();
 
+        // Create user with force_password_change = true (ALWAYS for admin-created users)
         const user = await this.userRepo.create({
             email: data.email,
             password_hash: passwordHash,
@@ -58,9 +98,48 @@ export class UserService {
             organization_id: data.organizationId || data.organization_id,
             timezone: data.timezone,
             code,
+            force_password_change: true, // User MUST change password on first login
         });
 
-        logger.info('User created', { userId: user.id, email: user.email });
+        // ALWAYS send welcome email with credentials
+        if (data.sendWelcomeEmail !== false) {
+            try {
+                const loginUrl = config.app?.frontendUrl
+                    ? `${config.app.frontendUrl}/login`
+                    : 'http://localhost:3000/login';
+
+                const published = await publishNotification({
+                    type: 'welcome_credentials',
+                    to: data.email,
+                    data: {
+                        userName: data.full_name || data.email.split('@')[0],
+                        userEmail: data.email,
+                        tempPassword: passwordToUse, // Send the admin-entered password
+                        loginUrl: loginUrl,
+                        isTemporaryPassword: true, // Always true - user must change it
+                    },
+                    metadata: { userId: user.id, source: 'auth-service' },
+                });
+
+                if (published) {
+                    logger.info('Welcome email notification published', { userId: user.id, email: user.email });
+                } else {
+                    logger.warn('Failed to publish welcome email notification (RabbitMQ may be down or disabled)', { userId: user.id });
+                }
+            } catch (emailError) {
+                // Log error but don't fail user creation
+                logger.error('Failed to send welcome email', {
+                    userId: user.id,
+                    error: (emailError as Error).message
+                });
+            }
+        }
+
+        logger.info('User created', {
+            userId: user.id,
+            email: user.email,
+            forcePasswordChange: true
+        });
 
         return user;
     }
@@ -133,3 +212,4 @@ export class UserService {
         return `SPS-USR-${timestamp}`;
     }
 }
+

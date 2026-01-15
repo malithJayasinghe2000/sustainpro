@@ -4,7 +4,7 @@ import { BadRequestError } from '@sustainpro/shared-utils';
 const prisma = getPrismaClient();
 const CONFIG_ID = 'sps_password_policy';
 
-interface PasswordPolicies {
+export interface PasswordPolicies {
     min_length: number;
     max_length: number;
     require_uppercase: boolean;

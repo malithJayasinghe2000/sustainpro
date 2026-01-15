@@ -100,11 +100,18 @@ export class UserRepository {
 
         return users.map((user: any) => {
             const { password_hash, ...userWithoutPassword } = user;
+            // Map role assignments to the format expected by frontend
+            const roles = (user.sps_role_assignments || []).map((ra: any) => ({
+                role: ra.role,
+                org_id: ra.org_id,
+                event_id: ra.event_id,
+            }));
             // Get the primary role (first role assignment)
             const primaryRoleCode = user.sps_role_assignments?.[0]?.role;
             return {
                 ...userWithoutPassword,
                 org_name: user.sps_organizations?.name,
+                roles, // Array of role assignments for frontend
                 role_code: primaryRoleCode || null,
                 role_name: primaryRoleCode ? (roleDisplayNames[primaryRoleCode] || primaryRoleCode) : null,
             } as User;
@@ -121,6 +128,7 @@ export class UserRepository {
         organization_id?: string;
         timezone?: string;
         code?: string;
+        force_password_change?: boolean;
     }): Promise<User> {
         const user = await prisma.sps_users.create({
             data: {
@@ -130,6 +138,7 @@ export class UserRepository {
                 organization_id: data.organization_id,
                 timezone: data.timezone || 'UTC',
                 code: data.code,
+                force_password_change: data.force_password_change ?? false,
             },
         });
 
@@ -237,10 +246,10 @@ export class UserRepository {
             data: {
                 user_id: userId,
                 role,
-                org_id: context.org_id,
-                event_id: context.event_id,
-                dept_id: context.dept_id,
-                service_id: context.service_id,
+                org_id: context.org_id || null, // Convert empty string to null
+                event_id: context.event_id || null,
+                dept_id: context.dept_id || null,
+                service_id: context.service_id || null,
             },
         }) as any as RoleAssignment;
     }
@@ -265,7 +274,7 @@ export class UserRepository {
     }
 
     /**
-     * Update user password
+     * Update user password (also clears force_password_change flag)
      */
     async updatePassword(userId: string, passwordHash: string): Promise<void> {
         await prisma.sps_users.update({
@@ -273,6 +282,7 @@ export class UserRepository {
             data: {
                 password_hash: passwordHash,
                 password_changed_at: new Date(),
+                force_password_change: false, // Clear the flag after password change
                 updated_at: new Date(),
             },
         });

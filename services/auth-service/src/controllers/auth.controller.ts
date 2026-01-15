@@ -31,7 +31,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
         const { email, password } = req.body;
         const clientInfo = getClientInfo(req);
-        
+
         const loginRequest: LoginRequest = {
             email,
             password,
@@ -130,7 +130,7 @@ export const verify2FA = async (req: Request, res: Response, next: NextFunction)
  */
 export const logout = async (req: Request, res: Response): Promise<void> => {
     const refreshToken = req.cookies?.refresh_token;
-    
+
     if (refreshToken) {
         await authService.logout(refreshToken);
     }
@@ -563,6 +563,30 @@ export const disable2FA = async (req: Request, res: Response, next: NextFunction
         res.json({
             success: true,
             message: 'Two-factor authentication disabled',
+        });
+    } catch (error) {
+        if (error instanceof AppError) {
+            res.status(error.statusCode).json({
+                success: false,
+                error: error.message,
+            });
+            return;
+        }
+        next(error);
+    }
+};
+
+/**
+ * GET /api/v1/auth/password-policy
+ * Get password policy requirements (public endpoint for frontend validation)
+ */
+export const getPasswordPolicy = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const policies = await authService.getPasswordPolicies();
+
+        res.json({
+            success: true,
+            policies,
         });
     } catch (error) {
         if (error instanceof AppError) {
