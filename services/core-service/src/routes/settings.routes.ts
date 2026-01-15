@@ -239,6 +239,15 @@ router.get('/smtp', authenticateToken, requireSuperAdmin, settingsController.get
  */
 router.put('/smtp', authenticateToken, requireSuperAdmin, settingsController.updateSmtpSettings);
 
+/**
+ * @swagger
+ * /settings/smtp/test:
+ *   post:
+ *     tags: [Settings]
+ *     summary: Send test email
+ */
+router.post('/smtp/test', authenticateToken, requireSuperAdmin, settingsController.sendTestEmail);
+
 // -------------------------------------------------------------------------
 // NOTIFICATION SETTINGS
 // -------------------------------------------------------------------------

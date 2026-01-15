@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     Save, Settings, Shield, Clock, Key, Lock, Smartphone,
     Globe, Mail, Bell, FileText, RefreshCw, AlertTriangle,
-    Eye, EyeOff, Check, X, Palette, Languages
+    Eye, EyeOff, Check, X, Palette, Languages, Loader2, Send
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -208,6 +208,22 @@ export default function SystemSettingsPage() {
     const [twoFactorConfig, setTwoFactorConfig] = useState<Partial<TwoFactorConfig>>({});
     const [apiSecurityConfig, setApiSecurityConfig] = useState<Partial<ApiSecurityConfig>>({});
     const [smtpSettings, setSmtpSettings] = useState<Partial<SmtpSettings>>({});
+    const [testEmailRecipient, setTestEmailRecipient] = useState('');
+    const [isTestingEmail, setIsTestingEmail] = useState(false);
+
+    const handleSendTestEmail = async () => {
+        if (!testEmailRecipient) return;
+        try {
+            setIsTestingEmail(true);
+            await settingsApi.sendTestEmail(testEmailRecipient);
+            toast.success(`Test email sent to ${testEmailRecipient}`);
+        } catch (error) {
+            toast.error('Failed to send test email');
+            console.error(error);
+        } finally {
+            setIsTestingEmail(false);
+        }
+    };
     const [notificationSettings, setNotificationSettings] = useState<Partial<NotificationSettings>>({});
 
     // Get all timezones for dropdown
@@ -1186,6 +1202,28 @@ export default function SystemSettingsPage() {
                         placeholder="test@example.com"
                     />
                 )}
+            </div>
+
+            <div className="pt-4 border-t border-border mt-4">
+                <h3 className="text-sm font-medium mb-4">Connection Test</h3>
+                <div className="flex items-end gap-4">
+                    <div className="flex-1">
+                        <InputField
+                            label="Recipient Email"
+                            value={testEmailRecipient}
+                            onChange={(v: string) => setTestEmailRecipient(v)}
+                            placeholder="you@company.com"
+                        />
+                    </div>
+                    <button
+                        onClick={handleSendTestEmail}
+                        disabled={!testEmailRecipient || isTestingEmail}
+                        className="flex items-center gap-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg font-medium transition-colors h-[42px] mb-[2px]"
+                    >
+                        {isTestingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        Send Test
+                    </button>
+                </div>
             </div>
         </div>
     );

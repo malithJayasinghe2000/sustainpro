@@ -485,6 +485,9 @@ export const settingsApi = {
         const response = await apiClient.put('/settings/smtp', data);
         return response.data.data;
     },
+    sendTestEmail: async (recipient: string): Promise<void> => {
+        await apiClient.post('/settings/smtp/test', { recipient });
+    },
 
     // Notification Settings
     getNotificationSettings: async (): Promise<NotificationSettings> => {

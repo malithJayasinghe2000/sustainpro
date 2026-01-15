@@ -2,8 +2,9 @@ import amqp, { ChannelModel, Channel } from 'amqplib';
 import { logger } from './logger';
 
 export interface NotificationMessage {
-    type: 'otp' | 'password_reset' | 'password_changed' | '2fa_enabled' | '2fa_disabled' | 'welcome' | 'welcome_credentials' | 'account_locked' | 'login_alert' | 'custom';
+    type: 'otp' | 'password_reset' | 'password_changed' | '2fa_enabled' | '2fa_disabled' | 'welcome' | 'welcome_credentials' | 'account_locked' | 'login_alert' | 'custom' | 'generic';
     to: string;
+    email?: string;
     data: Record<string, any>;
     template?: string;
     priority?: 'low' | 'normal' | 'high';
