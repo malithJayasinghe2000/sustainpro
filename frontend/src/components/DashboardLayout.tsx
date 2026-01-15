@@ -93,6 +93,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
         { name: 'Services', icon: Layers, path: '/admin/services' }, // Added Services menu item
         { name: 'Device Models', icon: Component, path: '/admin/device-models' },
         { name: 'Global Reports', icon: FileText, path: '/admin/reports' },
+        { name: 'Direct Profile', icon: User, path: '/profile' },
         { name: 'System Settings', icon: Settings, path: '/admin/settings' },
         { name: 'Access Control (RBAC)', icon: Shield, path: '/admin/rbac' },
         { name: 'Admin Settings', icon: Shield, path: '/admin/platform-settings' },

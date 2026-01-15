@@ -46,8 +46,27 @@ export class UserService {
     /**
      * Get all users (filtered by org for non-super-admins)
      */
-    async getAll(organizationId?: string | null): Promise<User[]> {
-        return this.userRepo.findAll(organizationId || undefined);
+    async getAll(
+        organizationId?: string | null,
+        page: number = 1,
+        limit: number = 20,
+        search?: string,
+        role?: string
+    ): Promise<{ users: User[], total: number, pages: number }> {
+        const skip = (page - 1) * limit;
+        const { users, total } = await this.userRepo.findAll({
+            organizationId: organizationId || undefined,
+            skip,
+            take: limit,
+            search,
+            role
+        });
+
+        return {
+            users,
+            total,
+            pages: Math.ceil(total / limit)
+        };
     }
 
     /**
@@ -198,7 +217,11 @@ export class UserService {
      * Get users who can be managers (for assignment dropdowns)
      */
     async getManagerCandidates(organizationId?: string): Promise<User[]> {
-        const users = await this.userRepo.findAll(organizationId);
+        // No pagination for dropdown candidates (or use high limit)
+        const { users } = await this.userRepo.findAll({
+            organizationId,
+            take: 1000
+        });
         // Filter to active users only
         return users.filter(u => u.is_active);
     }

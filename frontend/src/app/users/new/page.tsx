@@ -4,13 +4,26 @@ import { useState, useEffect, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
-import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight, Info } from 'lucide-react';
-import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi } from '@/lib/api';
+import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight, Info, Eye, Truck, ShieldAlert, LucideIcon } from 'lucide-react';
+import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi, rolesApi, Role } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { RichSelect } from '@/components/ui/RichSelect';
 import { hasRole } from '@/lib/roles';
 import SetupWizard from '@/components/SetupWizard';
 import { toast } from 'sonner';
+
+// Icon mapping for dynamic role icons from database
+const iconMap: Record<string, LucideIcon> = {
+    Building2,
+    Calendar,
+    Users,
+    Activity,
+    Settings,
+    Briefcase,
+    Eye,
+    Truck,
+    ShieldAlert,
+};
 
 interface WizardStep {
     id: 'ROLE' | 'CONTEXT' | 'ACCOUNT' | 'REVIEW';
@@ -53,8 +66,22 @@ function NewUserPageContent() {
     const [depts, setDepts] = useState<any[]>([]);
     const [services, setServices] = useState<any[]>([]);
     const [serviceDefs, setServiceDefs] = useState<any[]>([]); // Catalog
+    const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
 
     // --- Dynamic Fetching Handlers ---
+
+    // Fetch assignable roles from API
+    useEffect(() => {
+        rolesApi.getAssignable()
+            .then(roles => {
+                // Filter out SUPER_ADMIN from assignable roles (handled by is_super_admin flag)
+                setAvailableRoles(roles.filter(r => r.code !== 'SUPER_ADMIN'));
+            })
+            .catch(err => {
+                console.error('Failed to fetch roles:', err);
+                setAvailableRoles([]);
+            });
+    }, []);
 
     // Get organization ID from query parameter (when coming from org management page)
     const searchParams = useSearchParams();
@@ -145,110 +172,57 @@ function NewUserPageContent() {
 
     // --- Steps Renderers ---
 
-    const renderRoleSelection = () => (
-        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
-            <h2 className="header-section">What type of user are you creating?</h2>
+    const renderRoleSelection = () => {
+        // Get icon component from icon name
+        const getIcon = (iconName: string | null) => {
+            if (!iconName) return Users;
+            return iconMap[iconName] || Users;
+        };
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Org Admin */}
-                {canCreateRole('ORG_ADMIN') && (
-                    <button
-                        onClick={() => setFormData({ ...formData, role: 'ORG_ADMIN' })}
-                        className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${formData.role === 'ORG_ADMIN' ? 'border-primary bg-primary/5 shadow-md' : 'border-border bg-card hover:border-primary/50'}`}
-                    >
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className={`p-2 rounded-lg ${formData.role === 'ORG_ADMIN' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                <Building2 className="w-6 h-6" />
-                            </div>
-                            <h3 className="font-bold">Organization Admin</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Full control over a specific organization, its settings, and all sub-resources.</p>
-                    </button>
+        return (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                <h2 className="header-section">What type of user are you creating?</h2>
+
+                {availableRoles.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                        <p>Loading roles...</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {availableRoles.map((role) => {
+                            const IconComponent = getIcon(role.icon);
+                            const isSelected = formData.role === role.code;
+
+                            return (
+                                <button
+                                    key={role.code}
+                                    onClick={() => setFormData({ ...formData, role: role.code })}
+                                    className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${isSelected
+                                            ? 'border-primary bg-primary/5 shadow-md'
+                                            : 'border-border bg-card hover:border-primary/50'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div
+                                            className={`p-2 rounded-lg ${isSelected
+                                                    ? 'bg-primary text-primary-foreground'
+                                                    : 'bg-muted text-muted-foreground'
+                                                }`}
+                                            style={isSelected && role.color ? { backgroundColor: role.color } : undefined}
+                                        >
+                                            <IconComponent className="w-6 h-6" />
+                                        </div>
+                                        <h3 className="font-bold">{role.name}</h3>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">{role.description}</p>
+                                </button>
+                            );
+                        })}
+                    </div>
                 )}
-
-                {/* Event Manager */}
-                {canCreateRole('EVENT_MANAGER') && (
-                    <button
-                        onClick={() => setFormData({ ...formData, role: 'EVENT_MANAGER' })}
-                        className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${formData.role === 'EVENT_MANAGER' ? 'border-primary bg-primary/5 shadow-md' : 'border-border bg-card hover:border-primary/50'}`}
-                    >
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className={`p-2 rounded-lg ${formData.role === 'EVENT_MANAGER' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                <Calendar className="w-6 h-6" />
-                            </div>
-                            <h3 className="font-bold">Event Manager</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Manages a specific event, its departments, and services.</p>
-                    </button>
-                )}
-
-                {/* Dept Head */}
-                {canCreateRole('DEPT_HEAD') && (
-                    <button
-                        onClick={() => setFormData({ ...formData, role: 'DEPT_HEAD' })}
-                        className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${formData.role === 'DEPT_HEAD' ? 'border-primary bg-primary/5 shadow-md' : 'border-border bg-card hover:border-primary/50'}`}
-                    >
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className={`p-2 rounded-lg ${formData.role === 'DEPT_HEAD' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                <Users className="w-6 h-6" />
-                            </div>
-                            <h3 className="font-bold">Department Head</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Oversees a specific department (e.g., Security, Sanitation) within an event.</p>
-                    </button>
-                )}
-
-                {/* Service Supervisor */}
-                {canCreateRole('SERVICE_SUPERVISOR') && (
-                    <button
-                        onClick={() => setFormData({ ...formData, role: 'SERVICE_SUPERVISOR' })}
-                        className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${formData.role === 'SERVICE_SUPERVISOR' ? 'border-primary bg-primary/5 shadow-md' : 'border-border bg-card hover:border-primary/50'}`}
-                    >
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className={`p-2 rounded-lg ${formData.role === 'SERVICE_SUPERVISOR' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                <Activity className="w-6 h-6" />
-                            </div>
-                            <h3 className="font-bold">Service Supervisor</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Manages specific service deployments (e.g., Water Monitors) and technicians.</p>
-                    </button>
-                )}
-
-                {/* Technician */}
-                {canCreateRole('TECHNICIAN') && (
-                    <button
-                        onClick={() => setFormData({ ...formData, role: 'TECHNICIAN' })}
-                        className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${formData.role === 'TECHNICIAN' ? 'border-primary bg-primary/5 shadow-md' : 'border-border bg-card hover:border-primary/50'}`}
-                    >
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className={`p-2 rounded-lg ${formData.role === 'TECHNICIAN' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                <Settings className="w-6 h-6" />
-                            </div>
-                            <h3 className="font-bold">Onsite Technician</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Ground-level access to manage devices and view local telemetry.</p>
-                    </button>
-                )}
-
-                {/* Viewer */}
-                {canCreateRole('VIEWER') && (
-                    <button
-                        onClick={() => setFormData({ ...formData, role: 'VIEWER' })}
-                        className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${formData.role === 'VIEWER' ? 'border-primary bg-primary/5 shadow-md' : 'border-border bg-card hover:border-primary/50'}`}
-                    >
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className={`p-2 rounded-lg ${formData.role === 'VIEWER' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                <Briefcase className="w-6 h-6" />
-                            </div>
-                            <h3 className="font-bold">Viewer / Auditor</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Read-only access to dashboards and reports.</p>
-                    </button>
-                )}
-
             </div>
-        </div>
-    );
+        );
+    };
 
     const renderContextSelection = () => (
         <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">

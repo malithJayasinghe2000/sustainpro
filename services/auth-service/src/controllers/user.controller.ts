@@ -14,11 +14,34 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
         const orgId = req.user?.organization_id;
 
         // Super admin sees all, others see only their org
-        const users = await userService.getAll(isSuperAdmin ? null : orgId);
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const search = req.query.search as string;
+        const role = req.query.role as string;
+
+        // Determine organization filter
+        let targetOrgId = orgId;
+        if (isSuperAdmin) {
+            targetOrgId = (req.query.organization_id as string) || null;
+        }
+
+        const { users, total, pages } = await userService.getAll(
+            targetOrgId,
+            page,
+            limit,
+            search,
+            role
+        );
 
         res.json({
             success: true,
             data: users,
+            meta: {
+                page,
+                limit,
+                total,
+                pages
+            }
         });
     } catch (error) {
         next(error);
