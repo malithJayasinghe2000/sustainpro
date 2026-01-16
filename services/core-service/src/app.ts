@@ -16,6 +16,7 @@ import settingsRoutes from './routes/settings.routes';
 import uploadRoutes from './routes/upload.routes';
 import deviceRoutes from './routes/device.routes';
 import deviceModelRoutes from './routes/device-model.routes';
+import auditLogRoutes from './routes/audit-log.routes';
 
 const logger = createLogger({ service: 'core-service' });
 
@@ -74,6 +75,8 @@ app.use('/api/v1/services', authenticateToken, serviceRoutes);
 app.use('/api/v1/upload', authenticateToken, uploadRoutes);
 app.use('/api/v1/devices', authenticateToken, deviceRoutes);
 app.use('/api/v1/device-models', authenticateToken, deviceModelRoutes);
+app.use('/api/v1/audit-logs', authenticateToken, auditLogRoutes);
+
 
 // Admin routes - Super Admin only
 app.get('/api/v1/admin/system-health', authenticateToken, requireRole('SUPER_ADMIN'), (req, res) => {

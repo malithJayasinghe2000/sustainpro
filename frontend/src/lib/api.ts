@@ -685,6 +685,10 @@ export const organizationsApi = {
         const config = adminPassword ? { data: { adminPassword } } : {};
         const response = await apiClient.delete(`/organizations/${id}`, config);
         return response.data;
+    },
+    getStats: async () => {
+        const response = await apiClient.get('/organizations/stats/overview');
+        return response.data.data;
     }
 };
 
@@ -845,5 +849,146 @@ export const rolesApi = {
         } catch (error) {
             return null;
         }
+    },
+};
+
+// Audit Log Types
+export interface AuditLog {
+    id: string;
+    created_at: string;
+    source_type: string;
+    actor_user_id?: string;
+    actor_user_email?: string;
+    actor_device_id?: string;
+    actor_device_code?: string;
+    organization_id?: string;
+    organization_name?: string;
+    event_id?: string;
+    department_id?: string;
+    service_id?: string;
+    category: string;
+    action: string;
+    sub_action?: string;
+    target_resource?: string;
+    target_id?: string;
+    target_name?: string;
+    old_values?: Record<string, any>;
+    new_values?: Record<string, any>;
+    changes?: string[];
+    status: string;
+    error_message?: string;
+    ip_address?: string;
+    user_agent?: string;
+    duration_ms?: number;
+    description?: string;
+    metadata?: Record<string, any>;
+}
+
+export interface AuditLogFilter {
+    page?: number;
+    limit?: number;
+    organization_id?: string;
+    source_type?: string;
+    category?: string;
+    action?: string;
+    status?: string;
+    actor_user_id?: string;
+    target_resource?: string;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+}
+
+export interface AuditLogStats {
+    total: number;
+    byCategory: Record<string, number>;
+    bySource: Record<string, number>;
+    byStatus: Record<string, number>;
+    recentActivity: { date: string; count: number }[];
+}
+
+export interface AuditCategory {
+    code: string;
+    name: string;
+    description: string;
+}
+
+export const auditLogsApi = {
+    /**
+     * Get paginated audit logs with filters
+     */
+    getAll: async (params?: AuditLogFilter): Promise<{
+        success: boolean;
+        data: AuditLog[];
+        meta: { page: number; limit: number; total: number; pages: number };
+    }> => {
+        const response = await apiClient.get('/audit-logs', { params });
+        return response.data;
+    },
+
+    /**
+     * Get single audit log by ID
+     */
+    getById: async (id: string): Promise<AuditLog> => {
+        const response = await apiClient.get(`/audit-logs/${id}`);
+        return response.data.data;
+    },
+
+    /**
+     * Get audit log statistics
+     */
+    getStats: async (params?: {
+        organization_id?: string;
+        start_date?: string;
+        end_date?: string;
+    }): Promise<AuditLogStats> => {
+        const response = await apiClient.get('/audit-logs/stats', { params });
+        return response.data.data;
+    },
+
+    /**
+     * Get available categories for filtering
+     */
+    getCategories: async (): Promise<AuditCategory[]> => {
+        const response = await apiClient.get('/audit-logs/categories');
+        return response.data.data;
+    },
+
+    /**
+     * Get user activity logs
+     */
+    getUserActivity: async (userId: string, params?: {
+        start_date?: string;
+        end_date?: string;
+        limit?: number;
+    }): Promise<AuditLog[]> => {
+        const response = await apiClient.get(`/audit-logs/user/${userId}`, { params });
+        return response.data.data;
+    },
+
+    /**
+     * Export audit logs as CSV
+     */
+    exportCSV: async (params?: AuditLogFilter): Promise<Blob> => {
+        const response = await apiClient.get('/audit-logs/export', {
+            params,
+            responseType: 'blob',
+        });
+        return response.data;
+    },
+
+    /**
+     * Download CSV export
+     */
+    downloadCSV: async (params?: AuditLogFilter): Promise<void> => {
+        const blob = await auditLogsApi.exportCSV(params);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `audit_logs_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
     },
 };

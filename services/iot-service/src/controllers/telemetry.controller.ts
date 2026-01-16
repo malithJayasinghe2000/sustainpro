@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { telemetryService } from '../services/telemetry.service';
 import { liveDataService } from '../services/live-data.service';
-import { createLogger } from '@sustainpro/shared-utils';
+import { createLogger, auditLogger, AuditAction, AuditCategory, AuditStatus } from '@sustainpro/shared-utils';
 
 const logger = createLogger({ service: 'telemetry-controller' });
 
@@ -10,6 +10,8 @@ const logger = createLogger({ service: 'telemetry-controller' });
  * POST /api/v1/telemetry
  */
 export const ingest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const startTime = Date.now();
+
     try {
         const device = req.device;
 
@@ -43,12 +45,46 @@ export const ingest = async (req: Request, res: Response, next: NextFunction): P
             timestamp: timestamp ? new Date(timestamp) : undefined,
         });
 
+        // Log device telemetry (non-blocking, batched for performance)
+        auditLogger.logDeviceAction(
+            device.id,
+            device.device_code,
+            device.organization_id,
+            AuditAction.SEND_TELEMETRY,
+            {
+                eventId: device.event_id || undefined,
+                serviceId: device.service_id || undefined,
+                category: AuditCategory.TELEMETRY,
+                status: AuditStatus.SUCCESS,
+                metadata: {
+                    dataKeys: Object.keys(data),
+                    dataPointCount: Object.keys(data).length,
+                },
+                durationMs: Date.now() - startTime,
+            }
+        );
+
         res.status(201).json({
             success: true,
             device_code: device.device_code,
             timestamp: entry.timestamp,
         });
     } catch (error) {
+        // Log failed telemetry attempt
+        if (req.device) {
+            auditLogger.logDeviceAction(
+                req.device.id,
+                req.device.device_code,
+                req.device.organization_id,
+                AuditAction.SEND_TELEMETRY,
+                {
+                    category: AuditCategory.TELEMETRY,
+                    status: AuditStatus.FAILURE,
+                    errorMessage: (error as Error).message,
+                    durationMs: Date.now() - startTime,
+                }
+            );
+        }
         next(error);
     }
 };

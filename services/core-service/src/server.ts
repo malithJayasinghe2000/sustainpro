@@ -1,8 +1,8 @@
 import app from './app';
 import { config } from './config';
 import { connectRabbitMQ, closeRabbitMQ } from './messaging/publisher';
-import { createLogger } from '@sustainpro/shared-utils';
-import { initDatabase, closeDatabase } from '@sustainpro/shared-database';
+import { createLogger, auditLogger } from '@sustainpro/shared-utils';
+import { initDatabase, closeDatabase, getPrismaClient } from '@sustainpro/shared-database';
 
 const logger = createLogger({ service: 'core-service' });
 
@@ -11,6 +11,10 @@ const startServer = async () => {
         // Initialize database connection
         await initDatabase();
         logger.info('✅ Database connected successfully');
+
+        // Initialize audit logger
+        auditLogger.initialize(getPrismaClient());
+        logger.info('✅ Audit logger initialized');
 
         // Connect to RabbitMQ
         await connectRabbitMQ();
@@ -27,6 +31,8 @@ const startServer = async () => {
 
             server.close(async () => {
                 logger.info('HTTP server closed');
+                await auditLogger.shutdown();
+                logger.info('Audit logger closed');
                 await closeRabbitMQ();
                 await closeDatabase();
                 logger.info('Database connection closed');

@@ -5,3 +5,5 @@ export * from './timezone';
 export * from './validation';
 export * from './password-validation';
 export * from './notification-publisher';
+export * from './audit-logger';
+export * from './audit-repository';
