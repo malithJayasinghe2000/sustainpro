@@ -14,6 +14,10 @@ import {
     BadRequestError,
     createLogger,
     publishNotification,
+    auditLogger,
+    AuditAction,
+    AuditCategory,
+    AuditStatus,
 } from '@sustainpro/shared-utils';
 import { JwtPayload } from '@sustainpro/shared-types';
 
@@ -25,6 +29,17 @@ export interface LoginRequest {
     deviceInfo?: string;
     ipAddress?: string;
     userAgent?: string;
+}
+
+/**
+ * Audit context passed from controllers to services
+ */
+export interface AuditContext {
+    ipAddress?: string;
+    userAgent?: string;
+    requestMethod?: string;
+    requestPath?: string;
+    requestId?: string;
 }
 
 export interface TokenPair {

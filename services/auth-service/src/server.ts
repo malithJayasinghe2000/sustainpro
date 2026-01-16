@@ -1,7 +1,7 @@
 import app from './app';
 import { config } from './config';
-import { createLogger, initNotificationPublisher, closeNotificationPublisher } from '@sustainpro/shared-utils';
-import { initDatabase, closeDatabase } from '@sustainpro/shared-database';
+import { createLogger, initNotificationPublisher, closeNotificationPublisher, auditLogger } from '@sustainpro/shared-utils';
+import { initDatabase, closeDatabase, getPrismaClient } from '@sustainpro/shared-database';
 
 const logger = createLogger({ service: 'auth-service' });
 
@@ -11,6 +11,10 @@ const startServer = async () => {
         // Initialize database connection
         await initDatabase();
         logger.info('✅ Database connected successfully');
+
+        // Initialize audit logger
+        auditLogger.initialize(getPrismaClient());
+        logger.info('✅ Audit logger initialized');
 
         // Initialize notification publisher (RabbitMQ)
         if (config.rabbitmq?.url) {
@@ -36,6 +40,8 @@ const startServer = async () => {
 
             server.close(async () => {
                 logger.info('HTTP server closed');
+                await auditLogger.shutdown();
+                logger.info('Audit logger closed');
                 await closeNotificationPublisher();
                 logger.info('Notification publisher closed');
                 await closeDatabase();

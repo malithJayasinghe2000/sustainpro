@@ -21,6 +21,21 @@ router.get('/', orgController.getAll);
 
 /**
  * @swagger
+ * /organizations/stats/overview:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Get organization statistics
+ *     description: Get overview of organization counts
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Organization statistics
+ */
+router.get('/stats/overview', requireSuperAdmin, orgController.getStats);
+
+/**
+ * @swagger
  * /organizations/{id}:
  *   get:
  *     tags: [Organizations]

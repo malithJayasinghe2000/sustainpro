@@ -2,8 +2,8 @@ import http from 'http';
 import app from './app';
 import { config } from './config';
 import { initSocket, getConnectedClientsCount } from './socket';
-import { createLogger } from '@sustainpro/shared-utils';
-import { initDatabase, closeDatabase } from '@sustainpro/shared-database';
+import { createLogger, auditLogger } from '@sustainpro/shared-utils';
+import { initDatabase, closeDatabase, getPrismaClient } from '@sustainpro/shared-database';
 
 const logger = createLogger({ service: 'iot-service' });
 
@@ -13,6 +13,10 @@ const startServer = async () => {
         // Initialize database connection
         await initDatabase();
         logger.info('✅ Database connected successfully');
+
+        // Initialize audit logger
+        auditLogger.initialize(getPrismaClient());
+        logger.info('✅ Audit logger initialized');
 
         // Create HTTP server
         const server = http.createServer(app);
@@ -40,6 +44,10 @@ const startServer = async () => {
             // Close HTTP server
             server.close(async () => {
                 logger.info('HTTP server closed');
+
+                // Shutdown audit logger (flush pending logs)
+                await auditLogger.shutdown();
+                logger.info('Audit logger closed');
 
                 // Close database connection
                 await closeDatabase();

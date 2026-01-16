@@ -528,6 +528,8 @@ async function main() {
         { name: 'Manage Settings', code: 'settings.manage', description: 'Manage system settings', category: 'settings' },
         { name: 'View Telemetry', code: 'telemetry.view', description: 'View telemetry data', category: 'telemetry' },
         { name: 'Manage Alerts', code: 'alerts.manage', description: 'Create and manage alert rules', category: 'alerts' },
+        { name: 'View Audit Logs', code: 'audit.view', description: 'View system audit logs', category: 'audit' },
+        { name: 'Export Audit Logs', code: 'audit.export', description: 'Export audit logs to CSV', category: 'audit' },
     ];
 
     for (const perm of permissions) {
@@ -708,7 +710,8 @@ async function main() {
     const rolePermissionMappings: Record<string, string[]> = {
         'ORG_ADMIN': [
             'dashboard.view', 'devices.view', 'devices.manage', 'events.view', 'events.manage',
-            'users.view', 'users.manage', 'reports.view', 'settings.manage', 'telemetry.view', 'alerts.manage'
+            'users.view', 'users.manage', 'reports.view', 'settings.manage', 'telemetry.view', 'alerts.manage',
+            'audit.view', 'audit.export'
         ],
         'EVENT_MANAGER': [
             'dashboard.view', 'events.view', 'events.manage', 'devices.view', 'reports.view', 'telemetry.view', 'users.view'

@@ -7,7 +7,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import Navbar from '@/components/Navbar';
 import MaintenancePage from '@/components/MaintenancePage';
 import { getRoleLabel, hasRole, isAdmin, ROLES } from '@/lib/roles';
-import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User, ScrollText } from 'lucide-react';
 import { applyOrganizationTheme } from '@/lib/theme-utils';
 import { getPrimaryColor } from '@/lib/theme-parser';
 
@@ -97,6 +97,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
         { name: 'System Settings', icon: Settings, path: '/admin/settings' },
         { name: 'Access Control (RBAC)', icon: Shield, path: '/admin/rbac' },
         { name: 'Admin Settings', icon: Shield, path: '/admin/platform-settings' },
+        { name: 'Audit Logs', icon: ScrollText, path: '/audit-logs' },
     ];
 
     const standardItems: MenuItem[] = [
@@ -114,17 +115,18 @@ export default function DashboardLayout({ children }: SidebarProps) {
         { name: 'My Devices', icon: Component, path: '/devices' },
         { name: 'Reports', icon: FileText, path: '/reports' },
         { name: 'Direct Profile', icon: User, path: '/profile' },
-        { name: 'Org Settings', icon: Settings, path: '/settings', requiredRole: 'ORG_ADMIN' },
+        { name: 'Organization', icon: Building2, path: '/organization', requiredRole: 'ORG_ADMIN' },
         {
             name: 'User Management',
             icon: Users,
-            path: '/users', // Changed to global users path
+            path: '/users',
             requiredRole: 'ORG_ADMIN',
             submenu: [
                 { name: 'Overview', path: '/users' },
                 { name: 'Create User', path: '/users/new' }
             ]
         },
+        { name: 'Audit Logs', icon: ScrollText, path: '/audit-logs', requiredRole: 'ORG_ADMIN' },
     ];
 
     let filteredMenuItems: MenuItem[] = [];

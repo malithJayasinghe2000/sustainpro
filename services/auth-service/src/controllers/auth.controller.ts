@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import { AuthService, LoginRequest } from '../services/auth.service';
 import { config } from '../config';
-import { AppError } from '@sustainpro/shared-utils';
+import { AppError, auditLogger, AuditCategory, AuditAction, AuditStatus } from '@sustainpro/shared-utils';
 
 const authService = new AuthService();
 
@@ -19,6 +19,9 @@ const getClientInfo = (req: Request) => ({
  * POST /api/v1/auth/login
  */
 export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const startTime = Date.now();
+    const clientInfo = getClientInfo(req);
+
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -30,7 +33,6 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         }
 
         const { email, password } = req.body;
-        const clientInfo = getClientInfo(req);
 
         const loginRequest: LoginRequest = {
             email,
@@ -42,6 +44,15 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
         // Check if 2FA is required
         if ('requiresTwoFactor' in result && result.requiresTwoFactor) {
+            // Log 2FA required event
+            await auditLogger.logAuth(AuditAction.LOGIN, {
+                metadata: { email, requiresTwoFactor: true },
+                ipAddress: clientInfo.ipAddress,
+                userAgent: clientInfo.userAgent,
+                description: `User ${email} login requires 2FA verification`,
+                durationMs: Date.now() - startTime,
+            });
+
             res.json({
                 success: true,
                 requiresTwoFactor: true,
@@ -53,6 +64,20 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
         // Type guard confirms this is a successful login result
         const loginResult = result as { accessToken: string; refreshToken: string; user: any };
+
+        // Log successful login
+        await auditLogger.logAuth(AuditAction.LOGIN, {
+            actorUserId: loginResult.user.id,
+            organizationId: loginResult.user.organization_id,
+            status: AuditStatus.SUCCESS,
+            ipAddress: clientInfo.ipAddress,
+            userAgent: clientInfo.userAgent,
+            targetResource: 'user',
+            targetId: loginResult.user.id,
+            targetName: loginResult.user.email,
+            description: `User ${loginResult.user.email} logged in successfully`,
+            durationMs: Date.now() - startTime,
+        });
 
         // Set refresh token as HTTP-only cookie
         res.cookie('refresh_token', loginResult.refreshToken, {
@@ -69,6 +94,17 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
             user: loginResult.user,
         });
     } catch (error) {
+        // Log failed login attempt
+        await auditLogger.logAuth(AuditAction.LOGIN_FAILED, {
+            status: AuditStatus.FAILURE,
+            ipAddress: clientInfo.ipAddress,
+            userAgent: clientInfo.userAgent,
+            errorMessage: (error as Error).message,
+            metadata: { email: req.body.email },
+            description: `Failed login attempt for ${req.body.email}`,
+            durationMs: Date.now() - startTime,
+        });
+
         if (error instanceof AppError) {
             res.status(error.statusCode).json({
                 success: false,
@@ -130,9 +166,24 @@ export const verify2FA = async (req: Request, res: Response, next: NextFunction)
  */
 export const logout = async (req: Request, res: Response): Promise<void> => {
     const refreshToken = req.cookies?.refresh_token;
+    const clientInfo = getClientInfo(req);
 
     if (refreshToken) {
         await authService.logout(refreshToken);
+    }
+
+    // Log logout event
+    if (req.user) {
+        await auditLogger.logAuth(AuditAction.LOGOUT, {
+            actorUserId: req.user.id,
+            organizationId: req.user.organization_id || undefined,
+            status: AuditStatus.SUCCESS,
+            ipAddress: clientInfo.ipAddress,
+            userAgent: clientInfo.userAgent,
+            targetResource: 'user',
+            targetId: req.user.id,
+            description: `User ${req.user.email || req.user.id} logged out`,
+        });
     }
 
     res.clearCookie('refresh_token', {
