@@ -138,7 +138,17 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
  */
 export const update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const user = await userService.update(req.params.id, req.body);
+        // Extract role separately (not a direct user field)
+        const { role, ...updateData } = req.body;
+        
+        const user = await userService.update(req.params.id, updateData);
+
+        // If role is provided, update the role assignment
+        if (role) {
+            await userService.assignRole(user.id, role, {
+                org_id: user.organization_id || undefined,
+            });
+        }
 
         res.json({
             success: true,

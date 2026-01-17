@@ -83,7 +83,7 @@ const InputField = ({ label, value, onChange, type = 'text', placeholder = '', s
 interface ToggleFieldProps {
     label: string;
     description?: string;
-    checked: boolean;
+    checked: boolean | undefined;
     onChange: (value: boolean) => void;
 }
 

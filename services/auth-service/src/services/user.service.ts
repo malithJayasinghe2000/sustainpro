@@ -9,6 +9,7 @@ import {
     createLogger,
     publishNotification,
 } from '@sustainpro/shared-utils';
+import { clearPermissionCache, publishPermissionCacheInvalidation } from '@sustainpro/shared-middleware';
 import { CreateUserDto, UpdateUserDto, User } from '@sustainpro/shared-types';
 import { config } from '../config';
 
@@ -201,6 +202,13 @@ export class UserService {
         }
 
         const assignment = await this.userRepo.assignRole(userId, role, context);
+        
+        // Clear local cache
+        clearPermissionCache(userId);
+        
+        // Publish distributed cache invalidation
+        await publishPermissionCacheInvalidation('user_role_changed', { userId, roleCode: role });
+        
         logger.info('Role assigned', { userId, role });
         return assignment;
     }

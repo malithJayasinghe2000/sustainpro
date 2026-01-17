@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireRole } from '@sustainpro/shared-middleware';
+import { requireRole, requirePermission } from '@sustainpro/shared-middleware';
 import * as deviceController from '../controllers/device.controller';
 
 const router = Router();
@@ -108,7 +108,7 @@ router.get('/:id', deviceController.getById);
  */
 router.post(
     '/',
-    requireRole('SUPER_ADMIN', 'ORG_ADMIN'),
+    requirePermission('devices.manage'),
     deviceController.create
 );
 
@@ -133,7 +133,7 @@ router.post(
  */
 router.put(
     '/:id',
-    requireRole('SUPER_ADMIN', 'ORG_ADMIN'),
+    requirePermission('devices.manage'),
     deviceController.update
 );
 
@@ -158,7 +158,7 @@ router.put(
  */
 router.delete(
     '/:id',
-    requireRole('SUPER_ADMIN', 'ORG_ADMIN'),
+    requirePermission('devices.manage'),
     deviceController.remove
 );
 
@@ -182,7 +182,7 @@ router.delete(
  */
 router.post(
     '/:id/assign',
-    requireRole('SUPER_ADMIN', 'ORG_ADMIN'),
+    requirePermission('devices.manage'),
     deviceController.assignToService
 );
 
@@ -206,7 +206,7 @@ router.post(
  */
 router.post(
     '/:id/unassign',
-    requireRole('SUPER_ADMIN', 'ORG_ADMIN'),
+    requirePermission('devices.manage'),
     deviceController.unassignFromService
 );
 
@@ -230,7 +230,7 @@ router.post(
  */
 router.post(
     '/:id/regenerate-api-key',
-    requireRole('SUPER_ADMIN', 'ORG_ADMIN'),
+    requirePermission('devices.manage'),
     deviceController.regenerateApiKey
 );
 

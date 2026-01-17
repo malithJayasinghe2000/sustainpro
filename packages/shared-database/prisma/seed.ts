@@ -684,11 +684,11 @@ async function main() {
         },
     });
 
-    // Operator role
+    // Technician role (Operator user)
     await prisma.sps_role_assignments.create({
         data: {
             user_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
-            role: 'OPERATOR',
+            role: 'TECHNICIAN',
             org_id: '11111111-1111-1111-1111-111111111111',
             event_id: null,
             dept_id: null,

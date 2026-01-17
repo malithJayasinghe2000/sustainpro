@@ -1,6 +1,21 @@
-import { Router, Request, Response } from 'express';
-import { query } from '../db';
+/**
+ * RBAC Routes
+ * Role-Based Access Control management endpoints
+ * 
+ * Note: Permissions are managed via seed file, not via API.
+ * This is a best practice because:
+ * 1. Permissions are tied to code (routes use requirePermission('xxx'))
+ * 2. Adding a new permission requires backend code changes anyway
+ * 3. Seed ensures consistent permissions across environments
+ * 
+ * The API only allows:
+ * - Viewing all permissions (for UI)
+ * - Assigning/removing permissions to/from roles (role-permission mapping)
+ */
+
+import { Router } from 'express';
 import { authenticateToken, requireSuperAdmin } from '@sustainpro/shared-middleware';
+import * as rbacController from '../controllers/rbac.controller';
 
 const router = Router();
 
@@ -13,32 +28,23 @@ router.use(authenticateToken);
  *   get:
  *     tags: [RBAC]
  *     summary: Get all permissions
- *     description: Get list of all available permissions with details
+ *     description: Get list of all available permissions (defined in seed)
  *     security:
  *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: List of permissions
  */
-router.get('/permissions', async (req: Request, res: Response): Promise<void> => {
-    try {
-        // Get all permissions with full details
-        const result = await query(
-            `SELECT id, code, name, description, category as module FROM sps_permissions ORDER BY category, code`
-        );
+router.get('/permissions', rbacController.getPermissions);
 
-        res.json({
-            success: true,
-            data: result.rows,
-        });
-    } catch (error) {
-        console.error('Failed to fetch permissions:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch permissions',
-        });
-    }
-});
+/**
+ * @swagger
+ * /rbac/permissions/grouped:
+ *   get:
+ *     tags: [RBAC]
+ *     summary: Get permissions grouped by category
+ *     description: Get permissions organized by module/category
+ *     security:
+ *       - BearerAuth: []
+ */
+router.get('/permissions/grouped', rbacController.getPermissionsGrouped);
 
 /**
  * @swagger
@@ -49,48 +55,15 @@ router.get('/permissions', async (req: Request, res: Response): Promise<void> =>
  *     description: Get all role-permission mappings (Super Admin only)
  *     security:
  *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: Role-permission mappings
- *       403:
- *         description: Forbidden - Super Admin required
  */
-router.get('/mappings', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
-    try {
-        // Get mappings using actual column names: role, permission_id
-        const result = await query(
-            `SELECT rp.role, array_agg(p.code) as permissions
-             FROM sps_role_permissions rp
-             JOIN sps_permissions p ON rp.permission_id = p.id
-             GROUP BY rp.role
-             ORDER BY rp.role`
-        );
-
-        // Convert to object format for frontend: { 'ORG_ADMIN': ['events.view', ...], ... }
-        const mappings: Record<string, string[]> = {};
-        for (const row of result.rows) {
-            mappings[row.role] = row.permissions || [];
-        }
-
-        res.json({
-            success: true,
-            data: mappings,
-        });
-    } catch (error) {
-        console.error('Failed to fetch mappings:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch mappings',
-        });
-    }
-});
+router.get('/mappings', requireSuperAdmin, rbacController.getMappings);
 
 /**
  * @swagger
  * /rbac/mappings:
  *   post:
  *     tags: [RBAC]
- *     summary: Update role-permission mapping
+ *     summary: Update role permissions
  *     description: Update permissions for a role (Super Admin only)
  *     security:
  *       - BearerAuth: []
@@ -104,51 +77,40 @@ router.get('/mappings', requireSuperAdmin, async (req: Request, res: Response): 
  *             properties:
  *               role:
  *                 type: string
+ *                 description: Role code (e.g., 'ORG_ADMIN')
  *               permissions:
  *                 type: array
  *                 items:
  *                   type: string
+ *                 description: Array of permission codes
+ */
+router.post('/mappings', requireSuperAdmin, rbacController.updateMapping);
+
+/**
+ * @swagger
+ * /rbac/user/{userId}/permissions:
+ *   get:
+ *     tags: [RBAC]
+ *     summary: Get user's effective permissions
+ *     description: Get all permissions a user has based on their roles (Super Admin only)
+ *     security:
+ *       - BearerAuth: []
+ */
+router.get('/user/:userId/permissions', requireSuperAdmin, rbacController.getUserPermissions);
+
+/**
+ * @swagger
+ * /rbac/my-permissions:
+ *   get:
+ *     tags: [RBAC]
+ *     summary: Get current user's permissions
+ *     description: Get all permissions for the authenticated user
+ *     security:
+ *       - BearerAuth: []
  *     responses:
  *       200:
- *         description: Permissions updated
- *       403:
- *         description: Forbidden - Super Admin required
+ *         description: List of permission codes
  */
-router.post('/mappings', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { role, permissions } = req.body;
-
-        if (!role || !Array.isArray(permissions)) {
-            res.status(400).json({
-                success: false,
-                error: 'Role and permissions array required',
-            });
-            return;
-        }
-
-        // Delete existing permissions for role (using actual column name: role)
-        await query('DELETE FROM sps_role_permissions WHERE role = $1', [role]);
-
-        // Insert new permissions (lookup permission_id from code)
-        for (const permCode of permissions) {
-            await query(
-                `INSERT INTO sps_role_permissions (role, permission_id)
-                 SELECT $1, id FROM sps_permissions WHERE code = $2`,
-                [role, permCode]
-            );
-        }
-
-        res.json({
-            success: true,
-            message: 'Permissions updated',
-        });
-    } catch (error) {
-        console.error('Failed to update mappings:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to update mappings',
-        });
-    }
-});
+router.get('/my-permissions', rbacController.getMyPermissions);
 
 export default router;

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as eventController from '../controllers/event.controller';
-import { requireMinRole } from '@sustainpro/shared-middleware';
+import { requireMinRole, requirePermission } from '@sustainpro/shared-middleware';
 
 const router = Router();
 
@@ -99,7 +99,7 @@ router.get('/:id/details', eventController.getDetails);
  *       201:
  *         description: Event created
  */
-router.post('/', requireMinRole('ORG_ADMIN'), eventController.create);
+router.post('/', requirePermission('events.manage'), eventController.create);
 
 /**
  * @swagger
@@ -120,7 +120,7 @@ router.post('/', requireMinRole('ORG_ADMIN'), eventController.create);
  *       200:
  *         description: Event updated
  */
-router.put('/:id', requireMinRole('ORG_ADMIN'), eventController.update);
+router.put('/:id', requirePermission('events.manage'), eventController.update);
 
 /**
  * @swagger
@@ -141,7 +141,7 @@ router.put('/:id', requireMinRole('ORG_ADMIN'), eventController.update);
  *       200:
  *         description: Event deleted
  */
-router.delete('/:id', requireMinRole('ORG_ADMIN'), eventController.remove);
+router.delete('/:id', requirePermission('events.manage'), eventController.remove);
 
 /**
  * @swagger

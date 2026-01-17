@@ -1,7 +1,8 @@
 import app from './app';
 import { config } from './config';
-import { createLogger, initNotificationPublisher, closeNotificationPublisher } from '@sustainpro/shared-utils';
+import { createLogger, initNotificationPublisher, closeNotificationPublisher, initCacheInvalidation, closeCacheInvalidation } from '@sustainpro/shared-utils';
 import { initDatabase, closeDatabase } from '@sustainpro/shared-database';
+import { initPermissionCacheInvalidation } from '@sustainpro/shared-middleware';
 
 const logger = createLogger({ service: 'auth-service' });
 
@@ -19,6 +20,17 @@ const startServer = async () => {
                 enabled: config.rabbitmq.enabled !== false,
             });
             logger.info('✅ Notification publisher connected');
+
+            // Initialize cache invalidation service
+            await initCacheInvalidation({
+                url: config.rabbitmq.url,
+                serviceName: 'auth-service',
+                enabled: config.rabbitmq.enabled !== false,
+            });
+            
+            // Also listen for cache invalidation events
+            await initPermissionCacheInvalidation('auth-service', config.rabbitmq.url);
+            logger.info('✅ Cache invalidation service initialized');
         } else {
             logger.warn('⚠️ RabbitMQ not configured - notifications will not be sent');
         }
@@ -38,6 +50,8 @@ const startServer = async () => {
                 logger.info('HTTP server closed');
                 await closeNotificationPublisher();
                 logger.info('Notification publisher closed');
+                await closeCacheInvalidation();
+                logger.info('Cache invalidation service closed');
                 await closeDatabase();
                 logger.info('Database connection closed');
                 process.exit(0);

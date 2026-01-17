@@ -63,4 +63,5 @@ export type RoleType =
     | 'DEPT_HEAD'
     | 'SERVICE_SUPERVISOR'
     | 'TECHNICIAN'
+    | 'SERVICE_SUPPLIER'
     | 'VIEWER';

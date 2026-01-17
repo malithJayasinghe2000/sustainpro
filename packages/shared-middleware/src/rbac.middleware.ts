@@ -7,6 +7,7 @@ import { ForbiddenError } from '@sustainpro/shared-utils';
 
 /**
  * Role hierarchy - higher roles include lower role permissions
+ * Lower number = lower privileges (VIEWER has least, SUPER_ADMIN has most)
  */
 const ROLE_HIERARCHY: Record<RoleType, number> = {
     SUPER_ADMIN: 100,
@@ -15,6 +16,7 @@ const ROLE_HIERARCHY: Record<RoleType, number> = {
     DEPT_HEAD: 40,
     SERVICE_SUPERVISOR: 30,
     TECHNICIAN: 20,
+    SERVICE_SUPPLIER: 20, // Same level as technician (external access)
     VIEWER: 10,
 };
 

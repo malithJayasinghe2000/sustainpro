@@ -1,7 +1,6 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config';
 import { createLogger } from '@sustainpro/shared-utils';
-import { getPrismaClient } from '@sustainpro/shared-database';
 
 const logger = createLogger({ service: 'notification-service' });
 
@@ -39,42 +38,7 @@ class EmailService {
     }
 
     private async initialize(): Promise<void> {
-        // Try to load from database first
-        try {
-            const prisma = getPrismaClient();
-            const dbConfig = await prisma.sps_smtp_settings.findFirst({
-                where: { smtp_enabled: true },
-                orderBy: { updated_at: 'desc' }
-            });
-
-            if (dbConfig && dbConfig.smtp_host) {
-                this.transporter = nodemailer.createTransport({
-                    host: dbConfig.smtp_host,
-                    port: dbConfig.smtp_port || 587,
-                    secure: dbConfig.smtp_encryption === 'SSL',
-                    auth: {
-                        user: dbConfig.smtp_username || '',
-                        pass: dbConfig.smtp_password || '',
-                    },
-                    tls: { rejectUnauthorized: false }
-                });
-
-                if (dbConfig.from_email) this.fromEmail = dbConfig.from_email;
-                if (dbConfig.from_name) this.fromName = dbConfig.from_name;
-
-                await this.transporter.verify();
-                this.isConfigured = true;
-                logger.info('✅ Email service configured from Database settings', {
-                    host: dbConfig.smtp_host,
-                    port: dbConfig.smtp_port
-                });
-                return;
-            }
-        } catch (error) {
-            logger.warn('Failed to load SMTP settings from database', { error: (error as Error).message });
-        }
-
-        // Fallback to Env Config
+        // Use environment config for SMTP
         if (config.smtp.auth.user && config.smtp.auth.pass) {
             try {
                 this.transporter = nodemailer.createTransport({
@@ -85,6 +49,7 @@ class EmailService {
                         user: config.smtp.auth.user,
                         pass: config.smtp.auth.pass,
                     },
+                    tls: { rejectUnauthorized: false }
                 });
 
                 // Verify connection

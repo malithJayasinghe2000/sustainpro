@@ -81,6 +81,17 @@ export default function UsersPage() {
     const [userToDelete, setUserToDelete] = useState<any>(null);
     const [deleteAdminPassword, setDeleteAdminPassword] = useState('');
 
+    // Edit Modal State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [userToEdit, setUserToEdit] = useState<User | null>(null);
+    const [editFormData, setEditFormData] = useState({
+        full_name: '',
+        email: '',
+        timezone: 'Asia/Colombo',
+        is_active: true,
+        role: '',
+    });
+
     const [passwordError, setPasswordError] = useState('');
     const [passwordStrength, setPasswordStrength] = useState(0);
 
@@ -91,10 +102,12 @@ export default function UsersPage() {
             .catch(err => console.error('Failed to fetch roles:', err));
     }, []);
 
-    // Permission Check: Allow Super Admin OR Org Admin
+    // Permission Check: Allow Super Admin OR users with users.view permission
     useEffect(() => {
         if (!authLoading && user) {
-            const hasAccess = user.is_super_admin || user.roles?.some(r => r.role === 'ORG_ADMIN');
+            const hasAccess = user.is_super_admin || 
+                              user.permissions?.includes('users.view') ||
+                              user.roles?.some(r => r.role === 'ORG_ADMIN');
             if (!hasAccess) {
                 router.replace('/not-found');
             }
@@ -220,6 +233,48 @@ export default function UsersPage() {
         } catch (error: any) {
             const errorMessage = error.response?.data?.error || 'Failed to delete user';
             toast.error(errorMessage);
+        }
+    };
+
+    // Edit User Handlers
+    const handleEditUser = (user: User) => {
+        setUserToEdit(user);
+        setEditFormData({
+            full_name: user.full_name || '',
+            email: user.email,
+            timezone: 'Asia/Colombo',
+            is_active: user.is_active,
+            role: user.role_code || user.roles?.[0]?.role || '',
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleUpdateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!userToEdit) return;
+
+        setIsSubmitting(true);
+        try {
+            const updatePayload: any = {
+                full_name: editFormData.full_name,
+                email: editFormData.email,
+                timezone: editFormData.timezone,
+                is_active: editFormData.is_active,
+            };
+
+            // Only include role if it's been changed (not empty)
+            if (editFormData.role) {
+                updatePayload.role = editFormData.role;
+            }
+
+            await usersApi.update(userToEdit.id, updatePayload);
+            toast.success('User updated successfully');
+            setIsEditModalOpen(false);
+            fetchUsers();
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to update user');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -410,7 +465,7 @@ export default function UsersPage() {
 
                                                                         <div className="flex opacity-0 group-hover/user:opacity-100 transition-opacity gap-1">
                                                                             <button
-                                                                                onClick={() => toast('Edit coming soon', { icon: '🚧' })}
+                                                                                onClick={() => handleEditUser(user)}
                                                                                 className="p-2 hover:bg-background rounded-md text-muted-foreground hover:text-primary transition-all"
                                                                             >
                                                                                 <Pencil className="w-4 h-4" />
@@ -440,7 +495,9 @@ export default function UsersPage() {
         );
     };
 
-    const hasAccess = user?.is_super_admin || user?.roles?.some(r => r.role === 'ORG_ADMIN');
+    const hasAccess = user?.is_super_admin || 
+                  user?.permissions?.includes('users.view') ||
+                  user?.roles?.some(r => r.role === 'ORG_ADMIN');
     if (authLoading || (user && !hasAccess)) {
         return null;
     }
@@ -667,7 +724,7 @@ export default function UsersPage() {
                                                     <td className="px-4 py-3 text-right">
                                                         <div className="flex items-center justify-end gap-1">
                                                             <button
-                                                                onClick={() => toast('Edit functionality coming soon', { icon: '🚧' })}
+                                                                onClick={() => handleEditUser(user)}
                                                                 className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-all"
                                                                 title="Edit User"
                                                             >
@@ -715,6 +772,128 @@ export default function UsersPage() {
 
                     </>
                 )}
+
+                {/* Edit User Modal */}
+                <Modal
+                    isOpen={isEditModalOpen && userToEdit !== null}
+                    onClose={() => {
+                        setIsEditModalOpen(false);
+                        setUserToEdit(null);
+                    }}
+                    title={
+                        <div className="flex items-center gap-2">
+                            <Pencil className="w-5 h-5" />
+                            Edit User
+                        </div>
+                    }
+                    size="md"
+                >
+                    {userToEdit && (
+                        <form onSubmit={handleUpdateUser} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                                    Full Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editFormData.full_name}
+                                    onChange={(e) => setEditFormData(prev => ({ ...prev, full_name: e.target.value }))}
+                                    placeholder="User's full name"
+                                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                                    Email Address
+                                </label>
+                                <input
+                                    type="email"
+                                    value={editFormData.email}
+                                    onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                                    placeholder="user@example.com"
+                                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                                    Status
+                                </label>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditFormData(prev => ({ ...prev, is_active: true }))}
+                                        className={cn(
+                                            "flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-all",
+                                            editFormData.is_active
+                                                ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
+                                                : "bg-background border-border text-muted-foreground hover:border-emerald-300"
+                                        )}
+                                    >
+                                        <CheckCircle2 className="w-4 h-4 inline mr-2" />
+                                        Active
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditFormData(prev => ({ ...prev, is_active: false }))}
+                                        className={cn(
+                                            "flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-all",
+                                            !editFormData.is_active
+                                                ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300"
+                                                : "bg-background border-border text-muted-foreground hover:border-rose-300"
+                                        )}
+                                    >
+                                        <XCircle className="w-4 h-4 inline mr-2" />
+                                        Inactive
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Role Selection */}
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                                    Role
+                                </label>
+                                <select
+                                    value={editFormData.role}
+                                    onChange={(e) => setEditFormData(prev => ({ ...prev, role: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                                >
+                                    <option value="">No change</option>
+                                    {availableRoles.map((role) => (
+                                        <option key={role.id} value={role.code}>
+                                            {role.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Current: {ROLE_LABELS[userToEdit?.role_code || userToEdit?.roles?.[0]?.role] || 'Unknown'}
+                                </p>
+                            </div>
+
+                            <div className="pt-4 flex items-center justify-end gap-2 border-t border-border">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsEditModalOpen(false);
+                                        setUserToEdit(null);
+                                    }}
+                                    className="btn-secondary"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="btn-primary disabled:opacity-50"
+                                >
+                                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </form>
+                    )}
+                </Modal>
 
                 {/* Keeping the Delete Modal as is for now */}
                 <Modal

@@ -773,18 +773,30 @@ export const uploadApi = {
 export const rbacApi = {
     getPermissions: async () => {
         const response = await apiClient.get('/rbac/permissions');
-        console.log('RBAC getPermissions response:', response.data);
         return response.data.data || response.data || [];
     },
     getMappings: async () => {
         const response = await apiClient.get('/rbac/mappings');
-        console.log('RBAC getMappings response:', response.data);
         return response.data.data || response.data || {};
     },
     updateMapping: async (role: string, permissions: string[]) => {
         const response = await apiClient.post('/rbac/mappings', { role, permissions });
         return response.data;
-    }
+    },
+    /**
+     * Get user's effective permissions (for debugging - Super Admin only)
+     */
+    getUserPermissions: async (userId: string) => {
+        const response = await apiClient.get(`/rbac/user/${userId}/permissions`);
+        return response.data.data || response.data || [];
+    },
+    /**
+     * Get current user's permissions
+     */
+    getMyPermissions: async (): Promise<string[]> => {
+        const response = await apiClient.get('/rbac/my-permissions');
+        return response.data.data || response.data || [];
+    },
 };
 
 export const telemetryApi = {
@@ -845,5 +857,19 @@ export const rolesApi = {
         } catch (error) {
             return null;
         }
+    },
+
+    /**
+     * Update a role's display properties (Super Admin only)
+     * NOTE: Roles are defined in the seed file. Only display properties can be updated.
+     */
+    update: async (id: string, data: {
+        name?: string;
+        description?: string;
+        icon?: string;
+        color?: string;
+    }): Promise<Role> => {
+        const response = await apiClient.put(`/roles/${id}`, data);
+        return response.data.data || response.data;
     },
 };

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import * as userController from '../controllers/user.controller';
-import { authenticateToken, requireMinRole } from '@sustainpro/shared-middleware';
+import { authenticateToken, requireMinRole, requirePermission } from '@sustainpro/shared-middleware';
 
 const router = Router();
 
@@ -93,7 +93,7 @@ router.get('/:id', userController.getById);
  */
 router.post(
     '/',
-    requireMinRole('ORG_ADMIN'),
+    requirePermission('users.manage'),
     [
         body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
         body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
@@ -141,6 +141,6 @@ router.put('/:id', userController.update);
  *       200:
  *         description: User deleted
  */
-router.delete('/:id', requireMinRole('ORG_ADMIN'), userController.remove);
+router.delete('/:id', requirePermission('users.manage'), userController.remove);
 
 export default router;

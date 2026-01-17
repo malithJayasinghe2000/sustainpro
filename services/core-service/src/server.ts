@@ -1,8 +1,9 @@
 import app from './app';
 import { config } from './config';
 import { connectRabbitMQ, closeRabbitMQ } from './messaging/publisher';
-import { createLogger } from '@sustainpro/shared-utils';
+import { createLogger, closeCacheInvalidation } from '@sustainpro/shared-utils';
 import { initDatabase, closeDatabase } from '@sustainpro/shared-database';
+import { initPermissionCacheInvalidation } from '@sustainpro/shared-middleware';
 
 const logger = createLogger({ service: 'core-service' });
 
@@ -14,6 +15,12 @@ const startServer = async () => {
 
         // Connect to RabbitMQ
         await connectRabbitMQ();
+
+        // Initialize cache invalidation listener
+        if (config.rabbitmq?.url) {
+            await initPermissionCacheInvalidation('core-service', config.rabbitmq.url);
+            logger.info('✅ Cache invalidation listener initialized');
+        }
 
         const server = app.listen(config.port, '0.0.0.0', () => {
             logger.info(`Core Service running on port ${config.port}`);
@@ -28,6 +35,7 @@ const startServer = async () => {
             server.close(async () => {
                 logger.info('HTTP server closed');
                 await closeRabbitMQ();
+                await closeCacheInvalidation();
                 await closeDatabase();
                 logger.info('Database connection closed');
                 process.exit(0);

@@ -290,18 +290,24 @@ export class UserRepository {
 
 
     /**
-     * Assign role to user
+     * Assign role to user (replaces any existing role assignments)
      */
     async assignRole(
         userId: string,
         role: string,
         context: { org_id?: string; event_id?: string; dept_id?: string; service_id?: string }
     ): Promise<RoleAssignment> {
+        // First, remove all existing role assignments for this user
+        await prisma.sps_role_assignments.deleteMany({
+            where: { user_id: userId }
+        });
+
+        // Then create the new role assignment
         return await prisma.sps_role_assignments.create({
             data: {
                 user_id: userId,
                 role,
-                org_id: context.org_id || null, // Convert empty string to null
+                org_id: context.org_id || null,
                 event_id: context.event_id || null,
                 dept_id: context.dept_id || null,
                 service_id: context.service_id || null,

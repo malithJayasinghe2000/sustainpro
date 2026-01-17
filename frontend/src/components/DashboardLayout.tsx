@@ -33,6 +33,14 @@ export default function DashboardLayout({ children }: SidebarProps) {
     const { user, logout, isAuthenticated, isLoading } = useAuth();
     const { settings } = useSettings();
 
+    // Debug: Log user permissions on mount/change
+    useEffect(() => {
+        if (user && process.env.NODE_ENV === 'development') {
+            console.log('[RBAC Debug] User permissions:', user.permissions);
+            console.log('[RBAC Debug] User roles:', user.roles);
+        }
+    }, [user]);
+
     useEffect(() => {
         if (!isLoading && !isAuthenticated) {
             router.push('/login');
@@ -100,29 +108,29 @@ export default function DashboardLayout({ children }: SidebarProps) {
     ];
 
     const standardItems: MenuItem[] = [
-        { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+        { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', requiredPermission: 'dashboard.view' },
         {
             name: 'Event Management',
             icon: Calendar,
             path: '/events',
-            requiredPermission: 'events:view', // The Module Access
+            requiredPermission: 'events.view', // Use dot notation matching database
             submenu: [
                 { name: 'Overview', path: '/events' },
-                { name: 'Create Event', path: '/events/new', requiredPermission: 'events:create' }
+                { name: 'Create Event', path: '/events/new', requiredPermission: 'events.manage' }
             ]
         },
-        { name: 'My Devices', icon: Component, path: '/devices' },
-        { name: 'Reports', icon: FileText, path: '/reports' },
+        { name: 'My Devices', icon: Component, path: '/devices', requiredPermission: 'devices.view' },
+        { name: 'Reports', icon: FileText, path: '/reports', requiredPermission: 'reports.view' },
         { name: 'Direct Profile', icon: User, path: '/profile' },
-        { name: 'Org Settings', icon: Settings, path: '/settings', requiredRole: 'ORG_ADMIN' },
+        { name: 'Org Settings', icon: Settings, path: '/settings', requiredPermission: 'settings.manage' },
         {
             name: 'User Management',
             icon: Users,
-            path: '/users', // Changed to global users path
-            requiredRole: 'ORG_ADMIN',
+            path: '/users',
+            requiredPermission: 'users.view',
             submenu: [
                 { name: 'Overview', path: '/users' },
-                { name: 'Create User', path: '/users/new' }
+                { name: 'Create User', path: '/users/new', requiredPermission: 'users.manage' }
             ]
         },
     ];
@@ -133,24 +141,20 @@ export default function DashboardLayout({ children }: SidebarProps) {
     } else {
         filteredMenuItems = standardItems
             .filter(item => {
+                // Check permission-based access (primary method)
                 if (item.requiredPermission) {
-                    // If permission is required, check if user has it
                     if (!user?.permissions?.includes(item.requiredPermission)) {
                         return false;
                     }
                 }
 
-                // HIDE Dashboard for Event Managers
-                if (item.path === '/dashboard' && hasRole(user, ROLES.EVENT_MANAGER)) {
-                    return false;
-                }
-
+                // Legacy role-based check (fallback for items without permissions)
                 if (item.requiredRole) {
                     return hasRole(user, item.requiredRole);
                 }
                 return true;
             })
-            // Filter Submenus
+            // Filter Submenus based on permissions
             .map(item => {
                 if (item.submenu) {
                     return {

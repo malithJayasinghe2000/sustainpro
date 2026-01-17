@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Shield, Save, Check, Lock, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Shield, Save, Check, Lock, AlertTriangle, RefreshCw, Pencil, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { rbacApi, rolesApi, Role } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/roles';
@@ -16,6 +16,13 @@ interface Permission {
     description: string;
 }
 
+// Available colors for role customization
+const ROLE_COLORS = [
+    '#EF4444', '#F97316', '#F59E0B', '#84CC16', '#22C55E', 
+    '#14B8A6', '#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6', 
+    '#A855F7', '#EC4899', '#F43F5E', '#6B7280'
+];
+
 export default function RBACPage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
@@ -26,6 +33,19 @@ export default function RBACPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
+    
+    // Role edit modal state
+    const [showRoleModal, setShowRoleModal] = useState(false);
+    const [editingRole, setEditingRole] = useState<Role | null>(null);
+    const [roleForm, setRoleForm] = useState({
+        name: '',
+        description: '',
+        icon: 'Shield',
+        color: '#3B82F6',
+    });
+    
+    // Tab state
+    const [activeTab, setActiveTab] = useState<'permissions' | 'roles'>('permissions');
 
     // Group permissions by module
     const groupedPermissions = permissions.reduce((acc, perm) => {
@@ -50,16 +70,15 @@ export default function RBACPage() {
             const [perms, maps, roles] = await Promise.all([
                 rbacApi.getPermissions(),
                 rbacApi.getMappings(),
-                rolesApi.getAll().catch(() => []) // Fallback to empty if API fails
+                rolesApi.getAll().catch(() => [])
             ]);
             setPermissions(perms);
             setMappings(maps);
 
-            // Filter out SUPER_ADMIN from role list (permissions managed differently)
+            // Filter out SUPER_ADMIN from role list
             const filteredRoles = roles.filter(r => r.code !== 'SUPER_ADMIN');
             setAvailableRoles(filteredRoles);
 
-            // Set default selected role if available
             if (filteredRoles.length > 0 && !filteredRoles.find(r => r.code === selectedRole)) {
                 setSelectedRole(filteredRoles[0].code);
             }
@@ -76,16 +95,11 @@ export default function RBACPage() {
             const currentRolePerms = prev[selectedRole] || [];
             const hasPerm = currentRolePerms.includes(permCode);
 
-            let newRolePerms;
-            if (hasPerm) {
-                newRolePerms = currentRolePerms.filter(p => p !== permCode);
-            } else {
-                newRolePerms = [...currentRolePerms, permCode];
-            }
-
             return {
                 ...prev,
-                [selectedRole]: newRolePerms
+                [selectedRole]: hasPerm
+                    ? currentRolePerms.filter(p => p !== permCode)
+                    : [...currentRolePerms, permCode]
             };
         });
     };
@@ -94,23 +108,13 @@ export default function RBACPage() {
         setMappings(prev => {
             const currentRolePerms = prev[selectedRole] || [];
             const modulePermCodes = modulePerms.map(p => p.code);
-
-            // Check if all are currently selected
             const allSelected = modulePermCodes.every(code => currentRolePerms.includes(code));
-
-            let newRolePerms;
-            if (allSelected) {
-                // Deselect all
-                newRolePerms = currentRolePerms.filter(p => !modulePermCodes.includes(p));
-            } else {
-                // Select all (add missing ones)
-                const toAdd = modulePermCodes.filter(code => !currentRolePerms.includes(code));
-                newRolePerms = [...currentRolePerms, ...toAdd];
-            }
 
             return {
                 ...prev,
-                [selectedRole]: newRolePerms
+                [selectedRole]: allSelected
+                    ? currentRolePerms.filter(p => !modulePermCodes.includes(p))
+                    : [...currentRolePerms, ...modulePermCodes.filter(code => !currentRolePerms.includes(code))]
             };
         });
     };
@@ -120,9 +124,42 @@ export default function RBACPage() {
             setIsSaving(true);
             const rolePerms = mappings[selectedRole] || [];
             await rbacApi.updateMapping(selectedRole, rolePerms);
-            toast.success(`Updated permissions for ${ROLE_LABELS[selectedRole]}`);
+            toast.success(`Updated permissions for ${ROLE_LABELS[selectedRole] || selectedRole}`);
         } catch (error) {
             toast.error('Failed to save changes');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Role edit handlers
+    const openRoleModal = (role: Role) => {
+        setEditingRole(role);
+        setRoleForm({
+            name: role.name,
+            description: role.description || '',
+            icon: role.icon || 'Shield',
+            color: role.color || '#3B82F6',
+        });
+        setShowRoleModal(true);
+    };
+
+    const handleSaveRole = async () => {
+        if (!editingRole) return;
+        
+        try {
+            setIsSaving(true);
+            await rolesApi.update(editingRole.id, {
+                name: roleForm.name,
+                description: roleForm.description,
+                icon: roleForm.icon,
+                color: roleForm.color,
+            });
+            toast.success(`Role "${roleForm.name}" updated`);
+            setShowRoleModal(false);
+            fetchData();
+        } catch (error: any) {
+            toast.error(error?.response?.data?.error || 'Failed to save role');
         } finally {
             setIsSaving(false);
         }
@@ -152,7 +189,7 @@ export default function RBACPage() {
                             Access Control (RBAC)
                         </h1>
                         <p className="text-muted-foreground text-sm mt-1">
-                            Configure feature access and permissions for each system role.
+                            Configure permissions for each role. Roles are defined in the system seed.
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -166,7 +203,32 @@ export default function RBACPage() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+                {/* Tabs */}
+                <div className="flex gap-2 border-b border-border pb-0">
+                    <button
+                        onClick={() => setActiveTab('permissions')}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                            activeTab === 'permissions'
+                                ? 'border-primary text-primary'
+                                : 'border-transparent text-muted-foreground hover:text-foreground'
+                        }`}
+                    >
+                        Permission Matrix
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('roles')}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                            activeTab === 'roles'
+                                ? 'border-primary text-primary'
+                                : 'border-transparent text-muted-foreground hover:text-foreground'
+                        }`}
+                    >
+                        View Roles
+                    </button>
+                </div>
+
+                {activeTab === 'permissions' ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
 
                     {/* Left: Role Selector */}
                     <div className="lg:col-span-1 space-y-2">
@@ -189,7 +251,6 @@ export default function RBACPage() {
                                     </button>
                                 ))
                             ) : (
-                                // Fallback to static ROLES if API roles not loaded
                                 Object.values(ROLES).filter(r => r !== 'SUPER_ADMIN').map((role) => (
                                     <button
                                         key={role}
@@ -216,7 +277,6 @@ export default function RBACPage() {
 
                     {/* Right: Permissions Matrix */}
                     <div className="lg:col-span-3 space-y-6">
-
                         <div className="bg-card border border-border rounded-xl !shadow-none overflow-hidden">
                             <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-muted/10">
                                 <div>
@@ -309,6 +369,146 @@ export default function RBACPage() {
                         </div>
                     </div>
                 </div>
+                ) : (
+                    /* Roles View Tab */
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-lg font-semibold">System Roles</h2>
+                            <p className="text-sm text-muted-foreground">
+                                Roles are defined in the system seed file. You can customize display properties.
+                            </p>
+                        </div>
+
+                        <div className="bg-card border border-border rounded-xl overflow-hidden">
+                            <table className="w-full">
+                                <thead className="bg-muted/50">
+                                    <tr>
+                                        <th className="text-left px-6 py-3 text-xs font-bold text-muted-foreground uppercase">Role</th>
+                                        <th className="text-left px-6 py-3 text-xs font-bold text-muted-foreground uppercase">Level</th>
+                                        <th className="text-left px-6 py-3 text-xs font-bold text-muted-foreground uppercase">Description</th>
+                                        <th className="text-right px-6 py-3 text-xs font-bold text-muted-foreground uppercase">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    {availableRoles.map((role) => (
+                                        <tr key={role.id} className="hover:bg-muted/30">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div 
+                                                        className="w-3 h-3 rounded-full" 
+                                                        style={{ backgroundColor: role.color || '#6B7280' }}
+                                                    />
+                                                    <div>
+                                                        <div className="font-medium">{role.name}</div>
+                                                        <div className="text-xs text-muted-foreground font-mono">{role.code}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-muted">
+                                                    Level {role.level}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-muted-foreground max-w-xs truncate">
+                                                {role.description}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button
+                                                    onClick={() => openRoleModal(role)}
+                                                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                                                    title="Edit Display Properties"
+                                                >
+                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="p-4 bg-blue-50 dark:bg-blue-950/20 text-blue-900 dark:text-blue-200 rounded-xl border border-blue-200 dark:border-blue-800 text-sm">
+                            <h4 className="font-bold mb-1 flex items-center gap-2">
+                                <Lock className="w-4 h-4" />
+                                About Role Management
+                            </h4>
+                            <p className="text-xs">
+                                Roles and their hierarchy levels are defined in the database seed file. 
+                                You can customize display properties (name, description, color) but not the role code or level.
+                                To add new roles or permissions, update the seed file and re-run the seeder.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Role Edit Modal */}
+                {showRoleModal && editingRole && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-xl">
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                                <h3 className="font-semibold text-lg">Edit Role Display</h3>
+                                <button onClick={() => setShowRoleModal(false)} className="p-1 hover:bg-muted rounded">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                <div className="p-3 bg-muted/50 rounded-lg">
+                                    <div className="text-xs text-muted-foreground">Role Code (read-only)</div>
+                                    <div className="font-mono font-medium">{editingRole.code}</div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Display Name</label>
+                                    <input
+                                        type="text"
+                                        value={roleForm.name}
+                                        onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
+                                        className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Description</label>
+                                    <textarea
+                                        value={roleForm.description}
+                                        onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
+                                        className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                        rows={2}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Color</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {ROLE_COLORS.map((color) => (
+                                            <button
+                                                key={color}
+                                                onClick={() => setRoleForm({ ...roleForm, color })}
+                                                className={`w-7 h-7 rounded-full border-2 transition-all ${
+                                                    roleForm.color === color ? 'border-foreground scale-110' : 'border-transparent'
+                                                }`}
+                                                style={{ backgroundColor: color }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/30">
+                                <button
+                                    onClick={() => setShowRoleModal(false)}
+                                    className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveRole}
+                                    disabled={isSaving || !roleForm.name}
+                                    className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    Update Role
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </DashboardLayout>
     );

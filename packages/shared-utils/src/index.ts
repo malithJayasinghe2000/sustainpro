@@ -5,3 +5,4 @@ export * from './timezone';
 export * from './validation';
 export * from './password-validation';
 export * from './notification-publisher';
+export * from './cache-invalidation';
