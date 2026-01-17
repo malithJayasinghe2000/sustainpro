@@ -6,7 +6,7 @@ import {
     RefreshCw, User, Lock, AlertCircle
 } from 'lucide-react';
 import { RichSelect } from '@/components/ui/RichSelect';
-import { getAllTimezones } from '@/lib/timezone';
+import { getTimezones } from '@/lib/timezones';
 import DashboardLayout from '@/components/DashboardLayout';
 import { organizationsApi, authApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -252,8 +252,8 @@ export default function OrgSettingsPage() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as Tab)}
                                 className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${isActive
-                                        ? 'bg-background text-foreground shadow-sm'
-                                        : 'text-muted-foreground hover:text-foreground'
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
                                     }`}
                             >
                                 <Icon className="w-4 h-4" />
@@ -413,8 +413,8 @@ export default function OrgSettingsPage() {
                                         <div>
                                             <span className="text-xs text-muted-foreground block">Status</span>
                                             <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${organization.is_active
-                                                    ? 'bg-green-500/10 text-green-600'
-                                                    : 'bg-red-500/10 text-red-600'
+                                                ? 'bg-green-500/10 text-green-600'
+                                                : 'bg-red-500/10 text-red-600'
                                                 }`}>
                                                 {organization.is_active ? 'Active' : 'Inactive'}
                                             </span>
@@ -454,9 +454,9 @@ export default function OrgSettingsPage() {
                                         <RichSelect
                                             value={selectedTimezone}
                                             onChange={setSelectedTimezone}
-                                            options={getAllTimezones().map(tz => ({
-                                                value: tz,
-                                                label: tz.replace(/_/g, ' '),
+                                            options={getTimezones().map(tz => ({
+                                                value: tz.value,
+                                                label: tz.label,
                                                 icon: Clock
                                             }))}
                                             className="h-11"

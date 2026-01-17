@@ -36,22 +36,28 @@ const getAllTimezones = (): TimezoneOption[] => {
         { value: 'America/Santiago', region: 'America' },
         { value: 'America/Buenos_Aires', region: 'America' },
         // Asia
+        { value: 'Asia/Bahrain', region: 'Asia' },
         { value: 'Asia/Bangkok', region: 'Asia' },
+        { value: 'Asia/Colombo', region: 'Asia' },  // Sri Lanka (UTC+5:30)
         { value: 'Asia/Dhaka', region: 'Asia' },
-        { value: 'Asia/Dubai', region: 'Asia' },
+        { value: 'Asia/Dubai', region: 'Asia' },    // UAE (UTC+4)
         { value: 'Asia/Hong_Kong', region: 'Asia' },
         { value: 'Asia/Jakarta', region: 'Asia' },
         { value: 'Asia/Jerusalem', region: 'Asia' },
-        { value: 'Asia/Karachi', region: 'Asia' },
-        { value: 'Asia/Kolkata', region: 'Asia' },
+        { value: 'Asia/Karachi', region: 'Asia' },  // Pakistan (UTC+5)
+        { value: 'Asia/Kathmandu', region: 'Asia' }, // Nepal (UTC+5:45)
+        { value: 'Asia/Kolkata', region: 'Asia' },  // India (UTC+5:30)
         { value: 'Asia/Kuala_Lumpur', region: 'Asia' },
         { value: 'Asia/Kuwait', region: 'Asia' },
         { value: 'Asia/Manila', region: 'Asia' },
+        { value: 'Asia/Muscat', region: 'Asia' },   // Oman (UTC+4)
+        { value: 'Asia/Qatar', region: 'Asia' },    // Qatar (UTC+3)
         { value: 'Asia/Riyadh', region: 'Asia' },
         { value: 'Asia/Seoul', region: 'Asia' },
         { value: 'Asia/Shanghai', region: 'Asia' },
         { value: 'Asia/Singapore', region: 'Asia' },
         { value: 'Asia/Taipei', region: 'Asia' },
+        { value: 'Asia/Tehran', region: 'Asia' },   // Iran (UTC+3:30)
         { value: 'Asia/Tokyo', region: 'Asia' },
         // Australia
         { value: 'Australia/Adelaide', region: 'Australia' },

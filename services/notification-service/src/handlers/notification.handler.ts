@@ -156,6 +156,14 @@ async function handleEmailNotification(routingKey: string, payload: any): Promis
                 result = await sendWelcomeCredentialsEmail(payload);
                 break;
 
+            case 'event.end_requested':
+                result = await sendEventEndRequestEmail(payload);
+                break;
+
+            case 'event.delete_requested':
+                result = await sendEventDeleteRequestEmail(payload);
+                break;
+
             default:
                 logger.warn('Unknown email notification type', { notificationType, routingKey });
                 return false;
@@ -348,6 +356,252 @@ async function sendWelcomeCredentialsEmail(payload: any) {
 }
 
 /**
+ * Send event delete request notification to org admins and super admins
+ */
+async function sendEventDeleteRequestEmail(payload: any) {
+    const { getPrismaClient } = await import('@sustainpro/shared-database');
+    const prisma = getPrismaClient();
+
+    try {
+        // Get event details
+        const eventId = payload.event_id;
+        const eventName = payload.event_name || 'Unknown Event';
+        const eventCode = payload.event_code || '';
+        const organizationId = payload.organization_id;
+        const requestedById = payload.requested_by;
+        const requestedAt = payload.requested_at ? new Date(payload.requested_at) : new Date();
+
+        // Get requester's name
+        const requester = await prisma.sps_users.findUnique({
+            where: { id: requestedById },
+            select: { full_name: true }
+        });
+        const requestedByName = requester?.full_name || 'Event Manager';
+
+        // Get org admins
+        const orgAdmins = await prisma.sps_users.findMany({
+            where: {
+                is_active: true,
+                OR: [
+                    {
+                        sps_role_assignments: {
+                            some: { role: 'ORG_ADMIN', org_id: organizationId }
+                        }
+                    },
+                    {
+                        organization_id: organizationId,
+                        sps_role_assignments: {
+                            some: { role: 'ORG_ADMIN' }
+                        }
+                    }
+                ]
+            },
+            select: { id: true, email: true, full_name: true }
+        });
+
+        // Get super admins
+        const superAdmins = await prisma.sps_users.findMany({
+            where: {
+                is_active: true,
+                OR: [
+                    { is_super_admin: true },
+                    { sps_role_assignments: { some: { role: 'SUPER_ADMIN' } } }
+                ]
+            },
+            select: { id: true, email: true, full_name: true }
+        });
+
+        const allRecipients = [...orgAdmins, ...superAdmins];
+        const uniqueRecipients = allRecipients.filter((recipient, index, self) =>
+            index === self.findIndex(r => r.email === recipient.email)
+        );
+
+        if (uniqueRecipients.length === 0) {
+            logger.warn('No recipients found for event delete request', { eventId });
+            return { success: true };
+        }
+
+        const baseUrl = process.env.FRONTEND_URL || 'https://app.sustainpro.io';
+        const eventUrl = `${baseUrl}/events/${eventId}`;
+
+        const results = [];
+        for (const recipient of uniqueRecipients) {
+            const html = templates.generateEventDeleteRequestHtml({
+                recipientName: recipient.full_name || undefined,
+                eventName,
+                eventCode,
+                requestedByName,
+                requestTime: requestedAt.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+                eventUrl,
+            });
+
+            const text = templates.generateEventDeleteRequestText({
+                recipientName: recipient.full_name || undefined,
+                eventName,
+                eventCode,
+                requestedByName,
+                requestTime: requestedAt.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+                eventUrl,
+            });
+
+            const result = await emailService.send({
+                to: recipient.email,
+                subject: `CRITICAL: Event Delete Request: ${eventName}`,
+                html,
+                text,
+            });
+            results.push(result);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        const successCount = results.filter(r => r.success).length;
+        return { success: successCount > 0 };
+    } catch (error) {
+        logger.error('Error sending event delete request notification', { error: (error as Error).message });
+        return { success: false, error };
+    }
+}
+
+/**
+ * Send event end request notification to org admins and super admins
+ */
+async function sendEventEndRequestEmail(payload: any) {
+    const { getPrismaClient } = await import('@sustainpro/shared-database');
+    const prisma = getPrismaClient();
+
+    try {
+        // Get event details
+        const eventId = payload.event_id;
+        const eventName = payload.event_name || 'Unknown Event';
+        const eventCode = payload.event_code || '';
+        const organizationId = payload.organization_id;
+        const requestedById = payload.requested_by;
+        const requestedAt = payload.requested_at ? new Date(payload.requested_at) : new Date();
+
+        // Get requester's name
+        const requester = await prisma.sps_users.findUnique({
+            where: { id: requestedById },
+            select: { full_name: true }
+        });
+        const requestedByName = requester?.full_name || 'Event Manager';
+
+        // Get org admins for this organization
+        // Get org admins for this organization
+        const orgAdmins = await prisma.sps_users.findMany({
+            where: {
+                is_active: true,
+                OR: [
+                    // Case 1: Explicit assignment to this Org
+                    {
+                        sps_role_assignments: {
+                            some: {
+                                role: 'ORG_ADMIN',
+                                org_id: organizationId
+                            }
+                        }
+                    },
+                    // Case 2: User belongs to Org and has generic Org Admin role
+                    {
+                        organization_id: organizationId,
+                        sps_role_assignments: {
+                            some: {
+                                role: 'ORG_ADMIN'
+                            }
+                        }
+                    }
+                ]
+            },
+            select: { id: true, email: true, full_name: true }
+        });
+
+        // Get super admins
+        const superAdmins = await prisma.sps_users.findMany({
+            where: {
+                is_active: true,
+                OR: [
+                    { is_super_admin: true },
+                    {
+                        sps_role_assignments: {
+                            some: { role: 'SUPER_ADMIN' }
+                        }
+                    }
+                ]
+            },
+            select: { id: true, email: true, full_name: true }
+        });
+
+        // Combine recipients (unique by email)
+        const allRecipients = [...orgAdmins, ...superAdmins];
+        const uniqueRecipients = allRecipients.filter((recipient, index, self) =>
+            index === self.findIndex(r => r.email === recipient.email)
+        );
+
+        if (uniqueRecipients.length === 0) {
+            logger.warn('No recipients found for event end request notification', { eventId, organizationId });
+            return { success: true }; // No recipients but not an error
+        }
+
+        // Build event URL
+        const baseUrl = process.env.FRONTEND_URL || 'https://app.sustainpro.io';
+        const eventUrl = `${baseUrl}/events/${eventId}`;
+
+        // Send email to each recipient sequentially to avoid rate limits
+        const results = [];
+        for (const recipient of uniqueRecipients) {
+            const html = templates.generateEventEndRequestHtml({
+                recipientName: recipient.full_name || undefined,
+                eventName,
+                eventCode,
+                requestedByName,
+                requestTime: requestedAt.toLocaleString('en-US', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                }),
+                eventUrl,
+            });
+
+            const text = templates.generateEventEndRequestText({
+                recipientName: recipient.full_name || undefined,
+                eventName,
+                eventCode,
+                requestedByName,
+                requestTime: requestedAt.toLocaleString('en-US', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                }),
+                eventUrl,
+            });
+
+            const result = await emailService.send({
+                to: recipient.email,
+                subject: `Event End Request: ${eventName} - Action Required`,
+                html,
+                text,
+            });
+            results.push(result);
+
+            // Wait 1 second between emails to prevent "Too many emails per second" error
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        const successCount = results.filter(r => r.success).length;
+        logger.info(`Event end request notifications sent`, {
+            eventId,
+            totalRecipients: uniqueRecipients.length,
+            successCount
+        });
+
+        return { success: true };
+    } catch (error) {
+        logger.error('Failed to send event end request notification', {
+            error: (error as Error).message,
+            payload
+        });
+        return { success: false, error: (error as Error).message };
+    }
+}
+
+/**
  * Extract notification type from routing key
  */
 function extractTypeFromRoutingKey(routingKey: string): string {
@@ -368,6 +622,11 @@ function extractTypeFromRoutingKey(routingKey: string): string {
 
     if (parts[0] === 'alert') {
         return routingKey;
+    }
+
+    // Handle event routing keys
+    if (parts[0] === 'event') {
+        return routingKey; // Return full key like 'event.end_requested'
     }
 
     return routingKey;

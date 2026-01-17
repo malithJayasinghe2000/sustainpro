@@ -14,10 +14,13 @@ export interface Event {
     event_type: string | null;
     image_url: string | null;
     coordinates: { lat: number; lng: number } | null;
+    end_requested: boolean | null;
+    end_requested_by: string | null;
+    end_requested_at: Date | null;
     created_at: Date;
 }
 
-export type EventStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+export type EventStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED' | 'END';
 
 export interface CreateEventDto {
     organization_id: string;

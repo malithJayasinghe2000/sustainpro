@@ -450,6 +450,159 @@ export class EventService {
             throw error;
         }
     }
+    /**
+     * Request to end an event (for event managers who can't directly end)
+     */
+    async requestEndEvent(id: string, requestedByUserId: string, auditCtx?: AuditContext): Promise<Event> {
+        const startTime = Date.now();
+        const event = await this.repo.findById(id);
+        if (!event) {
+            throw new NotFoundError('Event', id);
+        }
+
+        if (event.status !== 'ACTIVE') {
+            throw new ForbiddenError('Can only request to end an active event');
+        }
+
+        try {
+            // Update event with end request
+            const updated = await this.repo.update(id, {
+                end_requested: true,
+                end_requested_by: requestedByUserId,
+                end_requested_at: new Date(),
+            } as any);
+
+            logger.info('Event end requested', { eventId: id, requestedBy: requestedByUserId });
+
+            // Log the request
+            await auditLogger.log({
+                sourceType: AuditSourceType.USER,
+                category: AuditCategory.EVENT,
+                action: AuditAction.UPDATE,
+                actorUserId: auditCtx?.actorUserId || requestedByUserId,
+                organizationId: event.organization_id,
+                eventId: id,
+                targetResource: 'event',
+                targetId: id,
+                targetName: event.name,
+                status: AuditStatus.SUCCESS,
+                changes: { end_requested: { old: false, new: true } },
+                ipAddress: auditCtx?.ipAddress,
+                userAgent: auditCtx?.userAgent,
+                description: `Event end requested for "${event.name}"`,
+                durationMs: Date.now() - startTime,
+            });
+
+            // Publish event for notification service to send emails
+            await publishEvent('event.end_requested', {
+                event_id: id,
+                event_name: event.name,
+                event_code: event.code,
+                organization_id: event.organization_id,
+                requested_by: requestedByUserId,
+                requested_at: new Date().toISOString(),
+            });
+
+            return updated!;
+        } catch (error) {
+            await auditLogger.log({
+                sourceType: AuditSourceType.USER,
+                category: AuditCategory.EVENT,
+                action: AuditAction.UPDATE,
+                actorUserId: auditCtx?.actorUserId || requestedByUserId,
+                eventId: id,
+                status: AuditStatus.FAILURE,
+                errorMessage: (error as Error).message,
+                ipAddress: auditCtx?.ipAddress,
+                userAgent: auditCtx?.userAgent,
+                durationMs: Date.now() - startTime,
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Request to delete an event (for event managers who can't directly delete)
+     */
+    async requestDeleteEvent(id: string, requestedByUserId: string, auditCtx?: AuditContext): Promise<Event> {
+        const startTime = Date.now();
+        const event = await this.repo.findById(id);
+        if (!event) {
+            throw new NotFoundError('Event', id);
+        }
+
+        try {
+            const updated = await this.repo.update(id, {
+                delete_requested: true,
+                delete_requested_by: requestedByUserId,
+                delete_requested_at: new Date(),
+            } as any);
+
+            logger.info('Event delete requested', { eventId: id, requestedBy: requestedByUserId });
+
+            await auditLogger.log({
+                sourceType: AuditSourceType.USER,
+                category: AuditCategory.EVENT,
+                action: AuditAction.UPDATE,
+                actorUserId: auditCtx?.actorUserId || requestedByUserId,
+                organizationId: event.organization_id,
+                eventId: id,
+                targetResource: 'event',
+                targetId: id,
+                targetName: event.name,
+                status: AuditStatus.SUCCESS,
+                changes: { delete_requested: { old: false, new: true } },
+                ipAddress: auditCtx?.ipAddress,
+                userAgent: auditCtx?.userAgent,
+                description: `Event delete requested for "${event.name}"`,
+                durationMs: Date.now() - startTime,
+            });
+
+            await publishEvent('event.delete_requested', {
+                event_id: id,
+                event_name: event.name,
+                event_code: event.code,
+                organization_id: event.organization_id,
+                requested_by: requestedByUserId,
+                requested_at: new Date().toISOString(),
+            });
+
+            return updated!;
+        } catch (error) {
+            await auditLogger.log({
+                sourceType: AuditSourceType.USER,
+                category: AuditCategory.EVENT,
+                action: AuditAction.UPDATE,
+                actorUserId: auditCtx?.actorUserId,
+                eventId: id,
+                status: AuditStatus.FAILURE,
+                errorMessage: (error as Error).message,
+                ipAddress: auditCtx?.ipAddress,
+                userAgent: auditCtx?.userAgent,
+                durationMs: Date.now() - startTime,
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Clear end request (when event is ended or request is declined)
+     */
+    async clearEndRequest(id: string, auditCtx?: AuditContext): Promise<Event> {
+        const event = await this.repo.findById(id);
+        if (!event) {
+            throw new NotFoundError('Event', id);
+        }
+
+        const updated = await this.repo.update(id, {
+            end_requested: false,
+            end_requested_by: null,
+            end_requested_at: null,
+        } as any);
+
+        logger.info('Event end request cleared', { eventId: id });
+        return updated!;
+    }
 
     /**
      * Get event with full details

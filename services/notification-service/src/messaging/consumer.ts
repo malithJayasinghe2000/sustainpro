@@ -99,6 +99,7 @@ async function setupQueues(): Promise<void> {
     await channel.bindQueue(QUEUES.email, 'sustainpro.events', 'user.*');
     await channel.bindQueue(QUEUES.email, 'sustainpro.events', 'alert.*');
     await channel.bindQueue(QUEUES.email, 'sustainpro.events', 'notification.email.*');
+    await channel.bindQueue(QUEUES.email, 'sustainpro.events', 'event.end_requested');
 
     // Start consuming
     channel.consume(QUEUES.email, async (msg) => {
@@ -154,10 +155,10 @@ async function processMessage(msg: ConsumeMessage, type: 'email' | 'sms' | 'push
     if (!channel) return;
 
     const routingKey = msg.fields.routingKey;
-    
+
     try {
         const payload = JSON.parse(msg.content.toString());
-        
+
         logger.debug(`Processing ${type} notification`, { routingKey, payload: { ...payload, code: '***' } });
 
         // Handle the notification
@@ -169,13 +170,13 @@ async function processMessage(msg: ConsumeMessage, type: 'email' | 'sms' | 'push
         } else {
             // Reject and requeue if not exceeded max retries
             const retryCount = (msg.properties.headers?.['x-retry-count'] || 0) as number;
-            
+
             if (retryCount < config.retry.maxAttempts) {
                 // Delay before retry
-                await new Promise(resolve => 
+                await new Promise(resolve =>
                     setTimeout(resolve, config.retry.initialDelayMs * Math.pow(config.retry.backoffMultiplier, retryCount))
                 );
-                
+
                 channel.nack(msg, false, true);
                 logger.warn(`Retrying ${type} notification`, { routingKey, attempt: retryCount + 1 });
             } else {
@@ -185,7 +186,7 @@ async function processMessage(msg: ConsumeMessage, type: 'email' | 'sms' | 'push
             }
         }
     } catch (error) {
-        logger.error(`Error processing ${type} message`, { 
+        logger.error(`Error processing ${type} message`, {
             error: (error as Error).message,
             routingKey,
         });
@@ -222,9 +223,9 @@ export const publishNotification = async (
         logger.debug('Notification published', { routingKey });
         return true;
     } catch (error) {
-        logger.error('Failed to publish notification', { 
-            routingKey, 
-            error: (error as Error).message 
+        logger.error('Failed to publish notification', {
+            routingKey,
+            error: (error as Error).message
         });
         return false;
     }

@@ -243,6 +243,12 @@ model sps_events {
   event_type           String?                @db.VarChar(50)
   image_url            String?
   coordinates          Json?                  @default("{}")
+  end_requested        Boolean?               @default(false)
+  end_requested_by     String?                @db.Uuid
+  end_requested_at     DateTime?              @db.Timestamptz(6)
+  delete_requested     Boolean?               @default(false)
+  delete_requested_by  String?                @db.Uuid
+  delete_requested_at  DateTime?              @db.Timestamptz(6)
   created_at           DateTime?              @default(now()) @db.Timestamptz(6)
   updated_at           DateTime?              @default(now()) @db.Timestamptz(6)
   sps_departments      sps_departments[]

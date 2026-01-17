@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { Calendar, MapPin, Clock, Settings, ArrowLeft, Edit, Trash2, Archive, Layers, Shield, Heart, Zap, Users, ArrowRight, UserPlus, Save, Image as ImageIcon } from 'lucide-react';
+import { Calendar, MapPin, Clock, Settings, ArrowLeft, Edit, Trash2, Archive, Layers, Shield, Heart, Zap, Users, ArrowRight, UserPlus, Save, Image as ImageIcon, Play, Square } from 'lucide-react';
 import { eventsApi, departmentsApi, usersApi, getImageUrl } from '@/lib/api';
 import DepartmentsSelector from '@/components/DepartmentsSelector';
 import ImageUpload from '@/components/ImageUpload';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
+import Modal from '@/components/Modal';
 import dynamic from 'next/dynamic';
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
@@ -29,6 +30,14 @@ export default function EventDetailPage() {
     const canUpdate = user?.is_super_admin || user?.permissions?.includes('events.update');
     const canUpdateStatus = user?.is_super_admin || user?.permissions?.includes('events.status');
     const canDelete = user?.is_super_admin || user?.permissions?.includes('events.delete');
+    // New permissions for ending events
+    const canEndEvent = user?.is_super_admin || user?.permissions?.includes('events.end');
+    // Event managers can request end - fallback to events.status if events.endrequest not available
+    const canRequestEnd = user?.permissions?.includes('events.endrequest') ||
+        (!canEndEvent && user?.permissions?.includes('events.status'));
+    // Request delete permission
+    const canRequestDelete = user?.permissions?.includes('events.deleterequest') ||
+        (!canDelete && canUpdate);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -49,6 +58,8 @@ export default function EventDetailPage() {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [deletePassword, setDeletePassword] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isEndEventModalOpen, setIsEndEventModalOpen] = useState(false);
+    const [isDeleteRequestModalOpen, setIsDeleteRequestModalOpen] = useState(false);
 
     useEffect(() => {
         if (params.id) {
@@ -56,7 +67,149 @@ export default function EventDetailPage() {
         }
     }, [params.id]);
 
+    const [timeLeft, setTimeLeft] = useState<string>('');
 
+    // Timer Logic - Timezone Aware
+    useEffect(() => {
+        if (!event?.end_date) return;
+
+        // Import timezone utilities dynamically or ensure they are imported at the top
+        const getUserTimezone = () => {
+            if (typeof window === 'undefined') return 'Asia/Dubai';
+            return localStorage.getItem('userTimezone') || 'Asia/Dubai';
+        };
+
+        const calculateTimeLeft = () => {
+            const userTZ = getUserTimezone();
+
+            // Get the current time in the user's timezone
+            const now = new Date();
+
+            // Parse the end_date (stored as UTC in database)
+            const end = new Date(event.end_date);
+
+            // Calculate diff in milliseconds (both are in UTC internally, so this is correct)
+            const diff = end.getTime() - now.getTime();
+
+            if (diff <= 0) {
+                if (event.status === 'ACTIVE') {
+                    handleStatusChange('END');
+                }
+                return '00:00:00';
+            }
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            const dayString = days > 0 ? `${days}d ` : '';
+            return `${dayString}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        };
+
+        let timer: NodeJS.Timeout;
+
+        if (event.status === 'ACTIVE') {
+            // Also run immediately
+            setTimeLeft(calculateTimeLeft());
+            timer = setInterval(() => {
+                setTimeLeft(calculateTimeLeft());
+            }, 1000);
+        } else if (event.status === 'END') {
+            setTimeLeft('Event Ended');
+        } else {
+            setTimeLeft(calculateTimeLeft());
+        }
+
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+    }, [event?.status, event?.end_date]);
+
+    const handleStartEvent = () => {
+        if (!event?.start_date || !event?.end_date) {
+            toast.error('Please set start and end dates first');
+            return;
+        }
+        handleStatusChange('ACTIVE');
+    };
+
+
+    // Get the user's timezone - centralized for consistency
+    const getUserTZ = () => localStorage.getItem('userTimezone') || 'Asia/Dubai';
+
+    // Convert UTC date string to datetime-local format in user's timezone
+    const utcToLocalInput = (utcDateStr: string | null): string => {
+        if (!utcDateStr) return '';
+
+        const date = new Date(utcDateStr);
+        const userTZ = getUserTZ();
+
+        // Format date in user's timezone for datetime-local input
+        const formatter = new Intl.DateTimeFormat('sv-SE', {
+            timeZone: userTZ,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        });
+
+        // sv-SE locale gives us YYYY-MM-DD HH:mm format
+        const formatted = formatter.format(date);
+        // Convert "YYYY-MM-DD HH:mm" to "YYYY-MM-DDTHH:mm"
+        return formatted.replace(' ', 'T');
+    };
+
+    // Convert datetime-local input (in user's timezone) to UTC ISO string for saving
+    const localInputToUTC = (localDateStr: string | null): string | null => {
+        if (!localDateStr) return null;
+
+        const userTZ = getUserTZ();
+
+        // Parse input: YYYY-MM-DDTHH:mm
+        const [datePart, timePart] = localDateStr.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour, minute] = timePart.split(':').map(Number);
+
+        // Create a date string with timezone
+        // We need to find what UTC time corresponds to the given local time in userTZ
+
+        // Step 1: Create a reference date to get the timezone offset
+        const referenceDate = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+
+        // Step 2: Get what time it would be in the target timezone at this UTC time
+        const tzFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: userTZ,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        });
+        const tzParts = tzFormatter.formatToParts(referenceDate);
+        const tzHour = parseInt(tzParts.find(p => p.type === 'hour')?.value || '0');
+        const tzMinute = parseInt(tzParts.find(p => p.type === 'minute')?.value || '0');
+        const tzDay = parseInt(tzParts.find(p => p.type === 'day')?.value || '1');
+
+        // Step 3: Calculate the offset between UTC and the timezone
+        // The difference tells us how far ahead/behind the timezone is
+        let offsetMinutes = (tzHour * 60 + tzMinute) - (hour * 60 + minute);
+
+        // Handle day boundary
+        if (tzDay !== day) {
+            offsetMinutes += (tzDay > day ? 1 : -1) * 24 * 60;
+        }
+
+        // Step 4: Create the UTC date by subtracting the offset
+        // If timezone is UTC+4, we need to subtract 4 hours to get UTC
+        const utcTime = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+        utcTime.setMinutes(utcTime.getMinutes() - offsetMinutes);
+
+        return utcTime.toISOString();
+    };
 
     useEffect(() => {
         if (event) {
@@ -64,9 +217,9 @@ export default function EventDetailPage() {
                 name: event.name || '',
                 description: event.description || '',
                 location: event.location || '',
-                coordinates: event.coordinates || { lat: 25.075908, lng: 55.1453303 }, // Default to Dubai if missing
-                start_date: event.start_date ? new Date(event.start_date).toISOString().slice(0, 16) : '',
-                end_date: event.end_date ? new Date(event.end_date).toISOString().slice(0, 16) : '',
+                coordinates: event.coordinates || { lat: 25.075908, lng: 55.1453303 },
+                start_date: utcToLocalInput(event.start_date),
+                end_date: utcToLocalInput(event.end_date),
                 banner_url: event.image_url || ''
             });
         }
@@ -135,14 +288,19 @@ export default function EventDetailPage() {
         if (!canUpdate) return;
         try {
             setIsSaving(true);
+
             const updateData = {
                 ...formData,
-                start_date: formData.start_date ? new Date(formData.start_date).toISOString() : null,
-                end_date: formData.end_date ? new Date(formData.end_date).toISOString() : null,
+                start_date: localInputToUTC(formData.start_date),
+                end_date: localInputToUTC(formData.end_date),
                 image_url: formData.banner_url
             };
+
             await eventsApi.update(params.id as string, updateData);
-            setEvent({ ...event, ...formData });
+
+            // Refetch event data to get the server's response with correct dates
+            await fetchEventData();
+
             toast.success('Event details updated');
         } catch (error: any) {
             console.error(error);
@@ -223,11 +381,87 @@ export default function EventDetailPage() {
                                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
                                     {event.code}
                                 </span>
+                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${event.status === 'ACTIVE' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                    event.status === 'END' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                        'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                                    }`}>
+                                    {event.status}
+                                </span>
                             </div>
                             <p className="text-sm text-muted-foreground mt-1">
                                 {event.location || 'No location specified'}
                             </p>
                         </div>
+                    </div>
+
+                    {/* Right Side Actions & Timer */}
+                    <div className="flex items-center gap-4">
+                        {/* Timer Display */}
+                        {(event.status === 'ACTIVE' || event.status === 'PLANNING') && timeLeft && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-lg shadow-sm">
+                                <Clock className="w-4 h-4 text-primary animate-pulse" />
+                                <span className="font-mono text-lg font-bold tabular-nums text-foreground">
+                                    {timeLeft}
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Start Button */}
+                        {canUpdateStatus && event.status === 'PLANNING' && (
+                            <button
+                                onClick={handleStartEvent}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+                            >
+                                <Play className="w-4 h-4 fill-current" />
+                                Start Event
+                            </button>
+                        )}
+
+                        {/* End Event Button - For Org Admins/Super Admins */}
+                        {canEndEvent && event.status === 'ACTIVE' && (
+                            <button
+                                onClick={() => setIsEndEventModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+                            >
+                                <Square className="w-4 h-4 fill-current" />
+                                End Event
+                            </button>
+                        )}
+
+                        {/* Request End Button - For Event Managers */}
+                        {!canEndEvent && canRequestEnd && event.status === 'ACTIVE' && !event.end_requested && (
+                            <button
+                                onClick={() => setIsEndEventModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+                            >
+                                <Square className="w-4 h-4" />
+                                Request End
+                            </button>
+                        )}
+
+                        {/* Delete Requested Indicator */}
+                        {event.delete_requested && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg border border-destructive/50 font-medium">
+                                <Trash2 className="w-4 h-4" />
+                                Delete Requested
+                            </div>
+                        )}
+
+                        {/* End Requested Indicator - When request is pending */}
+                        {!event.delete_requested && event.status === 'ACTIVE' && event.end_requested && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-orange-700 dark:bg-orange-700 text-white rounded-lg border border-orange-300 dark:border-orange-700 font-medium">
+                                <Clock className="w-4 h-4" />
+                                End Requested
+                            </div>
+                        )}
+
+                        {/* End Status Indicator */}
+                        {event.status === 'END' && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-lg border border-border">
+                                <Square className="w-4 h-4 fill-current" />
+                                Event Ended
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -668,19 +902,35 @@ export default function EventDetailPage() {
                                 </div>
 
                                 {/* Danger Zone */}
-                                {canDelete && (
+                                {(canDelete || canRequestDelete) && (
                                     <div className="border-t border-destructive/20 pt-6">
                                         <h4 className="font-semibold text-destructive mb-2">Danger Zone</h4>
                                         <p className="text-sm text-muted-foreground mb-4">
                                             Permanent actions that cannot be undone.
                                         </p>
-                                        <button
-                                            onClick={() => setShowDeleteDialog(true)}
-                                            className="px-4 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-lg text-sm font-medium transition-colors"
-                                        >
-                                            <Trash2 className="w-4 h-4 inline mr-2" />
-                                            Delete Event
-                                        </button>
+                                        {canDelete ? (
+                                            <button
+                                                onClick={() => setShowDeleteDialog(true)}
+                                                className="px-4 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-lg text-sm font-medium transition-colors"
+                                            >
+                                                <Trash2 className="w-4 h-4 inline mr-2" />
+                                                Delete Event
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => setIsDeleteRequestModalOpen(true)}
+                                                disabled={event.delete_requested}
+                                                className="px-4 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                            >
+                                                <Trash2 className="w-4 h-4 inline mr-2" />
+                                                {event.delete_requested ? 'Delete Requested' : 'Request Deletion'}
+                                            </button>
+                                        )}
+                                        {event.delete_requested && (
+                                            <p className="text-xs text-destructive mt-2">
+                                                Deletion requested on {new Date(event.delete_requested_at).toLocaleDateString()}. Pending approval.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -799,6 +1049,153 @@ export default function EventDetailPage() {
                     </div>
                 )}
             </div>
+
+            {/* End Event Confirmation Modal */}
+            <Modal
+                isOpen={isEndEventModalOpen}
+                onClose={() => setIsEndEventModalOpen(false)}
+                title={canEndEvent ? "End Event" : "Request Event End"}
+                variant="destructive"
+                footer={
+                    <>
+                        <button
+                            onClick={() => setIsEndEventModalOpen(false)}
+                            className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        {canEndEvent ? (
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        await eventsApi.endEvent(event.id);
+                                        await fetchEventData();
+                                        toast.success('Event ended successfully');
+                                        setIsEndEventModalOpen(false);
+                                    } catch (error: any) {
+                                        toast.error(error.response?.data?.error || 'Failed to end event');
+                                    }
+                                }}
+                                className="px-4 py-2 text-sm font-medium text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                                <Square className="w-4 h-4 fill-current" />
+                                End Event Now
+                            </button>
+                        ) : (
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        await eventsApi.requestEnd(event.id);
+                                        await fetchEventData();
+                                        toast.success('End request submitted. Org admins will be notified.');
+                                        setIsEndEventModalOpen(false);
+                                    } catch (error: any) {
+                                        toast.error(error.response?.data?.error || 'Failed to submit end request');
+                                    }
+                                }}
+                                className="px-4 py-2 text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                                <Square className="w-4 h-4" />
+                                Submit Request
+                            </button>
+                        )}
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    {canEndEvent ? (
+                        <>
+                            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-4">
+                                <div className="p-2 bg-destructive/20 rounded-full">
+                                    <Square className="w-6 h-6 text-destructive" />
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-destructive">Confirmation Required</h4>
+                                    <p className="text-sm text-destructive/80 mt-1">
+                                        Are you sure you want to end this event? This action will stop the countdown timer and mark the event as ended.
+                                    </p>
+                                </div>
+                            </div>
+                            {event?.end_requested && (
+                                <div className="p-4 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-lg shadow-sm">
+                                    <p className="text-sm text-orange-900 dark:text-orange-100">
+                                        <strong className="font-bold text-orange-950 dark:text-white uppercase text-xs tracking-wider mr-1">Note:</strong>
+                                        An event manager has requested to end this event. By proceeding, you are approving this request.
+                                    </p>
+                                </div>
+                            )}
+                            <p className="text-sm text-muted-foreground">
+                                The event status will be changed to <span className="font-mono font-medium text-destructive">END</span>. You can reactivate it later if needed.
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <div className="p-4 bg-orange-100 dark:bg-orange-900/20 border border-orange-300 dark:border-orange-700 rounded-lg flex items-start gap-4">
+                                <div className="p-2 bg-orange-200 dark:bg-orange-500/40 rounded-full">
+                                    <Clock className="w-6 h-6 text-orange-900 dark:text-orange-900" />
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100">Request to End Event</h4>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                        As an Event Manager, you can request to end this event. The organization administrators will be notified and can approve your request.
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                Your request will be sent to the organization admins. They will receive an email notification with a link to this event.
+                            </p>
+                        </>
+                    )}
+                </div>
+            </Modal>
+
+            {/* Request Delete Modal */}
+            <Modal
+                isOpen={isDeleteRequestModalOpen}
+                onClose={() => setIsDeleteRequestModalOpen(false)}
+                title="Request Event Deletion"
+                variant="destructive"
+                footer={
+                    <>
+                        <button
+                            onClick={() => setIsDeleteRequestModalOpen(false)}
+                            className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    await eventsApi.requestDelete(event.id);
+                                    await fetchEventData();
+                                    toast.success('Deletion request submitted');
+                                    setIsDeleteRequestModalOpen(false);
+                                } catch (error: any) {
+                                    toast.error(error.response?.data?.error || 'Failed to submit request');
+                                }
+                            }}
+                            className="px-4 py-2 text-sm font-medium text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors flex items-center gap-2"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                            Submit Request
+                        </button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-4">
+                        <div className="p-2 bg-destructive/20 rounded-full">
+                            <Trash2 className="w-6 h-6 text-destructive" />
+                        </div>
+                        <div>
+                            <h4 className="font-semibold text-destructive">Requesting Deletion</h4>
+                            <p className="text-sm text-destructive/80 mt-1">
+                                As an Event Manager, you cannot delete events directly. This action will send a request to organization administrators to permanently delete <strong>{event.name}</strong>.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </Modal>
 
             {/* Template Selector Modal */}
             <DepartmentsSelector
