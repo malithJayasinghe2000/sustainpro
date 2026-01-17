@@ -87,8 +87,7 @@ export default function NewEventPage() {
     });
 
     // Validating password against policies
-    const { validatePassword } = usePasswordValidation();
-    const { isValid: isPasswordValid } = validatePassword(managerData.password);
+    const { isValid: isPasswordValid } = usePasswordValidation(managerData.password);
 
     // Image Upload State
     const [imagePreview, setImagePreview] = useState<string>('');
