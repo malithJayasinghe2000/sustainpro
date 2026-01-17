@@ -66,9 +66,6 @@ COPY --from=builder /app/packages/shared-middleware/dist ./packages/shared-middl
 
 COPY --from=builder /app/packages/shared-database/package.json ./packages/shared-database/
 COPY --from=builder /app/packages/shared-database/dist ./packages/shared-database/dist
-COPY --from=builder /app/packages/shared-database/prisma ./packages/shared-database/prisma
-COPY --from=builder /app/packages/shared-database/node_modules/.prisma ./packages/shared-database/node_modules/.prisma
-COPY --from=builder /app/packages/shared-database/node_modules/@prisma ./packages/shared-database/node_modules/@prisma
 
 COPY --from=builder /app/packages/shared-swagger/package.json ./packages/shared-swagger/
 COPY --from=builder /app/packages/shared-swagger/dist ./packages/shared-swagger/dist
@@ -79,6 +76,11 @@ COPY --from=builder /app/services/notification-service/dist ./services/notificat
 
 # Install production dependencies only
 RUN npm ci --omit=dev
+
+# Copy generated Prisma Client (must be after npm ci to prevent overwrite)
+COPY --from=builder /app/packages/shared-database/prisma ./packages/shared-database/prisma
+COPY --from=builder /app/packages/shared-database/node_modules/.prisma ./packages/shared-database/node_modules/.prisma
+COPY --from=builder /app/packages/shared-database/node_modules/@prisma ./packages/shared-database/node_modules/@prisma
 
 # Set ownership
 RUN chown -R sustainpro:nodejs /app
