@@ -720,3 +720,183 @@ Security: Do not share your password with anyone. Delete this email after you've
 ${new Date().getFullYear()} ${companyName}
 `.trim();
 };
+
+// ============================================
+// Event End Request Notification
+// ============================================
+
+export interface EventEndRequestData extends BaseTemplateData {
+    eventName: string;
+    eventCode?: string;
+    requestedByName: string;
+    requestTime: string;
+    eventUrl: string;
+    organizationName?: string;
+}
+
+export const generateEventEndRequestHtml = (data: EventEndRequestData): string => {
+    const content = `
+        ${sectionHeader('Event End Request', 'Action Required')}
+        
+        <!-- Greeting -->
+        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
+            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
+        </p>
+        
+        <p style="margin: 0 0 24px; font-size: 14px; color: ${COLORS.muted}; line-height: 1.6;">
+            An event manager has requested to end the following event. Please review and take action.
+        </p>
+        
+        <!-- Event Details Card -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.mutedBg}; border: 1px solid ${COLORS.border}; border-radius: 8px;">
+            ${infoRow(ICONS.clock(COLORS.primary), COLORS.primaryLight, 'Event Name', data.eventName, false)}
+            ${data.eventCode ? infoRow(ICONS.server(COLORS.primary), COLORS.primaryLight, 'Event Code', data.eventCode, false) : ''}
+            ${infoRow(ICONS.user(COLORS.primary), COLORS.primaryLight, 'Requested By', data.requestedByName, false)}
+            ${infoRow(ICONS.clock(COLORS.warning), COLORS.warningLight, 'Request Time', data.requestTime, true)}
+        </table>
+        
+        <!-- Warning Box -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.warningLight}; border: 1px solid ${COLORS.warningBorder}; border-radius: 8px;">
+            <tr>
+                <td style="padding: 16px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                            ${iconBox('rgba(217, 119, 6, 0.15)', ICONS.alert(COLORS.warning))}
+                            <td style="padding-left: 16px; vertical-align: middle;">
+                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #92400e;">Action Required</p>
+                                <p style="margin: 4px 0 0; font-size: 12px; color: #a16207;">Please review this request and end the event if appropriate.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+        
+        <!-- CTA Button -->
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
+            <tr>
+                <td>
+                    <a href="${data.eventUrl}" style="display: inline-block; padding: 14px 28px; background-color: ${COLORS.primary}; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px;">
+                        View Event
+                    </a>
+                </td>
+            </tr>
+        </table>
+    `;
+
+    return baseHtmlTemplate(content, data);
+};
+
+export const generateEventEndRequestText = (data: EventEndRequestData): string => {
+    const companyName = data.companyName || config.templates.companyName;
+
+    return `
+${companyName} - Event End Request
+
+Hello${data.recipientName ? ` ${data.recipientName}` : ''},
+
+An event manager has requested to end the following event:
+
+Event Name: ${data.eventName}
+${data.eventCode ? `Event Code: ${data.eventCode}` : ''}
+Requested By: ${data.requestedByName}
+Request Time: ${data.requestTime}
+
+Please review and take action:
+${data.eventUrl}
+
+---
+${new Date().getFullYear()} ${companyName}
+`.trim();
+};
+
+// ============================================
+// Event Delete Request Notification
+// ============================================
+
+export interface EventDeleteRequestData extends BaseTemplateData {
+    eventName: string;
+    eventCode?: string;
+    requestedByName: string;
+    requestTime: string;
+    eventUrl: string;
+    organizationName?: string;
+}
+
+export const generateEventDeleteRequestHtml = (data: EventDeleteRequestData): string => {
+    const content = `
+        ${sectionHeader('Event Delete Request', 'Critical Action Required')}
+        
+        <!-- Greeting -->
+        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
+            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
+        </p>
+        
+        <p style="margin: 0 0 24px; font-size: 14px; color: ${COLORS.muted}; line-height: 1.6;">
+            An event manager has requested to <strong>PERMANENTLY DELETE</strong> the following event.
+        </p>
+        
+        <!-- Event Details Card -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.mutedBg}; border: 1px solid ${COLORS.border}; border-radius: 8px;">
+            ${infoRow(ICONS.clock(COLORS.primary), COLORS.primaryLight, 'Event Name', data.eventName, false)}
+            ${data.eventCode ? infoRow(ICONS.server(COLORS.primary), COLORS.primaryLight, 'Event Code', data.eventCode, false) : ''}
+            ${infoRow(ICONS.user(COLORS.primary), COLORS.primaryLight, 'Requested By', data.requestedByName, false)}
+            ${infoRow(ICONS.clock(COLORS.error), COLORS.errorLight, 'Request Time', data.requestTime, true)}
+        </table>
+        
+        <!-- Warning Box -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.errorLight}; border: 1px solid ${COLORS.errorBorder}; border-radius: 8px;">
+            <tr>
+                <td style="padding: 16px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                            ${iconBox('rgba(220, 38, 38, 0.15)', ICONS.alert(COLORS.error))}
+                            <td style="padding-left: 16px; vertical-align: middle;">
+                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #991b1b;">Irreversible Action</p>
+                                <p style="margin: 4px 0 0; font-size: 12px; color: #7f1d1d;">Deletion cannot be undone. Please ensure this is intended.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+        
+        <!-- CTA Button -->
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
+            <tr>
+                <td>
+                    <a href="${data.eventUrl}" style="display: inline-block; padding: 14px 28px; background-color: ${COLORS.error}; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px;">
+                        Review Deletion Request
+                    </a>
+                </td>
+            </tr>
+        </table>
+    `;
+
+    return baseHtmlTemplate(content, data);
+};
+
+export const generateEventDeleteRequestText = (data: EventDeleteRequestData): string => {
+    const companyName = data.companyName || config.templates.companyName;
+
+    return `
+${companyName} - Event DELETE Request
+
+Hello${data.recipientName ? ` ${data.recipientName}` : ''},
+
+An event manager has requested to PERMANENTLY DELETE the following event:
+
+Event Name: ${data.eventName}
+${data.eventCode ? `Event Code: ${data.eventCode}` : ''}
+Requested By: ${data.requestedByName}
+Request Time: ${data.requestTime}
+
+WARNING: Deletion is irreversible.
+
+Please review and take action:
+${data.eventUrl}
+
+---
+${new Date().getFullYear()} ${companyName}
+`.trim();
+};

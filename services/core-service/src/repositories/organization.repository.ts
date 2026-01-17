@@ -331,4 +331,23 @@ export class OrganizationRepository {
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-|-$/g, '');
     }
+
+    /**
+     * Get organization statistics
+     */
+    async getStats() {
+        const [total, providers, partners, clients] = await Promise.all([
+            prisma.sps_organizations.count(),
+            prisma.sps_organizations.count({ where: { type: 'PROVIDER' } }),
+            prisma.sps_organizations.count({ where: { type: 'PARTNER' } }),
+            prisma.sps_organizations.count({ where: { type: 'CLIENT' } })
+        ]);
+
+        return {
+            total,
+            providers,
+            partners,
+            clients
+        };
+    }
 }

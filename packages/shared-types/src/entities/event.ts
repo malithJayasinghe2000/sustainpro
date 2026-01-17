@@ -5,6 +5,7 @@ export interface Event {
     id: string;
     organization_id: string;
     name: string;
+    code: string | null;
     location: string | null;
     start_date: Date | null;
     end_date: Date | null;
@@ -13,10 +14,13 @@ export interface Event {
     event_type: string | null;
     image_url: string | null;
     coordinates: { lat: number; lng: number } | null;
+    end_requested: boolean | null;
+    end_requested_by: string | null;
+    end_requested_at: Date | null;
     created_at: Date;
 }
 
-export type EventStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+export type EventStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED' | 'END';
 
 export interface CreateEventDto {
     organization_id: string;
@@ -26,6 +30,8 @@ export interface CreateEventDto {
     end_date?: Date;
     description?: string;
     event_type?: string;
+    image_url?: string;
+    coordinates?: { lat: number; lng: number };
 }
 
 export interface UpdateEventDto {
@@ -37,4 +43,5 @@ export interface UpdateEventDto {
     description?: string;
     event_type?: string;
     image_url?: string;
+    coordinates?: { lat: number; lng: number };
 }

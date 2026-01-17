@@ -2,76 +2,124 @@
 
 import { useState, useEffect } from 'react';
 import {
-    Shield, Save, AlertTriangle, Mail, Globe, Clock, Lock, Key,
-    RefreshCw, User, Image as ImageIcon, Terminal, Server, Settings
+    Shield, Save, Settings, Building2, Palette, Globe, Clock,
+    RefreshCw, User, Lock, AlertCircle
 } from 'lucide-react';
 import { RichSelect } from '@/components/ui/RichSelect';
-import { getAllTimezones } from '@/lib/timezone';
+import { getTimezones } from '@/lib/timezones';
 import DashboardLayout from '@/components/DashboardLayout';
-import { settingsApi, SystemSettings, authApi } from '@/lib/api';
+import { organizationsApi, authApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
 
-type Tab = 'general' | 'security' | 'admin';
+type Tab = 'organization' | 'profile' | 'security';
 
-export default function SettingsPage() {
+interface Organization {
+    id: string;
+    name: string;
+    slug: string;
+    code: string;
+    contact_email: string | null;
+    contact_phone: string | null;
+    address: string | null;
+    theme_config: {
+        primaryColor?: string;
+        logoUrl?: string;
+    } | null;
+    is_active: boolean;
+    created_at: string;
+}
+
+export default function OrgSettingsPage() {
     const { user, updateUser, isLoading: authLoading } = useAuth();
-    const [selectedTimezone, setSelectedTimezone] = useState<string>('');
     const router = useRouter();
-    const [settings, setSettings] = useState<SystemSettings | null>(null);
+
+    // State
+    const [organization, setOrganization] = useState<Organization | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<Tab>('general');
+    const [activeTab, setActiveTab] = useState<Tab>('organization');
+    const [selectedTimezone, setSelectedTimezone] = useState<string>('');
+    const [error, setError] = useState<string | null>(null);
 
-    // Admin Password Change State
+    // Password Change State
     const [passwordData, setPasswordData] = useState({
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
     });
 
-    // Check permissions and load data
+    // Style Classes
+    const inputClass = "w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/50";
+    const labelClass = "text-xs font-semibold uppercase text-muted-foreground mb-1.5 block tracking-wider";
+
+    // Permission check - redirect if not org admin
     useEffect(() => {
-        if (!authLoading && !user?.roles?.some(r => r.role === 'ORG_ADMIN')) {
-            router.replace('/dashboard');
+        if (!authLoading && user) {
+            const isOrgAdmin = user.roles?.some((r: any) => r.role === 'ORG_ADMIN');
+            if (!isOrgAdmin && !user.is_super_admin) {
+                router.replace('/dashboard');
+            }
         }
     }, [user, authLoading, router]);
 
+    // Load organization data when user is available
     useEffect(() => {
-        fetchSettings();
-    }, []);
+        if (!authLoading && user?.organization_id) {
+            loadOrganization();
+        } else if (!authLoading && !user?.organization_id) {
+            setIsLoading(false);
+            setError('No organization assigned to your account');
+        }
+    }, [authLoading, user?.organization_id]);
 
+    // Set user timezone
     useEffect(() => {
         if (user?.timezone) {
             setSelectedTimezone(user.timezone);
         }
-    }, [user]);
+    }, [user?.timezone]);
 
-    const fetchSettings = async () => {
+    const loadOrganization = async () => {
+        if (!user?.organization_id) return;
+
+        setIsLoading(true);
+        setError(null);
+
         try {
-            setIsLoading(true);
-            const data = await settingsApi.get();
-            setSettings(data);
-        } catch (error) {
-            console.error('Failed to load settings:', error);
-            toast.error('Failed to load system settings');
+            const data = await organizationsApi.getOne(user.organization_id);
+            setOrganization(data);
+        } catch (err: any) {
+            console.error('Failed to load organization:', err);
+            setError(err.response?.data?.error || 'Failed to load organization data');
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleSave = async () => {
-        if (!settings) return;
+    const handleSaveOrganization = async () => {
+        if (!organization || !user?.organization_id) return;
 
         setIsSaving(true);
         try {
-            const updated = await settingsApi.update(settings);
-            setSettings(updated);
-            toast.success('System settings updated successfully');
-        } catch (error) {
-            console.error('Failed to save settings:', error);
-            toast.error('Failed to update settings');
+            const updateData = {
+                name: organization.name,
+                slug: organization.slug,
+                contact_email: organization.contact_email,
+                contact_phone: organization.contact_phone,
+                address: organization.address,
+                theme_config: organization.theme_config,
+            };
+
+            const response = await organizationsApi.update(user.organization_id, updateData);
+            if (response.data) {
+                setOrganization(response.data);
+            }
+            toast.success('Organization updated successfully');
+        } catch (err: any) {
+            console.error('Failed to save:', err);
+            toast.error(err.response?.data?.error || 'Failed to update organization');
         } finally {
             setIsSaving(false);
         }
@@ -80,10 +128,12 @@ export default function SettingsPage() {
     const handleSaveTimezone = async () => {
         try {
             const response = await authApi.updateProfile({ timezone: selectedTimezone });
-            updateUser(response.user);
-            toast.success(`Timezone updated to ${selectedTimezone}`);
-        } catch (error) {
-            toast.error('Failed to update timezone');
+            if (response.user) {
+                updateUser(response.user);
+            }
+            toast.success('Timezone updated successfully');
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to update timezone');
         }
     };
 
@@ -91,7 +141,12 @@ export default function SettingsPage() {
         e.preventDefault();
 
         if (passwordData.newPassword !== passwordData.confirmPassword) {
-            toast.error('New passwords do not match');
+            toast.error('Passwords do not match');
+            return;
+        }
+
+        if (passwordData.newPassword.length < 8) {
+            toast.error('Password must be at least 8 characters');
             return;
         }
 
@@ -99,38 +154,63 @@ export default function SettingsPage() {
             await authApi.changePassword(passwordData.currentPassword, passwordData.newPassword);
             toast.success('Password changed successfully');
             setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-        } catch (error: any) {
-            toast.error(error.response?.data?.error || 'Failed to change password');
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to change password');
         }
     };
 
-    // Standardized Input Classes (matches Users/Device Models)
-    const inputClass = "w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/50";
-    const labelClass = "text-xs font-bold uppercase text-muted-foreground mb-1.5 block";
-    const sectionHeaderClass = "flex items-center gap-2 pb-2 border-b border-border mb-6";
-    const sectionTitleClass = "font-bold text-sm uppercase tracking-wide";
+    const updateOrgField = (field: string, value: any) => {
+        if (!organization) return;
+        setOrganization({ ...organization, [field]: value });
+    };
 
-    // Show shell immediately, content loading only
+    const updateThemeField = (field: string, value: string) => {
+        if (!organization) return;
+        setOrganization({
+            ...organization,
+            theme_config: {
+                ...organization.theme_config,
+                [field]: value
+            }
+        });
+    };
+
+    // Check access
+    const isOrgAdmin = user?.roles?.some((r: any) => r.role === 'ORG_ADMIN');
+    if (authLoading) {
+        return (
+            <DashboardLayout>
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                </div>
+            </DashboardLayout>
+        );
+    }
+
+    if (!isOrgAdmin && !user?.is_super_admin) {
+        return null;
+    }
+
     return (
         <DashboardLayout>
-            <div className="page-padding max-w-[1600px] mx-auto space-y-6">
+            <div className="page-padding max-w-[1400px] mx-auto space-y-6">
                 <Toaster position="bottom-right" />
 
-                {/* Page Header */}
+                {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <h1 className="page-header-title">
                             <Settings className="w-6 h-6 text-primary" />
-                            System Settings
+                            Organization Settings
                         </h1>
                         <p className="page-header-subtext">
-                            Manage global application identity, security policies, and administrative access.
+                            Manage your organization profile, branding, and personal account settings.
                         </p>
                     </div>
-                    {activeTab !== 'admin' && (
+                    {activeTab === 'organization' && organization && (
                         <button
-                            onClick={handleSave}
-                            disabled={isSaving || isLoading || !settings}
+                            onClick={handleSaveOrganization}
+                            disabled={isSaving}
                             className="btn-primary"
                         >
                             {isSaving ? (
@@ -146,14 +226,24 @@ export default function SettingsPage() {
                             )}
                         </button>
                     )}
+                    {activeTab === 'profile' && (
+                        <button
+                            onClick={handleSaveTimezone}
+                            disabled={selectedTimezone === user?.timezone}
+                            className="btn-primary"
+                        >
+                            <Save className="w-4 h-4" />
+                            Save Timezone
+                        </button>
+                    )}
                 </div>
 
-                {/* Tabs Navigation */}
-                <div className="flex items-center gap-8 border-b border-border overflow-x-auto">
+                {/* Tab Navigation */}
+                <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
                     {[
-                        { id: 'general', label: 'General Settings', icon: Globe },
-                        { id: 'security', label: 'Security & Access', icon: Lock },
-                        { id: 'admin', label: 'Admin Settings', icon: User },
+                        { id: 'organization', label: 'Organization', icon: Building2 },
+                        { id: 'profile', label: 'My Profile', icon: User },
+                        { id: 'security', label: 'Security', icon: Lock },
                     ].map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.id;
@@ -161,323 +251,272 @@ export default function SettingsPage() {
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as Tab)}
-                                className={`flex items-center gap-2 pb-4 text-sm font-medium transition-colors relative ${isActive
-                                    ? 'text-primary'
+                                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${isActive
+                                    ? 'bg-background text-foreground shadow-sm'
                                     : 'text-muted-foreground hover:text-foreground'
                                     }`}
                             >
                                 <Icon className="w-4 h-4" />
                                 {tab.label}
-                                {isActive && (
-                                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full" />
-                                )}
                             </button>
                         );
                     })}
                 </div>
 
-                {/* Loading State */}
-                {(authLoading || isLoading || !settings) ? (
-                    <div className="flex flex-col items-center justify-center py-20 gap-3">
-                        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-                        <p className="text-sm text-muted-foreground animate-pulse">Loading configuration...</p>
+                {/* Error State */}
+                {error && (
+                    <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <AlertCircle className="w-5 h-5 text-destructive" />
+                        <p className="text-sm text-destructive">{error}</p>
+                        <button onClick={loadOrganization} className="ml-auto text-sm text-primary hover:underline">
+                            Retry
+                        </button>
                     </div>
-                ) : (
-                    <div>
-                        {/* TAB: GENERAL SETTINGS */}
-                        {activeTab === 'general' && (
-                            <div className="grid grid-cols-1 gap-6">
-                                {/* Site Identity */}
-                                <div className="bg-card border border-border rounded-sm p-6">
-                                    <div className={sectionHeaderClass}>
-                                        <Globe className="w-4 h-4 text-primary" />
-                                        <h3 className={sectionTitleClass}>Site Identity</h3>
+                )}
+
+                {/* Loading State */}
+                {isLoading && (
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                        <p className="text-sm text-muted-foreground">Loading settings...</p>
+                    </div>
+                )}
+
+                {/* Content */}
+                {!isLoading && !error && (
+                    <>
+                        {/* Organization Tab */}
+                        {activeTab === 'organization' && organization && (
+                            <div className="space-y-6">
+                                {/* Basic Info */}
+                                <div className="bg-card border border-border rounded-xl p-6">
+                                    <div className="flex items-center gap-2 mb-6 pb-3 border-b border-border">
+                                        <Building2 className="w-5 h-5 text-primary" />
+                                        <h2 className="font-semibold text-base">Organization Details</h2>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <label className={labelClass}>Application Name</label>
+                                            <label className={labelClass}>Organization Name</label>
                                             <input
                                                 type="text"
-                                                value={settings.site_title || ''}
-                                                onChange={(e) => setSettings({ ...settings, site_title: e.target.value })}
+                                                value={organization.name || ''}
+                                                onChange={(e) => updateOrgField('name', e.target.value)}
                                                 className={inputClass}
-                                                placeholder="e.g. SustainPro IoT"
+                                                placeholder="Your Organization"
                                             />
                                         </div>
-
-                                        <div className="md:col-span-2">
-                                            <label className={labelClass}>Logo URL</label>
-                                            <div className="flex gap-4">
-                                                <div className="relative flex-1">
-                                                    <input
-                                                        type="text"
-                                                        value={settings.site_logo || ''}
-                                                        onChange={(e) => setSettings({ ...settings, site_logo: e.target.value })}
-                                                        className={inputClass}
-                                                        placeholder="https://example.com/logo.png"
-                                                    />
-                                                    <ImageIcon className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                                                </div>
-                                                {settings.site_logo && (
-                                                    <div className="w-10 h-10 border border-border rounded bg-muted/20 flex items-center justify-center overflow-hidden">
-                                                        <img src={settings.site_logo} alt="Logo Preview" className="max-w-full max-h-full object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
-                                                    </div>
-                                                )}
-                                            </div>
+                                        <div>
+                                            <label className={labelClass}>Slug</label>
+                                            <input
+                                                type="text"
+                                                value={organization.slug || ''}
+                                                onChange={(e) => updateOrgField('slug', e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                                                className={inputClass}
+                                                placeholder="your-org"
+                                            />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Support Information */}
-                                <div className="bg-card border border-border rounded-sm p-6">
-                                    <div className={sectionHeaderClass}>
-                                        <Mail className="w-4 h-4 text-primary" />
-                                        <h3 className={sectionTitleClass}>Support Contact</h3>
+                                {/* Contact Info */}
+                                <div className="bg-card border border-border rounded-xl p-6">
+                                    <div className="flex items-center gap-2 mb-6 pb-3 border-b border-border">
+                                        <Globe className="w-5 h-5 text-primary" />
+                                        <h2 className="font-semibold text-base">Contact Information</h2>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <label className={labelClass}>Support Email</label>
+                                            <label className={labelClass}>Email</label>
                                             <input
                                                 type="email"
-                                                value={settings.support_email || ''}
-                                                onChange={(e) => setSettings({ ...settings, support_email: e.target.value })}
+                                                value={organization.contact_email || ''}
+                                                onChange={(e) => updateOrgField('contact_email', e.target.value)}
                                                 className={inputClass}
-                                                placeholder="support@sustainpro.com"
+                                                placeholder="contact@example.com"
                                             />
                                         </div>
                                         <div>
-                                            <label className={labelClass}>Support Phone</label>
+                                            <label className={labelClass}>Phone</label>
                                             <input
                                                 type="tel"
-                                                value={settings.support_phone || ''}
-                                                onChange={(e) => setSettings({ ...settings, support_phone: e.target.value })}
+                                                value={organization.contact_phone || ''}
+                                                onChange={(e) => updateOrgField('contact_phone', e.target.value)}
                                                 className={inputClass}
-                                                placeholder="+94 11 234 5678"
+                                                placeholder="+1 234 567 890"
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className={labelClass}>Address</label>
+                                            <textarea
+                                                value={organization.address || ''}
+                                                onChange={(e) => updateOrgField('address', e.target.value)}
+                                                className={`${inputClass} min-h-[80px] resize-none`}
+                                                placeholder="Full address"
                                             />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Device API URL */}
-                                <div className="bg-card border border-border rounded-sm p-6">
-                                    <div className={sectionHeaderClass}>
-                                        <Server className="w-4 h-4 text-primary" />
-                                        <h3 className={sectionTitleClass}>IoT Device Configuration</h3>
+                                {/* Branding */}
+                                <div className="bg-card border border-border rounded-xl p-6">
+                                    <div className="flex items-center gap-2 mb-6 pb-3 border-b border-border">
+                                        <Palette className="w-5 h-5 text-primary" />
+                                        <h2 className="font-semibold text-base">Branding</h2>
                                     </div>
-                                    <div className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <label className={labelClass}>Device API URL</label>
+                                            <label className={labelClass}>Primary Color</label>
+                                            <div className="flex gap-3 items-center">
+                                                <input
+                                                    type="color"
+                                                    value={organization.theme_config?.primaryColor || '#3b82f6'}
+                                                    onChange={(e) => updateThemeField('primaryColor', e.target.value)}
+                                                    className="w-12 h-10 rounded-lg border border-border cursor-pointer"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={organization.theme_config?.primaryColor || '#3b82f6'}
+                                                    onChange={(e) => updateThemeField('primaryColor', e.target.value)}
+                                                    className={`${inputClass} flex-1 font-mono`}
+                                                    placeholder="#3b82f6"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className={labelClass}>Logo URL</label>
                                             <input
-                                                type="text"
-                                                value={settings.device_api_url || ''}
-                                                onChange={(e) => setSettings({ ...settings, device_api_url: e.target.value })}
+                                                type="url"
+                                                value={organization.theme_config?.logoUrl || ''}
+                                                onChange={(e) => updateThemeField('logoUrl', e.target.value)}
                                                 className={inputClass}
-                                                placeholder="http://192.168.1.100:5000"
+                                                placeholder="https://..."
                                             />
-                                            <p className="text-xs text-muted-foreground mt-2">
-                                                This URL is sent to devices during provisioning. Use your server's IP address that IoT devices can reach on the local network.
-                                            </p>
                                         </div>
-                                        <div className="p-3 bg-muted/50 border border-border rounded-lg">
-                                            <p className="text-xs font-mono text-muted-foreground">
-                                                <span className="font-semibold text-foreground">Current: </span>
-                                                {settings.device_api_url || 'http://localhost:5000 (default)'}
-                                            </p>
+                                    </div>
+                                </div>
+
+                                {/* Read-only Info */}
+                                <div className="bg-muted/30 border border-border rounded-xl p-6">
+                                    <div className="flex items-center gap-2 mb-4 pb-2 border-b border-border/50">
+                                        <Shield className="w-4 h-4 text-muted-foreground" />
+                                        <h2 className="font-medium text-sm text-muted-foreground">System Information</h2>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        <div>
+                                            <span className="text-xs text-muted-foreground block">ID</span>
+                                            <span className="font-mono">{organization.id?.slice(0, 8)}...</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-muted-foreground block">Code</span>
+                                            <span className="font-mono">{organization.code}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-muted-foreground block">Status</span>
+                                            <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${organization.is_active
+                                                ? 'bg-green-500/10 text-green-600'
+                                                : 'bg-red-500/10 text-red-600'
+                                                }`}>
+                                                {organization.is_active ? 'Active' : 'Inactive'}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-muted-foreground block">Created</span>
+                                            <span>{new Date(organization.created_at).toLocaleDateString()}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* TAB: SECURITY */}
+                        {/* Profile Tab */}
+                        {activeTab === 'profile' && (
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="bg-card border border-border rounded-xl p-6">
+                                    <div className="flex flex-col items-center text-center">
+                                        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                                            <User className="w-10 h-10 text-primary" />
+                                        </div>
+                                        <h3 className="font-semibold text-lg">{user?.full_name || user?.email}</h3>
+                                        <p className="text-sm text-muted-foreground">{user?.email}</p>
+                                        <span className="mt-2 px-3 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full">
+                                            {user?.roles?.[0]?.role || 'User'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="lg:col-span-2 bg-card border border-border rounded-xl p-6">
+                                    <div className="flex items-center gap-2 mb-6 pb-3 border-b border-border">
+                                        <Clock className="w-5 h-5 text-primary" />
+                                        <h2 className="font-semibold text-base">Preferences</h2>
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}>Timezone</label>
+                                        <RichSelect
+                                            value={selectedTimezone}
+                                            onChange={setSelectedTimezone}
+                                            options={getTimezones().map(tz => ({
+                                                value: tz.value,
+                                                label: tz.label,
+                                                icon: Clock
+                                            }))}
+                                            className="h-11"
+                                        />
+                                        <p className="text-xs text-muted-foreground mt-2">
+                                            All timestamps will be displayed in this timezone.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Security Tab */}
                         {activeTab === 'security' && (
-                            <div className="grid grid-cols-1 gap-6">
-                                {/* Access Policies */}
-                                <div className="bg-card border border-border rounded-sm p-6">
-                                    <div className={sectionHeaderClass}>
-                                        <Shield className="w-4 h-4 text-primary" />
-                                        <h3 className={sectionTitleClass}>Access Policies</h3>
+                            <div className="max-w-xl">
+                                <div className="bg-card border border-border rounded-xl p-6">
+                                    <div className="flex items-center gap-2 mb-6 pb-3 border-b border-border">
+                                        <Shield className="w-5 h-5 text-primary" />
+                                        <h2 className="font-semibold text-base">Change Password</h2>
                                     </div>
-                                    <div className="max-w-3xl space-y-8">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                            <div>
-                                                <label className={labelClass}>Account Lock Duration (mins)</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type="number"
-                                                        value={settings.account_lock_duration_minutes}
-                                                        onChange={(e) => setSettings({ ...settings, account_lock_duration_minutes: parseInt(e.target.value) })}
-                                                        className={`${inputClass} pl-9`}
-                                                        min="5"
-                                                        max="120"
-                                                    />
-                                                    <Clock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className={labelClass}>Max Login Attempts</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type="number"
-                                                        value={settings.max_login_attempts}
-                                                        onChange={(e) => setSettings({ ...settings, max_login_attempts: parseInt(e.target.value) })}
-                                                        className={`${inputClass} pl-9`}
-                                                    />
-                                                    <AlertTriangle className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className={labelClass}>Session Token Expiry (mins)</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type="number"
-                                                        value={settings.token_expire_minutes}
-                                                        onChange={(e) => setSettings({ ...settings, token_expire_minutes: parseInt(e.target.value) })}
-                                                        className={`${inputClass} pl-9`}
-                                                    />
-                                                    <Key className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                                                </div>
-                                            </div>
+                                    <form onSubmit={handleChangePassword} className="space-y-5">
+                                        <div>
+                                            <label className={labelClass}>Current Password</label>
+                                            <input
+                                                type="password"
+                                                required
+                                                value={passwordData.currentPassword}
+                                                onChange={(e) => setPasswordData(p => ({ ...p, currentPassword: e.target.value }))}
+                                                className={inputClass}
+                                            />
                                         </div>
-                                    </div>
-                                </div>
-
-                                {/* Maintenance Mode */}
-                                <div className="bg-card border border-border rounded-sm p-6">
-                                    <div className={sectionHeaderClass}>
-                                        <Terminal className="w-4 h-4 text-primary" />
-                                        <h3 className={sectionTitleClass}>System Status</h3>
-                                    </div>
-
-                                    <div className="flex items-center justify-between p-4 border border-primary/20 bg-primary/5 rounded-lg">
-                                        <div className="space-y-1">
-                                            <h4 className="font-bold text-foreground">Maintenance Mode</h4>
-                                            <p className="text-sm text-muted-foreground">Blocks non-admin access. Use during updates.</p>
+                                        <div>
+                                            <label className={labelClass}>New Password</label>
+                                            <input
+                                                type="password"
+                                                required
+                                                value={passwordData.newPassword}
+                                                onChange={(e) => setPasswordData(p => ({ ...p, newPassword: e.target.value }))}
+                                                className={inputClass}
+                                            />
                                         </div>
-                                        <button
-                                            role="switch"
-                                            aria-checked={settings.maintenance_mode}
-                                            onClick={() => setSettings({ ...settings, maintenance_mode: !settings.maintenance_mode })}
-                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${settings.maintenance_mode ? 'bg-primary' : 'bg-muted-foreground/30'
-                                                }`}
-                                        >
-                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.maintenance_mode ? 'translate-x-6' : 'translate-x-1'}`} />
+                                        <div>
+                                            <label className={labelClass}>Confirm Password</label>
+                                            <input
+                                                type="password"
+                                                required
+                                                value={passwordData.confirmPassword}
+                                                onChange={(e) => setPasswordData(p => ({ ...p, confirmPassword: e.target.value }))}
+                                                className={inputClass}
+                                            />
+                                        </div>
+                                        <button type="submit" className="btn-primary w-full">
+                                            <Lock className="w-4 h-4" />
+                                            Update Password
                                         </button>
-                                    </div>
-
-                                    {settings.maintenance_mode && (
-                                        <div className="mt-4 flex items-center gap-2 text-xs font-mono text-primary bg-background/50 p-2 rounded border border-primary/10">
-                                            <AlertTriangle className="w-3 h-3" />
-                                            SYSTEM LOCKED - ADMIN ACCESS ONLY
-                                        </div>
-                                    )}
+                                    </form>
                                 </div>
                             </div>
                         )}
-
-                        {/* TAB: ADMIN SETTINGS */}
-                        {activeTab === 'admin' && (
-                            <>
-                                {/* Save Button */}
-                                <div className="flex justify-end mb-4">
-                                    <button
-                                        onClick={handleSaveTimezone}
-                                        className="btn-primary"
-                                        disabled={selectedTimezone === user?.timezone}
-                                    >
-                                        <Save className="w-4 h-4" />
-                                        Save Settings
-                                    </button>
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    {/* Admin Info Card */}
-                                    <div className="lg:col-span-1 space-y-6">
-                                        <div className="bg-card border border-border rounded-sm p-6 h-full">
-                                            <div className="flex flex-col items-center text-center space-y-4">
-                                                <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center border-2 border-primary/20">
-                                                    <User className="w-10 h-10 text-primary" />
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-bold text-lg text-foreground">{user?.email}</h3>
-                                                    <span className="inline-block px-2 py-0.5 rounded text-xs font-bold uppercase bg-primary text-primary-foreground mt-1">
-                                                        {user?.roles?.[0]?.role || 'User'}
-                                                    </span>
-                                                </div>
-                                                <div className="w-full pt-6 border-t border-border space-y-3">
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-muted-foreground">User ID</span>
-                                                        <span className="font-mono">{user?.id}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center text-sm">
-                                                        <span className="text-muted-foreground">Timezone</span>
-                                                        <div className="w-[300px]">
-                                                            <RichSelect
-                                                                value={selectedTimezone}
-                                                                onChange={setSelectedTimezone}
-                                                                options={getAllTimezones().map(tz => ({ value: tz, label: tz.replace(/_/g, ' '), icon: Clock }))}
-                                                                className="h-9"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Change Password Form */}
-                                    <div className="lg:col-span-2">
-                                        <div className="bg-card border border-border rounded-sm p-6">
-                                            <div className={sectionHeaderClass}>
-                                                <Shield className="w-4 h-4 text-primary" />
-                                                <h3 className={sectionTitleClass}>Security Credentials</h3>
-                                            </div>
-
-                                            <form onSubmit={handleChangePassword} className="space-y-6 max-w-lg">
-                                                <div>
-                                                    <label className={labelClass}>Current Password</label>
-                                                    <input
-                                                        type="password"
-                                                        required
-                                                        value={passwordData.currentPassword}
-                                                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                                                        className={inputClass}
-                                                    />
-                                                </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                    <div>
-                                                        <label className={labelClass}>New Password</label>
-                                                        <input
-                                                            type="password"
-                                                            required
-                                                            value={passwordData.newPassword}
-                                                            onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                                                            className={inputClass}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className={labelClass}>Confirm New Password</label>
-                                                        <input
-                                                            type="password"
-                                                            required
-                                                            value={passwordData.confirmPassword}
-                                                            onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                                                            className={inputClass}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="pt-2">
-                                                    <button type="submit" className="btn-primary w-full md:w-auto">
-                                                        Update Password
-                                                    </button>
-                                                </div>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </div>
+                    </>
                 )}
             </div>
         </DashboardLayout>

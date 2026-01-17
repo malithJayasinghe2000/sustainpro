@@ -378,7 +378,7 @@ export default function DashboardPage() {
                                                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Active Dashboards</p>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                    {orgStructure.services.slice(0, 6).map(svc => (
+                                                    {orgStructure.services.slice(0, 50).map(svc => (
                                                         <Link
                                                             key={svc.id}
                                                             href={`/events/${svc.event_id}/departments/${svc.department_id}/services/${svc.id}`}
@@ -394,6 +394,14 @@ export default function DashboardPage() {
                                                             <ArrowRight className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
                                                         </Link>
                                                     ))}
+                                                    {orgStructure.services.length > 50 && (
+                                                        <Link
+                                                            href="/events"
+                                                            className="flex items-center justify-center gap-2 p-2 rounded-lg border border-border border-dashed hover:bg-muted/50 transition-all text-xs text-muted-foreground hover:text-primary"
+                                                        >
+                                                            View all {orgStructure.services.length} services...
+                                                        </Link>
+                                                    )}
                                                 </div>
                                             </>
                                         )}

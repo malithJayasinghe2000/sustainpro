@@ -9,7 +9,7 @@ import {
     User, Mail, Lock, UserPlus, X, CheckCircle2, UserCog, Globe,
     Trophy, Music, Mic2, Briefcase, PartyPopper, Snowflake, Sun, Tent, Layers
 } from 'lucide-react';
-import { organizationsApi, eventsApi, uploadApi, usersApi } from '@/lib/api';
+import { organizationsApi, eventsApi, uploadApi, usersApi, getImageUrl } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import SetupWizard from '@/components/SetupWizard';
 import { Input } from '@/components/ui/Input';
@@ -92,20 +92,23 @@ export default function NewEventPage() {
     // Image Upload State
     const [imagePreview, setImagePreview] = useState<string>('');
 
+    // Permission Check - Use permissions only (assigned to roles in RBAC)
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const canCreate = currentUser.is_super_admin || currentUser.permissions?.includes('events.create');
+
+        if (!canCreate) {
+            toast.error('Access Denied', { description: 'You do not have permission to create events.' });
+            router.push('/events');
+        }
+    }, [currentUser, router]);
+
     useEffect(() => {
         if (currentUser?.is_super_admin) {
             organizationsApi.getAll({ limit: 1000 }).then(res => setOrgs(res.data)).catch(console.error);
         } else if (currentUser?.organization_id) {
             setFormData(prev => ({ ...prev, organization_id: currentUser.organization_id }));
-        }
-
-        // Permission Check
-        if (currentUser && !currentUser.is_super_admin) {
-            if (!currentUser.permissions?.includes('events:create')) {
-                // Redirect or Show Error
-                router.push('/events');
-                // toast.error('You do not have permission to create events'); // Ideally
-            }
         }
     }, [currentUser]);
 
@@ -132,8 +135,12 @@ export default function NewEventPage() {
         }
     };
 
-    const handleLocationSelect = (lat: number, lng: number) => {
-        setFormData(prev => ({ ...prev, coordinates: { lat, lng } }));
+    const handleLocationSelect = (lat: number, lng: number, locationName?: string) => {
+        setFormData(prev => ({
+            ...prev,
+            coordinates: { lat, lng },
+            location: locationName || prev.location
+        }));
     };
 
     const nextStep = () => {
@@ -158,7 +165,11 @@ export default function NewEventPage() {
 
         if (currentStep === 2 && createManager) {
             if (!managerData.full_name) errors.full_name = "Full name is required";
-            if (!managerData.email) errors.email = "Email is required";
+            if (!managerData.email) {
+                errors.email = "Email is required";
+            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(managerData.email)) {
+                errors.email = "Invalid email format";
+            }
             if (!managerData.password) errors.password = "Password is required";
             if (!isPasswordValid) errors.password = "Password does not meet requirements";
             if (managerData.password && managerData.password !== managerData.confirmPassword) {
@@ -199,19 +210,25 @@ export default function NewEventPage() {
 
             // 2. Create Event
             const createdEvent = await eventsApi.create(eventPayload);
-            const newEventId = createdEvent.id;
+            const newEventId = createdEvent?.id;
+
+            // console.log('[Event Create] Created event:', createdEvent);
+            // console.log('[Event Create] New Event ID:', newEventId);
 
             // 3. Create NEW Manager (only if requested)
             if (createManager && managerData.email) {
                 try {
-                    await usersApi.create({
+                    const managerPayload = {
                         email: managerData.email,
                         password: managerData.password,
                         full_name: managerData.full_name,
                         organization_id: formData.organization_id,
                         role: 'EVENT_MANAGER',
-                        context_id: newEventId // Link to the new event
-                    });
+                        event_id: newEventId // Link to the new event
+                    };
+                    //console.log('[Event Create] Creating manager with payload:', managerPayload);
+
+                    await usersApi.create(managerPayload);
                 } catch (userError: any) {
                     console.error("User creation failed:", userError);
                     const errorMsg = `Event created, but manager creation failed: ${userError.response?.data?.error || userError.message}`;
@@ -257,7 +274,7 @@ export default function NewEventPage() {
                             onChange={val => { setFormData({ ...formData, organization_id: val }); setFieldErrors(prev => ({ ...prev, organization_id: '' })); }}
                             options={[
                                 { value: '', label: 'Select Organization', icon: Building2 },
-                                ...orgs.map(org => ({ value: org.id, label: org.name, image: org.logo_url }))
+                                ...orgs.map(org => ({ value: org.id, label: org.name, image: getImageUrl(org.logo_url) || undefined }))
                             ]}
                             error={fieldErrors.organization_id}
                             icon={Building2}
@@ -312,7 +329,7 @@ export default function NewEventPage() {
                     <div className="h-full min-h-[160px]">
                         {formData.image_url ? (
                             <div className="relative w-full h-full min-h-[160px] rounded-lg border border-border overflow-hidden bg-muted/10 flex items-center justify-center group">
-                                <img src={formData.image_url} alt="Banner Preview" className="w-full h-full object-cover" />
+                                <img src={getImageUrl(formData.image_url) || ''} alt="Banner Preview" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <button
                                         type="button"
@@ -366,13 +383,19 @@ export default function NewEventPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input
-                    label="Main Venue Location"
-                    placeholder="e.g. Yas Marina Circuit, Abu Dhabi"
-                    value={formData.location}
-                    onChange={e => setFormData({ ...formData, location: e.target.value })}
-                    icon={MapPin}
-                />
+                <div className="space-y-2">
+                    <Input
+                        label="Main Venue Location"
+                        placeholder="Select location from map above"
+                        value={formData.location}
+                        onChange={e => setFormData({ ...formData, location: e.target.value })}
+                        icon={MapPin}
+                    />
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <MapPin className="w-3 h-3" />
+                        Auto-filled when you search, click, or drag the marker on the map
+                    </p>
+                </div>
                 <RichSelect
                     label="Climate Control"
                     value={formData.climate_control}
@@ -533,15 +556,8 @@ export default function NewEventPage() {
                                 confirmValue={managerData.password}
                             />
                         </div>
-                        {/* Password Strength - Full Width */}
-                        {managerData.password && (
-                            <div className="pt-2 border-t border-dashed border-border/50">
-                                <PasswordStrength
-                                    password={managerData.password}
-                                    confirmPassword={managerData.confirmPassword}
-                                />
-                            </div>
-                        )}
+                        {/* Password Requirements */}
+                        <PasswordRequirements password={managerData.password} />
                     </div>
                     {/* Right Column - 40% - Role Card */}
                     <div className="lg:col-span-2">

@@ -158,6 +158,7 @@ export function requirePermission(permission: string) {
             }
 
             const userPermissions = await getUserPermissions(req.user.id);
+            if (req.user) { (req.user as any).permissions = userPermissions; }
 
             if (!userPermissions.includes(permission)) {
                 throw new ForbiddenError(`Permission denied: ${permission} required`);
@@ -186,6 +187,7 @@ export function requireAnyPermission(...permissions: string[]) {
             }
 
             const userPermissions = await getUserPermissions(req.user.id);
+            if (req.user) { (req.user as any).permissions = userPermissions; }
             const hasAny = permissions.some(p => userPermissions.includes(p));
 
             if (!hasAny) {
@@ -215,6 +217,7 @@ export function requireAllPermissions(...permissions: string[]) {
             }
 
             const userPermissions = await getUserPermissions(req.user.id);
+            if (req.user) { (req.user as any).permissions = userPermissions; }
             const hasAll = permissions.every(p => userPermissions.includes(p));
 
             if (!hasAll) {

@@ -7,7 +7,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import Navbar from '@/components/Navbar';
 import MaintenancePage from '@/components/MaintenancePage';
 import { getRoleLabel, hasRole, isAdmin, ROLES } from '@/lib/roles';
-import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User, ScrollText } from 'lucide-react';
 import { applyOrganizationTheme } from '@/lib/theme-utils';
 import { getPrimaryColor } from '@/lib/theme-parser';
 
@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
         {
             name: 'Event Management',
             icon: Calendar,
-            path: '/admin/events',
+            path: '',
             submenu: [
                 { name: 'Overview', path: '/events' },
                 { name: 'Create Event', path: '/events/new' }
@@ -105,6 +105,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
         { name: 'System Settings', icon: Settings, path: '/admin/settings' },
         { name: 'Access Control (RBAC)', icon: Shield, path: '/admin/rbac' },
         { name: 'Admin Settings', icon: Shield, path: '/admin/platform-settings' },
+        { name: 'Audit Logs', icon: ScrollText, path: '/audit-logs' },
     ];
 
     const standardItems: MenuItem[] = [
@@ -113,16 +114,16 @@ export default function DashboardLayout({ children }: SidebarProps) {
             name: 'Event Management',
             icon: Calendar,
             path: '/events',
-            requiredPermission: 'events.view', // Use dot notation matching database
+            // No requiredPermission for the main menu - all org users can see events
             submenu: [
-                { name: 'Overview', path: '/events' },
-                { name: 'Create Event', path: '/events/new', requiredPermission: 'events.manage' }
+                { name: 'Overview', path: '/events' }, // All users can view their assigned events
+                { name: 'Create Event', path: '/events/new', requiredPermission: 'events.create' } // Only those with create permission
             ]
         },
         { name: 'My Devices', icon: Component, path: '/devices', requiredPermission: 'devices.view' },
         { name: 'Reports', icon: FileText, path: '/reports', requiredPermission: 'reports.view' },
         { name: 'Direct Profile', icon: User, path: '/profile' },
-        { name: 'Org Settings', icon: Settings, path: '/settings', requiredPermission: 'settings.manage' },
+        { name: 'Org Settings', icon: Settings, path: '/organization', requiredPermission: 'settings.manage' },
         {
             name: 'User Management',
             icon: Users,
@@ -133,6 +134,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
                 { name: 'Create User', path: '/users/new', requiredPermission: 'users.manage' }
             ]
         },
+        { name: 'Audit Logs', icon: ScrollText, path: '/audit-logs', requiredPermission: 'audit.view' },
     ];
 
     let filteredMenuItems: MenuItem[] = [];
@@ -154,14 +156,17 @@ export default function DashboardLayout({ children }: SidebarProps) {
                 }
                 return true;
             })
-            // Filter Submenus based on permissions
+            // Filter Submenus - Use permissions only (assigned to roles in RBAC)
             .map(item => {
                 if (item.submenu) {
                     return {
                         ...item,
                         submenu: item.submenu.filter(sub => {
-                            if (sub.requiredPermission && !user?.permissions?.includes(sub.requiredPermission)) {
-                                return false;
+                            // Check if user has the required permission
+                            if (sub.requiredPermission) {
+                                if (!user?.permissions?.includes(sub.requiredPermission)) {
+                                    return false;
+                                }
                             }
                             return true;
                         })

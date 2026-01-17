@@ -18,6 +18,7 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
         const limit = parseInt(req.query.limit as string) || 20;
         const search = req.query.search as string;
         const role = req.query.role as string;
+        const eventId = req.query.event_id as string;
 
         // Determine organization filter
         let targetOrgId = orgId;
@@ -30,7 +31,8 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
             page,
             limit,
             search,
-            role
+            role,
+            eventId
         );
 
         res.json({
@@ -112,8 +114,21 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
 
         // Assign role if provided
         if (req.body.role) {
+            const orgId = req.body.organizationId || req.body.organization_id;
+            const eventId = req.body.event_id || req.body.context_id; // Support both field names
+
+            // Debug logging - uncomment to troubleshoot role assignment issues
+            // console.log('[User Create] Assigning role with context:', {
+            //     role: req.body.role,
+            //     orgId,
+            //     eventId,
+            //     body_event_id: req.body.event_id,
+            //     body_context_id: req.body.context_id
+            // });
+
             await userService.assignRole(user.id, req.body.role, {
-                org_id: req.body.organizationId || req.body.organization_id,
+                org_id: orgId,
+                event_id: eventId,
             });
         }
 

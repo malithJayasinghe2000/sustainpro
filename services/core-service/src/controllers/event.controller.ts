@@ -19,11 +19,28 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
             return;
         }
 
-        const events = await eventService.getAll();
+        // Pagination and filtering
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const search = req.query.search as string;
+        const organizationId = req.query.organization_id as string;
+
+        const { events, total, pages } = await eventService.getAll({
+            page,
+            limit,
+            search,
+            organizationId
+        });
 
         res.json({
             success: true,
             data: events,
+            meta: {
+                page,
+                limit,
+                total,
+                pages
+            }
         });
     } catch (error) {
         next(error);
@@ -47,7 +64,27 @@ export const getByOrganization = async (req: Request, res: Response, next: NextF
             return;
         }
 
-        const events = await eventService.getByOrganization(orgId);
+        let events = await eventService.getByOrganization(orgId);
+
+        // If user is not super admin, check if they have specific event assignments
+        // Users with assigned eventIds only see those events
+        // If user is not super admin, apply permission-based filtering
+        if (!user.isSuperAdmin) {
+            const permissions = (req.user as any)?.permissions || [];
+            const canViewAll = permissions.includes('events.view_all');
+
+            if (!canViewAll) {
+                const assignedEventIds = (req.user as any)?.eventIds || [];
+
+                if (assignedEventIds.length > 0) {
+                    // Filter to only assigned events
+                    events = events.filter(e => assignedEventIds.includes(e.id));
+                } else {
+                    // No 'view all' permission AND no assigned events -> see nothing
+                    events = [];
+                }
+            }
+        }
 
         res.json({
             success: true,
@@ -120,7 +157,15 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
             return;
         }
 
-        const event = await eventService.create(req.body, user.id);
+        const auditCtx = {
+            actorUserId: user.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        const event = await eventService.create(req.body, user.id, auditCtx);
 
         res.status(201).json({
             success: true,
@@ -143,7 +188,48 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
  */
 export const update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const event = await eventService.update(req.params.id, req.body);
+        const user = req.user!;
+        const permissions = (user as any).permissions || [];
+        const isSuperAdmin = user.isSuperAdmin;
+
+        // Check if user has permission to update full event details
+        const canUpdateDetails = isSuperAdmin || permissions.includes('events.update');
+        const canUpdateStatus = isSuperAdmin || permissions.includes('events.status');
+
+        if (!canUpdateDetails) {
+            // If they can't update details, check if they can update status
+            if (canUpdateStatus) {
+                // Ensure ONLY status is being updated
+                const allowedKeys = ['status'];
+                const bodyKeys = Object.keys(req.body);
+                const hasForbiddenKeys = bodyKeys.some(k => !allowedKeys.includes(k));
+
+                if (hasForbiddenKeys) {
+                    res.status(403).json({
+                        success: false,
+                        error: 'Permission denied: You can only update event status',
+                    });
+                    return;
+                }
+            } else {
+                // Should be caught by middleware, but extra safeguard
+                res.status(403).json({
+                    success: false,
+                    error: 'Permission denied',
+                });
+                return;
+            }
+        }
+
+        const auditCtx = {
+            actorUserId: user.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        const event = await eventService.update(req.params.id, req.body, auditCtx);
 
         res.json({
             success: true,
@@ -166,7 +252,15 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
  */
 export const remove = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await eventService.delete(req.params.id);
+        const auditCtx = {
+            actorUserId: req.user?.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        await eventService.delete(req.params.id, auditCtx);
 
         res.json({
             success: true,
@@ -189,7 +283,15 @@ export const remove = async (req: Request, res: Response, next: NextFunction): P
  */
 export const start = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const event = await eventService.start(req.params.id);
+        const auditCtx = {
+            actorUserId: req.user?.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        const event = await eventService.start(req.params.id, auditCtx);
 
         res.json({
             success: true,
@@ -213,7 +315,15 @@ export const start = async (req: Request, res: Response, next: NextFunction): Pr
  */
 export const stop = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const event = await eventService.stop(req.params.id);
+        const auditCtx = {
+            actorUserId: req.user?.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        const event = await eventService.stop(req.params.id, auditCtx);
 
         res.json({
             success: true,
@@ -237,12 +347,122 @@ export const stop = async (req: Request, res: Response, next: NextFunction): Pro
  */
 export const archive = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const event = await eventService.archive(req.params.id);
+        const auditCtx = {
+            actorUserId: req.user?.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        const event = await eventService.archive(req.params.id, auditCtx);
 
         res.json({
             success: true,
             data: event,
             message: 'Event archived',
+        });
+    } catch (error) {
+        if (error instanceof AppError) {
+            res.status(error.statusCode).json({
+                success: false,
+                error: error.message,
+            });
+            return;
+        }
+        next(error);
+    }
+};
+
+/**
+ * POST /api/v1/events/:id/request-end
+ * Request to end an event (for event managers)
+ */
+export const requestEnd = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const auditCtx = {
+            actorUserId: req.user?.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        const event = await eventService.requestEndEvent(req.params.id, req.user?.id!, auditCtx);
+
+        res.json({
+            success: true,
+            data: event,
+            message: 'Event end request submitted. Org admins will be notified.',
+        });
+    } catch (error) {
+        if (error instanceof AppError) {
+            res.status(error.statusCode).json({
+                success: false,
+                error: error.message,
+            });
+            return;
+        }
+        next(error);
+    }
+};
+
+/**
+ * POST /api/v1/events/:id/request-delete
+ */
+export const requestDelete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const auditCtx = {
+            actorUserId: req.user?.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        const event = await eventService.requestDeleteEvent(req.params.id, req.user?.id!, auditCtx);
+
+        res.json({
+            success: true,
+            data: event,
+            message: 'Event delete request submitted. Org admins will be notified.',
+        });
+    } catch (error) {
+        if (error instanceof AppError) {
+            res.status(error.statusCode).json({
+                success: false,
+                error: error.message,
+            });
+            return;
+        }
+        next(error);
+    }
+};
+
+/**
+ * POST /api/v1/events/:id/end
+ * End an event immediately (for org admins and super admins)
+ */
+export const endEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const auditCtx = {
+            actorUserId: req.user?.id,
+            ipAddress: req.ip || (req.headers['x-forwarded-for'] as string),
+            userAgent: req.headers['user-agent'],
+            requestMethod: req.method,
+            requestPath: req.originalUrl,
+        };
+
+        // First clear any end request flag
+        await eventService.clearEndRequest(req.params.id, auditCtx);
+
+        // Then end the event
+        const event = await eventService.update(req.params.id, { status: 'END' }, auditCtx);
+
+        res.json({
+            success: true,
+            data: event,
+            message: 'Event ended successfully',
         });
     } catch (error) {
         if (error instanceof AppError) {

@@ -73,12 +73,13 @@ export class UserRepository {
      */
     async findAll(params: {
         organizationId?: string;
+        eventId?: string;
         skip?: number;
         take?: number;
         search?: string;
         role?: string;
     }): Promise<{ users: User[], total: number }> {
-        const { organizationId, skip, take, search, role } = params;
+        const { organizationId, eventId, skip, take, search, role } = params;
 
         const where: any = {};
 
@@ -94,9 +95,17 @@ export class UserRepository {
             ];
         }
 
+        const roleAssignmentsWhere: any = {};
         if (role && role !== 'ALL') {
+            roleAssignmentsWhere.role = role;
+        }
+        if (eventId) {
+            roleAssignmentsWhere.event_id = eventId;
+        }
+
+        if (Object.keys(roleAssignmentsWhere).length > 0) {
             where.sps_role_assignments = {
-                some: { role: role }
+                some: roleAssignmentsWhere
             };
         }
 

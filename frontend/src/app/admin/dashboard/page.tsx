@@ -144,13 +144,10 @@ export default function AdminDashboardPage() {
 
             socket.on('dashboard:telemetry', handleTelemetry);
 
-            // Poll stats every 3 seconds (reliable)
+            // Poll stats every 5 seconds
             const pollStats = async () => {
                 try {
-                    const response = await fetch(
-                        `${process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '')}/api/v1/telemetry/stats/dashboard`
-                    );
-                    const result = await response.json();
+                    const result = await telemetryApi.getDashboardStats();
 
                     if (result.success && result.stats) {
                         setStats(prev => {
@@ -166,8 +163,6 @@ export default function AdminDashboardPage() {
                             return result.stats;
                         });
                     }
-
-                    // Polling logic removed as moved to Navbar
                 } catch (error) {
                     console.error('Error polling stats:', error);
                 }
@@ -205,17 +200,16 @@ export default function AdminDashboardPage() {
     const fetchDashboardData = async () => {
         try {
             // Fetch regular dashboard stats (devices)
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '')}/api/v1/telemetry/stats/dashboard`
-            );
-            const result = await response.json();
+            const result = await telemetryApi.getDashboardStats();
 
             if (result.success) {
                 // Only update stats, don't replace device list (Socket.IO keeps it fresh)
                 setStats(result.stats);
 
                 // Only set device list on initial load
-                if (isLoading) {
+                // Note: The backend currently returns 'stats' only, not 'recently_active'
+                // so we rely on Socket.IO or future backend updates for the list
+                if (isLoading && result.recently_active) {
                     setRecentDevices(result.recently_active);
                 }
 

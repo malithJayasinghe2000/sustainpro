@@ -8,7 +8,6 @@ import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, Al
 import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi, rolesApi, Role } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { RichSelect } from '@/components/ui/RichSelect';
-import { hasRole } from '@/lib/roles';
 import SetupWizard from '@/components/SetupWizard';
 import { toast } from 'sonner';
 
@@ -43,6 +42,15 @@ function NewUserPageContent() {
     const [currentStep, setCurrentStep] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!currentUser) return;
+        const canCreate = currentUser.is_super_admin || currentUser.permissions?.includes('users.manage');
+        if (!canCreate) {
+            toast.error('Access Denied', { description: 'You do not have permission to create users.' });
+            router.push('/users');
+        }
+    }, [currentUser, router]);
 
     // Form State (password is REQUIRED - will be sent to user via email)
     const [formData, setFormData] = useState({
@@ -83,9 +91,11 @@ function NewUserPageContent() {
             });
     }, []);
 
-    // Get organization ID from query parameter (when coming from org management page)
+    // Get query parameters for pre-selection
     const searchParams = useSearchParams();
     const preselectedOrgId = searchParams.get('org');
+    const preselectedEventId = searchParams.get('event');
+    const preselectedRole = searchParams.get('role');
 
     useEffect(() => {
         if (currentUser?.is_super_admin) {
@@ -96,12 +106,20 @@ function NewUserPageContent() {
         }
     }, [currentUser]);
 
-    // Pre-select organization from query parameter
+    // Pre-select fields from query parameters
     useEffect(() => {
-        if (preselectedOrgId && !formData.organization_id) {
-            setFormData(prev => ({ ...prev, organization_id: preselectedOrgId }));
+        setFormData(prev => ({
+            ...prev,
+            organization_id: preselectedOrgId || prev.organization_id,
+            event_id: preselectedEventId || prev.event_id,
+            role: preselectedRole || prev.role
+        }));
+
+        // If role is pre-selected, move to next step
+        if (preselectedRole) {
+            setCurrentStep(1);
         }
-    }, [preselectedOrgId]);
+    }, [preselectedOrgId, preselectedEventId, preselectedRole]);
 
     // Fetch events when organization is selected
     useEffect(() => {
@@ -198,15 +216,15 @@ function NewUserPageContent() {
                                     key={role.code}
                                     onClick={() => setFormData({ ...formData, role: role.code })}
                                     className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${isSelected
-                                            ? 'border-primary bg-primary/5 shadow-md'
-                                            : 'border-border bg-card hover:border-primary/50'
+                                        ? 'border-primary bg-primary/5 shadow-md'
+                                        : 'border-border bg-card hover:border-primary/50'
                                         }`}
                                 >
                                     <div className="flex items-center gap-3 mb-2">
                                         <div
                                             className={`p-2 rounded-lg ${isSelected
-                                                    ? 'bg-primary text-primary-foreground'
-                                                    : 'bg-muted text-muted-foreground'
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'bg-muted text-muted-foreground'
                                                 }`}
                                             style={isSelected && role.color ? { backgroundColor: role.color } : undefined}
                                         >

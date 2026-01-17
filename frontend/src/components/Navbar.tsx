@@ -5,7 +5,6 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { Sun, Moon, Bell, Clock, AlertTriangle, Info, XCircle, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getUserTimezone } from '@/lib/timezone';
 import { adminApi } from '@/lib/api';
 import UniversalCreator from './UniversalCreator';
 import { getFullImageUrl } from './ImageUpload';
@@ -46,12 +45,26 @@ export default function Navbar() {
 
     useEffect(() => {
         setMounted(true);
+    }, []);
+
+    // Separate effect for the timer that depends on the timezone
+    const effectiveTimezone = user?.timezone || settings?.default_timezone || 'Asia/Dubai';
+
+    useEffect(() => {
+        // Update localStorage when timezone changes
+        if (effectiveTimezone) {
+            localStorage.setItem('userTimezone', effectiveTimezone);
+        }
+
+        // Initial time update
+        setCurrentTime(new Date());
+
         const timer = setInterval(() => {
             setCurrentTime(new Date());
         }, 1000);
 
         return () => clearInterval(timer);
-    }, []);
+    }, [effectiveTimezone]);
 
     // Poll Server Stats (Super Admin Only)
     useEffect(() => {
@@ -98,13 +111,11 @@ export default function Navbar() {
 
     // Format time based on settings - supports HH:mm:ss, hh:mm:ss, HH:mm, etc.
     const formatTime = (date: Date) => {
-        // Priority: User's org timezone > System default timezone > Browser timezone
-        const timezone = user?.timezone || settings?.default_timezone || getUserTimezone();
         const timeFormat = settings?.time_format || 'HH:mm:ss';
 
         // Get time parts in the specified timezone
         const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: timezone,
+            timeZone: effectiveTimezone,
             hour: 'numeric',
             minute: '2-digit',
             second: '2-digit',
@@ -145,13 +156,11 @@ export default function Navbar() {
 
     // Format date based on settings - supports patterns like DD/MM/YYYY, YYYY-MM-DD, etc.
     const formatDate = (date: Date) => {
-        // Priority: User's org timezone > System default timezone > Browser timezone
-        const timezone = user?.timezone || settings?.default_timezone || getUserTimezone();
         const dateFormat = settings?.date_format || 'DD/MM/YYYY';
 
         // Get date parts in the specified timezone
         const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: timezone,
+            timeZone: effectiveTimezone,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -221,11 +230,14 @@ export default function Navbar() {
                                         src={logo}
                                         alt={siteTitle}
                                         className="h-10 w-auto object-contain"
-                                        onError={() => {
-                                            console.log('[Navbar] Logo failed to load:', logo);
-                                            setLogoError(true);
+                                        onError={(e) => {
+                                            const target = e.target as HTMLImageElement;
+                                            if (target.src.includes('logo.png')) {
+                                                setLogoError(true);
+                                            } else {
+                                                target.src = '/logo.png';
+                                            }
                                         }}
-                                        onLoad={() => console.log('[Navbar] Logo loaded:', logo)}
                                     />
                                 </div>
                             ) : (

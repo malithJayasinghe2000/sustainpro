@@ -390,6 +390,33 @@ async function main() {
             available_variables: JSON.stringify(['userName', 'lockoutDuration', 'lockoutTime', 'ipAddress']),
             is_system_template: true,
         },
+        {
+            code: 'EVENT_END_REQUEST',
+            name: 'Event End Request',
+            category: 'EVENT',
+            description: 'Sent to org admins when an event manager requests to end an event',
+            subject: 'Event End Request: {{eventName}} - Action Required',
+            body_html: `
+                <h1>Event End Request</h1>
+                <p>Dear {{recipientName}},</p>
+                <p>An event manager has requested to end the following event:</p>
+                <table style="border-collapse: collapse; margin: 20px 0;">
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Event:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">{{eventName}}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Event Code:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">{{eventCode}}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Requested By:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">{{requestedByName}}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Request Time:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">{{requestTime}}</td></tr>
+                </table>
+                <p>Please review and take action:</p>
+                <p style="margin: 20px 0;">
+                    <a href="{{eventUrl}}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">View Event</a>
+                </p>
+                <p>If you approve, you can end the event from the event details page.</p>
+                <p>Best regards,<br>The SustainPro Team</p>
+            `,
+            body_text: 'Event End Request: {{eventName}}. Requested by {{requestedByName}}. Review at: {{eventUrl}}',
+            available_variables: JSON.stringify(['recipientName', 'eventName', 'eventCode', 'requestedByName', 'requestTime', 'eventUrl', 'organizationName']),
+            is_system_template: true,
+        },
     ];
 
     for (const template of emailTemplates) {
@@ -521,13 +548,22 @@ async function main() {
         { name: 'View Devices', code: 'devices.view', description: 'View device list', category: 'devices' },
         { name: 'Manage Devices', code: 'devices.manage', description: 'Create, update, delete devices', category: 'devices' },
         { name: 'View Events', code: 'events.view', description: 'View events', category: 'events' },
-        { name: 'Manage Events', code: 'events.manage', description: 'Create, update, delete events', category: 'events' },
+        { name: 'Create Events', code: 'events.create', description: 'Create new events', category: 'events' },
+        { name: 'Update Event Details', code: 'events.update', description: 'Update event name, location, etc.', category: 'events' },
+        { name: 'Update Event Status', code: 'events.status', description: 'Change event status (Active/Archived)', category: 'events' },
+        { name: 'End Event', code: 'events.end', description: 'Immediately end an active event', category: 'events' },
+        { name: 'Request Event End', code: 'events.endrequest', description: 'Request to end an active event (requires approval)', category: 'events' },
+        { name: 'Request Event Delete', code: 'events.deleterequest', description: 'Request to delete an event', category: 'events' },
+        { name: 'Delete Events', code: 'events.delete', description: 'Delete events', category: 'events' },
+        { name: 'View All Events', code: 'events.view_all', description: 'View all organization events', category: 'events' },
         { name: 'View Users', code: 'users.view', description: 'View user list', category: 'users' },
         { name: 'Manage Users', code: 'users.manage', description: 'Create, update, delete users', category: 'users' },
         { name: 'View Reports', code: 'reports.view', description: 'View analytics and reports', category: 'reports' },
         { name: 'Manage Settings', code: 'settings.manage', description: 'Manage system settings', category: 'settings' },
         { name: 'View Telemetry', code: 'telemetry.view', description: 'View telemetry data', category: 'telemetry' },
         { name: 'Manage Alerts', code: 'alerts.manage', description: 'Create and manage alert rules', category: 'alerts' },
+        { name: 'View Audit Logs', code: 'audit.view', description: 'View system audit logs', category: 'audit' },
+        { name: 'Export Audit Logs', code: 'audit.export', description: 'Export audit logs to CSV', category: 'audit' },
     ];
 
     for (const perm of permissions) {
@@ -614,6 +650,15 @@ async function main() {
             level: 6,
             icon: 'Eye',
             color: '#6B7280',
+            is_system: true,
+        },
+        {
+            code: 'OPERATOR',
+            name: 'Operator',
+            description: 'Standard operator access',
+            level: 3,
+            icon: 'Activity',
+            color: '#10B981',
             is_system: true,
         },
     ];
@@ -707,11 +752,13 @@ async function main() {
     // Define role-permission mappings
     const rolePermissionMappings: Record<string, string[]> = {
         'ORG_ADMIN': [
-            'dashboard.view', 'devices.view', 'devices.manage', 'events.view', 'events.manage',
-            'users.view', 'users.manage', 'reports.view', 'settings.manage', 'telemetry.view', 'alerts.manage'
+            'dashboard.view', 'devices.view', 'devices.manage', 'events.view', 'events.create', 'events.view_all',
+            'events.update', 'events.status', 'events.end', 'events.delete',
+            'users.view', 'users.manage', 'reports.view', 'settings.manage', 'telemetry.view', 'alerts.manage',
+            'audit.view', 'audit.export'
         ],
         'EVENT_MANAGER': [
-            'dashboard.view', 'events.view', 'events.manage', 'devices.view', 'reports.view', 'telemetry.view', 'users.view'
+            'dashboard.view', 'events.view', 'events.update', 'events.status', 'events.endrequest', 'events.deleterequest', 'devices.view', 'reports.view', 'telemetry.view', 'users.view'
         ],
         'DEPT_HEAD': [
             'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view'
@@ -727,6 +774,9 @@ async function main() {
         ],
         'VIEWER': [
             'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view'
+        ],
+        'OPERATOR': [
+            'dashboard.view', 'events.view', 'devices.view', 'devices.manage', 'reports.view', 'telemetry.view'
         ],
     };
 

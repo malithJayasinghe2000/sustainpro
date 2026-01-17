@@ -6,3 +6,5 @@ export * from './validation';
 export * from './password-validation';
 export * from './notification-publisher';
 export * from './cache-invalidation';
+export * from './audit-logger';
+export * from './audit-repository';

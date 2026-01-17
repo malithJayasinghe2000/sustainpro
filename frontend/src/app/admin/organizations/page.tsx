@@ -20,6 +20,7 @@ export default function OrganizationsPage() {
     // const [error, setError] = useState(''); // Removed unused error state if needed, or keep
     const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
     const [searchQuery, setSearchQuery] = useState('');
+    const [stats, setStats] = useState({ total: 0, providers: 0, partners: 0, clients: 0 });
 
     // Chunking Helper for Grid Layout (4 items per row)
     const chunkArray = (arr: any[], size: number) => {
@@ -46,6 +47,21 @@ export default function OrganizationsPage() {
 
         return () => clearTimeout(delayDebounceFn);
     }, [user, router, page, searchQuery]);
+
+    useEffect(() => {
+        if (user?.is_super_admin) {
+            fetchStats();
+        }
+    }, [user]);
+
+    const fetchStats = async () => {
+        try {
+            const data = await organizationsApi.getStats();
+            if (data) setStats(data);
+        } catch (err) {
+            console.error('Failed to fetch org stats:', err);
+        }
+    };
 
     const fetchOrgs = async () => {
         try {
@@ -133,28 +149,28 @@ export default function OrganizationsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     <StatsCard
                         title="Total Tenants"
-                        value={orgs.length}
+                        value={stats.total}
                         subtext="All registered entities"
                         icon={Building2}
                         intent="default"
                     />
                     <StatsCard
                         title="SustainPro"
-                        value={orgs.filter(o => o.type === 'PROVIDER').length}
+                        value={stats.providers}
                         subtext="Internal provider accounts"
                         icon={BadgeCheck}
                         intent="primary"
                     />
                     <StatsCard
                         title="Partners"
-                        value={orgs.filter(o => o.type === 'PARTNER').length}
+                        value={stats.partners}
                         subtext="Resellers & integrators"
                         icon={Briefcase}
                         intent="success"
                     />
                     <StatsCard
                         title="Clients"
-                        value={orgs.filter(o => o.type === 'CLIENT').length}
+                        value={stats.clients}
                         subtext="End-user organizations"
                         icon={Users}
                         intent="warning"

@@ -1,8 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
-import { OrganizationService } from '../services/organization.service';
+import { OrganizationService, AuditContext } from '../services/organization.service';
 import { AppError } from '@sustainpro/shared-utils';
 
 const orgService = new OrganizationService();
+
+/**
+ * Extract audit context from request
+ */
+const getAuditContext = (req: Request): AuditContext => ({
+    actorUserId: req.user?.id,
+    ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket?.remoteAddress,
+    userAgent: req.headers['user-agent'],
+    requestMethod: req.method,
+    requestPath: req.originalUrl,
+});
 
 /**
  * GET /api/v1/organizations
@@ -63,7 +74,8 @@ export const getById = async (req: Request, res: Response, next: NextFunction): 
  */
 export const create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const organization = await orgService.create(req.body, req.user?.id);
+        const auditCtx = getAuditContext(req);
+        const organization = await orgService.create(req.body, req.user?.id, auditCtx);
 
         res.status(201).json({
             success: true,
@@ -86,7 +98,8 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
  */
 export const update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const organization = await orgService.update(req.params.id, req.body);
+        const auditCtx = getAuditContext(req);
+        const organization = await orgService.update(req.params.id, req.body, auditCtx);
 
         res.json({
             success: true,
@@ -109,7 +122,8 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
  */
 export const remove = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await orgService.delete(req.params.id);
+        const auditCtx = getAuditContext(req);
+        await orgService.delete(req.params.id, auditCtx);
 
         res.json({
             success: true,
@@ -149,3 +163,22 @@ export const getStructure = async (req: Request, res: Response, next: NextFuncti
         next(error);
     }
 };
+
+/**
+ * GET /api/v1/organizations/stats/overview
+ */
+export const getStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const stats = await orgService.getStats();
+
+        res.json({
+            success: true,
+            data: stats,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+
+
