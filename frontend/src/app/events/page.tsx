@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Calendar, Plus, Search, LayoutGrid, List, MapPin, Clock, ChevronRight, Activity, Archive, CheckCircle, Filter, Building2, ChevronLeft } from 'lucide-react';
+import { Calendar, Plus, Search, LayoutGrid, List, MapPin, Clock, ChevronRight, Activity, Archive, CheckCircle, Filter, Building2, ChevronLeft, Trash2 } from 'lucide-react';
 import StatsCard from '@/components/StatsCard';
 import { eventsApi, organizationsApi, getImageUrl } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -303,10 +303,10 @@ export default function EventsPage() {
                                 <div
                                     key={event.id}
                                     className={`group relative flex flex-col h-full min-h-[320px] bg-card border rounded-xl overflow-hidden hover:shadow-xl hover:translate-y-[-2px] transition-all duration-300 cursor-pointer ${hasDeleteRequest
-                                            ? 'border-2 border-destructive ring-2 ring-destructive/20'
-                                            : hasEndRequest
-                                                ? 'border-2 border-red-600 ring-2 ring-red-600/20'
-                                                : 'border-border'
+                                        ? 'border-2 border-destructive ring-2 ring-destructive/20'
+                                        : hasEndRequest
+                                            ? 'border-2 border-red-600 ring-2 ring-red-600/20'
+                                            : 'border-border'
                                         }`}
                                     onClick={() => router.push(`/events/${event.id}`)}
                                 >

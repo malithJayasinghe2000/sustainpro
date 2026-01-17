@@ -87,7 +87,8 @@ export default function NewEventPage() {
     });
 
     // Validating password against policies
-    const { isValid: isPasswordValid } = usePasswordValidation(managerData.password);
+    const { validatePassword } = usePasswordValidation();
+    const { isValid: isPasswordValid } = validatePassword(managerData.password);
 
     // Image Upload State
     const [imagePreview, setImagePreview] = useState<string>('');
@@ -165,7 +166,11 @@ export default function NewEventPage() {
 
         if (currentStep === 2 && createManager) {
             if (!managerData.full_name) errors.full_name = "Full name is required";
-            if (!managerData.email) errors.email = "Email is required";
+            if (!managerData.email) {
+                errors.email = "Email is required";
+            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(managerData.email)) {
+                errors.email = "Invalid email format";
+            }
             if (!managerData.password) errors.password = "Password is required";
             if (!isPasswordValid) errors.password = "Password does not meet requirements";
             if (managerData.password && managerData.password !== managerData.confirmPassword) {
