@@ -31,7 +31,7 @@ interface SettingsContextType {
 }
 
 // Default fallback colors
-const DEFAULT_PRIMARY_COLOR = '#14b8a6'; // Teal
+const DEFAULT_PRIMARY_COLOR = '#0f551aff'; // Teal
 const DEFAULT_SECONDARY_COLOR = '#10B981'; // Emerald
 
 // Default fallback logo - served from public folder

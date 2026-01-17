@@ -73,7 +73,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
         {
             name: 'Event Management',
             icon: Calendar,
-            path: '/admin/events',
+            path: '',
             submenu: [
                 { name: 'Overview', path: '/events' },
                 { name: 'Create Event', path: '/events/new' }
@@ -106,27 +106,27 @@ export default function DashboardLayout({ children }: SidebarProps) {
             name: 'Event Management',
             icon: Calendar,
             path: '/events',
-            requiredPermission: 'events:view', // The Module Access
+            // No requiredPermission for the main menu - all org users can see events
             submenu: [
-                { name: 'Overview', path: '/events' },
-                { name: 'Create Event', path: '/events/new', requiredPermission: 'events:create' }
+                { name: 'Overview', path: '/events' }, // All users can view their assigned events
+                { name: 'Create Event', path: '/events/new', requiredPermission: 'events.create' } // Only those with create permission
             ]
         },
         { name: 'My Devices', icon: Component, path: '/devices' },
         { name: 'Reports', icon: FileText, path: '/reports' },
         { name: 'Direct Profile', icon: User, path: '/profile' },
-        { name: 'Organization', icon: Building2, path: '/organization', requiredRole: 'ORG_ADMIN' },
+        { name: 'Org Settings', icon: Settings, path: '/organization', requiredPermission: 'settings.manage' },
         {
             name: 'User Management',
             icon: Users,
             path: '/users',
-            requiredRole: 'ORG_ADMIN',
+            requiredPermission: 'users.view',
             submenu: [
                 { name: 'Overview', path: '/users' },
-                { name: 'Create User', path: '/users/new' }
+                { name: 'Create User', path: '/users/new', requiredPermission: 'users.manage' }
             ]
         },
-        { name: 'Audit Logs', icon: ScrollText, path: '/audit-logs', requiredRole: 'ORG_ADMIN' },
+        { name: 'Audit Logs', icon: ScrollText, path: '/audit-logs', requiredPermission: 'audit.view' },
     ];
 
     let filteredMenuItems: MenuItem[] = [];
@@ -152,14 +152,17 @@ export default function DashboardLayout({ children }: SidebarProps) {
                 }
                 return true;
             })
-            // Filter Submenus
+            // Filter Submenus - Use permissions only (assigned to roles in RBAC)
             .map(item => {
                 if (item.submenu) {
                     return {
                         ...item,
                         submenu: item.submenu.filter(sub => {
-                            if (sub.requiredPermission && !user?.permissions?.includes(sub.requiredPermission)) {
-                                return false;
+                            // Check if user has the required permission
+                            if (sub.requiredPermission) {
+                                if (!user?.permissions?.includes(sub.requiredPermission)) {
+                                    return false;
+                                }
                             }
                             return true;
                         })

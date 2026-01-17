@@ -42,6 +42,8 @@ export interface JwtPayload {
     organization_id: string | null;
     isSuperAdmin: boolean;
     roles: string[];
+    permissions?: string[]; // permissions codes
+    eventIds?: string[]; // Event IDs assigned to user via role assignments
     iat?: number;
     exp?: number;
 }

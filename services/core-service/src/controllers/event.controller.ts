@@ -19,11 +19,28 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
             return;
         }
 
-        const events = await eventService.getAll();
+        // Pagination and filtering
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const search = req.query.search as string;
+        const organizationId = req.query.organization_id as string;
+
+        const { events, total, pages } = await eventService.getAll({
+            page,
+            limit,
+            search,
+            organizationId
+        });
 
         res.json({
             success: true,
             data: events,
+            meta: {
+                page,
+                limit,
+                total,
+                pages
+            }
         });
     } catch (error) {
         next(error);
@@ -47,7 +64,27 @@ export const getByOrganization = async (req: Request, res: Response, next: NextF
             return;
         }
 
-        const events = await eventService.getByOrganization(orgId);
+        let events = await eventService.getByOrganization(orgId);
+
+        // If user is not super admin, check if they have specific event assignments
+        // Users with assigned eventIds only see those events
+        // If user is not super admin, apply permission-based filtering
+        if (!user.isSuperAdmin) {
+            const permissions = (req.user as any)?.permissions || [];
+            const canViewAll = permissions.includes('events.view_all');
+
+            if (!canViewAll) {
+                const assignedEventIds = (req.user as any)?.eventIds || [];
+
+                if (assignedEventIds.length > 0) {
+                    // Filter to only assigned events
+                    events = events.filter(e => assignedEventIds.includes(e.id));
+                } else {
+                    // No 'view all' permission AND no assigned events -> see nothing
+                    events = [];
+                }
+            }
+        }
 
         res.json({
             success: true,
@@ -143,6 +180,39 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
  */
 export const update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+        const user = req.user!;
+        const permissions = (user as any).permissions || [];
+        const isSuperAdmin = user.isSuperAdmin;
+
+        // Check if user has permission to update full event details
+        const canUpdateDetails = isSuperAdmin || permissions.includes('events.update');
+        const canUpdateStatus = isSuperAdmin || permissions.includes('events.status');
+
+        if (!canUpdateDetails) {
+            // If they can't update details, check if they can update status
+            if (canUpdateStatus) {
+                // Ensure ONLY status is being updated
+                const allowedKeys = ['status'];
+                const bodyKeys = Object.keys(req.body);
+                const hasForbiddenKeys = bodyKeys.some(k => !allowedKeys.includes(k));
+
+                if (hasForbiddenKeys) {
+                    res.status(403).json({
+                        success: false,
+                        error: 'Permission denied: You can only update event status',
+                    });
+                    return;
+                }
+            } else {
+                // Should be caught by middleware, but extra safeguard
+                res.status(403).json({
+                    success: false,
+                    error: 'Permission denied',
+                });
+                return;
+            }
+        }
+
         const event = await eventService.update(req.params.id, req.body);
 
         res.json({

@@ -26,6 +26,8 @@ export interface CreateEventDto {
     end_date?: Date;
     description?: string;
     event_type?: string;
+    image_url?: string;
+    coordinates?: { lat: number; lng: number };
 }
 
 export interface UpdateEventDto {
@@ -37,4 +39,5 @@ export interface UpdateEventDto {
     description?: string;
     event_type?: string;
     image_url?: string;
+    coordinates?: { lat: number; lng: number };
 }

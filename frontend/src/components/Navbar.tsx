@@ -221,11 +221,14 @@ export default function Navbar() {
                                         src={logo}
                                         alt={siteTitle}
                                         className="h-10 w-auto object-contain"
-                                        onError={() => {
-                                            console.log('[Navbar] Logo failed to load:', logo);
-                                            setLogoError(true);
+                                        onError={(e) => {
+                                            const target = e.target as HTMLImageElement;
+                                            if (target.src.includes('logo.png')) {
+                                                setLogoError(true);
+                                            } else {
+                                                target.src = '/logo.png';
+                                            }
                                         }}
-                                        onLoad={() => console.log('[Navbar] Logo loaded:', logo)}
                                     />
                                 </div>
                             ) : (

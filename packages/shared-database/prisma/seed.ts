@@ -521,7 +521,11 @@ async function main() {
         { name: 'View Devices', code: 'devices.view', description: 'View device list', category: 'devices' },
         { name: 'Manage Devices', code: 'devices.manage', description: 'Create, update, delete devices', category: 'devices' },
         { name: 'View Events', code: 'events.view', description: 'View events', category: 'events' },
-        { name: 'Manage Events', code: 'events.manage', description: 'Create, update, delete events', category: 'events' },
+        { name: 'Create Events', code: 'events.create', description: 'Create new events', category: 'events' },
+        { name: 'Update Event Details', code: 'events.update', description: 'Update event name, location, etc.', category: 'events' },
+        { name: 'Update Event Status', code: 'events.status', description: 'Change event status (Active/Archived)', category: 'events' },
+        { name: 'Delete Events', code: 'events.delete', description: 'Delete events', category: 'events' },
+        { name: 'View All Events', code: 'events.view_all', description: 'View all organization events', category: 'events' },
         { name: 'View Users', code: 'users.view', description: 'View user list', category: 'users' },
         { name: 'Manage Users', code: 'users.manage', description: 'Create, update, delete users', category: 'users' },
         { name: 'View Reports', code: 'reports.view', description: 'View analytics and reports', category: 'reports' },
@@ -618,6 +622,15 @@ async function main() {
             color: '#6B7280',
             is_system: true,
         },
+        {
+            code: 'OPERATOR',
+            name: 'Operator',
+            description: 'Standard operator access',
+            level: 3,
+            icon: 'Activity',
+            color: '#10B981',
+            is_system: true,
+        },
     ];
 
     for (const role of roles) {
@@ -709,12 +722,12 @@ async function main() {
     // Define role-permission mappings
     const rolePermissionMappings: Record<string, string[]> = {
         'ORG_ADMIN': [
-            'dashboard.view', 'devices.view', 'devices.manage', 'events.view', 'events.manage',
+            'dashboard.view', 'devices.view', 'devices.manage', 'events.view', 'events.create', 'events.view_all', 'events.update', 'events.status', 'events.delete',
             'users.view', 'users.manage', 'reports.view', 'settings.manage', 'telemetry.view', 'alerts.manage',
             'audit.view', 'audit.export'
         ],
         'EVENT_MANAGER': [
-            'dashboard.view', 'events.view', 'events.manage', 'devices.view', 'reports.view', 'telemetry.view', 'users.view'
+            'dashboard.view', 'events.view', 'events.status', 'devices.view', 'reports.view', 'telemetry.view', 'users.view'
         ],
         'DEPT_HEAD': [
             'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view'
@@ -730,6 +743,9 @@ async function main() {
         ],
         'VIEWER': [
             'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view'
+        ],
+        'OPERATOR': [
+            'dashboard.view', 'events.view', 'devices.view', 'devices.manage', 'reports.view', 'telemetry.view'
         ],
     };
 

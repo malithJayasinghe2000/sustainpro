@@ -150,7 +150,7 @@ export const authApi = {
 
 // Users API functions
 export const usersApi = {
-    getAll: async (params?: { page?: number; limit?: number; search?: string; role?: string; organization_id?: string }) => {
+    getAll: async (params?: { page?: number; limit?: number; search?: string; role?: string; organization_id?: string; event_id?: string }) => {
         const response = await apiClient.get('/users', { params });
         return response.data;
     },
@@ -598,12 +598,12 @@ export const departmentTemplatesApi = {
 export const departmentsApi = {
     getByEvent: async (eventId: string) => {
         const response = await apiClient.get(`/departments/by-event/${eventId}`);
-        return response.data;
+        return response.data.data;
     },
 
     getById: async (id: string) => {
         const response = await apiClient.get(`/departments/${id}`);
-        return response.data;
+        return response.data.data;
     },
 
     create: async (data: any) => {
@@ -695,8 +695,25 @@ export const organizationsApi = {
 // ... (User Management APIs)
 
 export const eventsApi = {
-    getAll: async () => {
-        const response = await apiClient.get('/events');
+    getAll: async (params?: { page?: number; limit?: number; search?: string; organization_id?: string }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.search) queryParams.append('search', params.search);
+        if (params?.organization_id) queryParams.append('organization_id', params.organization_id);
+
+        const url = `/events${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+        const response = await apiClient.get(url);
+
+        // Return paginated response if available, otherwise just data
+        if (response.data.meta) {
+            return {
+                data: response.data.data,
+                total: response.data.meta.total,
+                totalPages: response.data.meta.pages,
+                page: response.data.meta.page,
+            };
+        }
         return response.data.data;
     },
     getByOrg: async (orgId: string) => {
@@ -705,11 +722,11 @@ export const eventsApi = {
     },
     create: async (data: any) => {
         const response = await apiClient.post('/events', data);
-        return response.data;
+        return response.data.data; // Return the event object directly
     },
     getById: async (id: string) => {
         const response = await apiClient.get(`/events/${id}`);
-        return response.data;
+        return response.data.data;
     },
     update: async (id: string, data: any) => {
         const response = await apiClient.put(`/events/${id}`, data);
