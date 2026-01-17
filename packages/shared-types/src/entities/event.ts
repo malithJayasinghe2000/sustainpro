@@ -5,6 +5,7 @@ export interface Event {
     id: string;
     organization_id: string;
     name: string;
+    code: string | null;
     location: string | null;
     start_date: Date | null;
     end_date: Date | null;
