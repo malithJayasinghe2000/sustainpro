@@ -13,31 +13,41 @@ export class DepartmentRepository {
      * Get departments by event
      */
     async findByEvent(eventId: string): Promise<DepartmentWithServices[]> {
-        const departments = await prisma.$queryRaw<DepartmentWithServices[]>`
-            SELECT d.*,
-                COUNT(ds.id)::int as services_count
-            FROM sps_departments d
-            LEFT JOIN sps_department_services ds ON d.id = ds.department_id
-            WHERE d.event_id = ${eventId}
-            GROUP BY d.id
-            ORDER BY d.created_at DESC
-        `;
-        
-        return departments;
+        const departments = await prisma.sps_departments.findMany({
+            where: { event_id: eventId },
+            include: {
+                _count: {
+                    select: { sps_department_services: true }
+                }
+            },
+            orderBy: { created_at: 'desc' }
+        });
+
+        return departments.map(d => ({
+            ...d,
+            services_count: d._count.sps_department_services
+        })) as any as DepartmentWithServices[];
     }
 
     /**
      * Get department by ID
      */
     async findById(id: string): Promise<DepartmentWithServices | null> {
-        const departments = await prisma.$queryRaw<DepartmentWithServices[]>`
-            SELECT d.*,
-                (SELECT COUNT(*)::int FROM sps_department_services ds WHERE ds.department_id = d.id) as services_count
-            FROM sps_departments d
-            WHERE d.id = ${id}
-        `;
-        
-        return departments[0] || null;
+        const department = await prisma.sps_departments.findUnique({
+            where: { id },
+            include: {
+                _count: {
+                    select: { sps_department_services: true }
+                }
+            }
+        });
+
+        if (!department) return null;
+
+        return {
+            ...department,
+            services_count: department._count.sps_department_services
+        } as any as DepartmentWithServices;
     }
 
     /**
@@ -59,7 +69,7 @@ export class DepartmentRepository {
                 color: data.color || '#3B82F6',
             } as any
         });
-        
+
         return dept as any as Department;
     }
 
@@ -97,7 +107,7 @@ export class DepartmentRepository {
             where: { id },
             data: updateData
         });
-        
+
         return dept as any as Department;
     }
 
@@ -124,7 +134,7 @@ export class DepartmentRepository {
                 event_id: eventId,
             } as any
         });
-        
+
         return count > 0;
     }
 
@@ -135,14 +145,22 @@ export class DepartmentRepository {
         const dept = await this.findById(id);
         if (!dept) return null;
 
-        const services = await prisma.$queryRaw`
-            SELECT ds.*, st.name as template_name, st.description as template_description
-            FROM sps_department_services ds
-            LEFT JOIN sps_service_templates st ON ds.service_template_id = st.id
-            WHERE ds.department_id = ${id}
-            ORDER BY ds.created_at
-        ` as any[];
+        const services = await prisma.sps_department_services.findMany({
+            where: { department_id: id },
+            include: {
+                sps_service_templates: {
+                    select: { name: true, description: true }
+                }
+            },
+            orderBy: { created_at: 'asc' }
+        });
 
-        return { ...dept, services };
+        const servicesWithTemplate = services.map(s => ({
+            ...s,
+            template_name: s.sps_service_templates?.name,
+            template_description: s.sps_service_templates?.description
+        }));
+
+        return { ...dept, services: servicesWithTemplate };
     }
 }

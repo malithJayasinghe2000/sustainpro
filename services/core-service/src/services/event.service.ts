@@ -9,10 +9,15 @@ export class EventService {
     private repo = new EventRepository();
 
     /**
-     * Get all events (for super admin)
+     * Get all events (for super admin) with pagination
      */
-    async getAll(): Promise<Event[]> {
-        return this.repo.findAll();
+    async getAll(params?: {
+        page?: number;
+        limit?: number;
+        search?: string;
+        organizationId?: string;
+    }): Promise<{ events: Event[]; total: number; pages: number }> {
+        return this.repo.findAllPaginated(params);
     }
 
     /**

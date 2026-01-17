@@ -158,6 +158,13 @@ export class AuthService {
         const roles = await this.userRepo.getUserRoles(user.id);
         const permissions = await this.userRepo.getUserPermissions(user.id);
 
+        // Extract unique event IDs from role assignments
+        const eventIds = [...new Set(
+            roles
+                .filter(r => r.event_id)
+                .map(r => r.event_id as string)
+        )];
+
         // Generate tokens
         const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
             id: user.id,
@@ -165,6 +172,8 @@ export class AuthService {
             organization_id: user.organization_id,
             isSuperAdmin: user.is_super_admin,
             roles: roles.map(r => r.role),
+            permissions: permissions, // Include permissions in JWT
+            eventIds, // Include assigned event IDs
         };
 
         const accessToken = jwt.sign(payload, config.jwt.secret, {
@@ -280,6 +289,14 @@ export class AuthService {
         }
 
         const roles = await this.userRepo.getUserRoles(user.id);
+        const permissions = await this.userRepo.getUserPermissions(user.id);
+
+        // Extract unique event IDs from role assignments
+        const eventIds = [...new Set(
+            roles
+                .filter(r => r.event_id)
+                .map(r => r.event_id as string)
+        )];
 
         const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
             id: user.id,
@@ -287,6 +304,8 @@ export class AuthService {
             organization_id: user.organization_id,
             isSuperAdmin: user.is_super_admin,
             roles: roles.map(r => r.role),
+            permissions: permissions, // Include permissions in refresh token payload
+            eventIds, // Include assigned event IDs
         };
 
         const accessToken = jwt.sign(payload, config.jwt.secret, {
