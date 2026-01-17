@@ -740,6 +740,20 @@ export const eventsApi = {
         const response = await apiClient.post(`/events/${id}/stop`);
         return response.data;
     },
+    // Request to end event (for event managers)
+    requestEnd: async (id: string) => {
+        const response = await apiClient.post(`/events/${id}/request-end`);
+        return response.data;
+    },
+    // End event immediately (for org admins and super admins)
+    endEvent: async (id: string) => {
+        const response = await apiClient.post(`/events/${id}/end`);
+        return response.data;
+    },
+    requestDelete: async (id: string) => {
+        const response = await apiClient.post(`/events/${id}/request-delete`);
+        return response.data;
+    },
     delete: async (id: string, adminPassword: string) => {
         const response = await apiClient.delete(`/events/${id}`, {
             data: { adminPassword }

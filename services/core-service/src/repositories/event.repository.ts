@@ -139,17 +139,19 @@ export class EventRepository {
     async update(id: string, data: UpdateEventDto): Promise<Event | null> {
         const updateData: any = {};
 
-        const allowedFields: (keyof UpdateEventDto)[] = [
+        const allowedFields: (keyof UpdateEventDto | 'end_requested' | 'end_requested_by' | 'end_requested_at' | 'delete_requested' | 'delete_requested_by' | 'delete_requested_at')[] = [
             'name', 'location', 'start_date', 'end_date',
-            'status', 'description', 'event_type', 'image_url', 'coordinates'
+            'status', 'description', 'event_type', 'image_url', 'coordinates',
+            'end_requested', 'end_requested_by', 'end_requested_at',
+            'delete_requested', 'delete_requested_by', 'delete_requested_at'
         ];
 
         for (const field of allowedFields) {
-            if (data[field] !== undefined) {
-                if ((field === 'start_date' || field === 'end_date') && data[field]) {
-                    updateData[field] = new Date(data[field] as any);
+            if ((data as any)[field] !== undefined) {
+                if ((field === 'start_date' || field === 'end_date' || field === 'end_requested_at' || field === 'delete_requested_at') && (data as any)[field]) {
+                    updateData[field] = new Date((data as any)[field] as any);
                 } else {
-                    updateData[field] = data[field];
+                    updateData[field] = (data as any)[field];
                 }
             }
         }

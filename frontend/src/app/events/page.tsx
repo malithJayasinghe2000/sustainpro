@@ -296,11 +296,18 @@ export default function EventsPage() {
 
                             const event = (item as { data: any }).data;
                             const eventImageUrl = getImageUrl(event.image_url);
+                            const hasDeleteRequest = event.delete_requested;
+                            const hasEndRequest = event.end_requested && event.status === 'ACTIVE';
 
                             return (
                                 <div
                                     key={event.id}
-                                    className="group relative flex flex-col h-full min-h-[320px] bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl hover:translate-y-[-2px] transition-all duration-300 cursor-pointer"
+                                    className={`group relative flex flex-col h-full min-h-[320px] bg-card border rounded-xl overflow-hidden hover:shadow-xl hover:translate-y-[-2px] transition-all duration-300 cursor-pointer ${hasDeleteRequest
+                                            ? 'border-2 border-destructive ring-2 ring-destructive/20'
+                                            : hasEndRequest
+                                                ? 'border-2 border-red-600 ring-2 ring-red-600/20'
+                                                : 'border-border'
+                                        }`}
                                     onClick={() => router.push(`/events/${event.id}`)}
                                 >
                                     {/* Full Background Image */}
@@ -316,6 +323,22 @@ export default function EventsPage() {
 
                                     {/* Noise Texture */}
                                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150 mix-blend-overlay"></div>
+
+                                    {/* Delete Requested Badge - Top Left */}
+                                    {hasDeleteRequest && (
+                                        <span className="absolute top-4 left-4 inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-destructive text-destructive-foreground shadow-lg z-10 animate-pulse">
+                                            <Trash2 className="w-3 h-3 mr-1" />
+                                            Delete Requested
+                                        </span>
+                                    )}
+
+                                    {/* End Requested Badge - Top Left */}
+                                    {!hasDeleteRequest && hasEndRequest && (
+                                        <span className="absolute top-4 left-4 inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-red-600 text-white shadow-lg z-10 animate-pulse">
+                                            <Clock className="w-3 h-3 mr-1" />
+                                            End Requested
+                                        </span>
+                                    )}
 
                                     {/* Status Badge */}
                                     <span className={`absolute top-4 right-4 inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-black/40 backdrop-blur-md text-white border border-white/10 shadow-lg z-10`}>
@@ -360,7 +383,7 @@ export default function EventsPage() {
                                             </span>
 
                                             <button className="text-xs font-bold text-white hover:text-primary-foreground transition-all uppercase tracking-wider flex items-center gap-1.5 group-hover:gap-2">
-                                                Manage
+                                                {hasEndRequest ? 'Review Request' : 'Manage'}
                                                 <ChevronRight className="w-3.5 h-3.5" />
                                             </button>
                                         </div>
