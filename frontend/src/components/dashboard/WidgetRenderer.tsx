@@ -2,6 +2,24 @@ import React from 'react';
 import { Activity, Droplet, Gauge, Thermometer, Zap, Wind, Waves, Battery, Wifi, Cpu, HardDrive, Cloud, Sun, Moon, CloudRain, AlertCircle, Leaf, Clock, Recycle, Package, PlayCircle } from 'lucide-react';
 import { WidgetConfig } from '@/types/dashboard';
 
+// Import new widget components
+import TankGaugeWidget from './widgets/visualization/TankGaugeWidget';
+import CircularGaugeWidget from './widgets/visualization/CircularGaugeWidget';
+import LineChartWidget from './widgets/visualization/LineChartWidget';
+import DeviceStatusWidget from './widgets/data/DeviceStatusWidget';
+import ParameterCardWidget from './widgets/data/ParameterCardWidget';
+import AlertWidget from './widgets/monitoring/AlertWidget';
+import AvailableDevicesWidget from './widgets/monitoring/AvailableDevicesWidget';
+import AuditLogWidget from './widgets/monitoring/AuditLogWidget';
+import ThresholdEditorWidget from './widgets/controls/ThresholdEditorWidget';
+import RecordingControlWidget from './widgets/controls/RecordingControlWidget';
+import DeviceConfigWidget from './widgets/controls/DeviceConfigWidget';
+import TextWidget from './widgets/decorative/TextWidget';
+import LogoWidget from './widgets/decorative/LogoWidget';
+import IconWidget from './widgets/decorative/IconWidget';
+import BackgroundImageWidget from './widgets/decorative/BackgroundImageWidget';
+import ContainerWidget from './widgets/layout/ContainerWidget';
+
 interface WidgetRendererProps {
     widget: WidgetConfig;
     isPreview?: boolean;
@@ -205,108 +223,153 @@ export default function WidgetRenderer({
 
         case 'device_status':
             return (
-                <div className="h-full bg-card border border-border rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-muted-foreground mb-3">{widget.title}</h4>
-                    <div className="space-y-3">
-                        {/* Device ID */}
-                        <div className="flex items-center justify-between pb-2 border-b border-border">
-                            <span className="text-xs text-muted-foreground">Device ID</span>
-                            <span className="text-sm font-mono font-medium">
-                                {isPreview ? 'WW-001' : (data.device_code || '--')}
-                            </span>
-                        </div>
-
-                        {/* Status (Always shown) */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm">Status</span>
-                            <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${isPreview || data.status === 'ONLINE' ? 'bg-green-500' : 'bg-gray-400'} ${isPreview ? 'animate-pulse' : ''}`} />
-                                <span className={`text-sm font-medium ${isPreview || data.status === 'ONLINE' ? 'text-green-600' : 'text-muted-foreground'}`}>
-                                    {isPreview ? 'Online' : (data.status || 'Unknown')}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Location */}
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Location</span>
-                            <span>{isPreview ? 'Tank Room A' : '--'}</span>
-                        </div>
-
-                        {/* Last Data Received (Always shown) */}
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Last Data</span>
-                            <span className="text-muted-foreground">Last Data</span>
-                            <span>{isPreview ? '2 min ago' : (data.last_seen ? new Date(data.last_seen).toLocaleString() : '--')}</span>
-                        </div>
-
-                        {/* Battery (if parameter selected) */}
-                        {widget.settings.batteryParameter && (
-                            <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">Battery</span>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                                        <div className="h-full bg-green-500" style={{ width: isPreview ? '87%' : '0%' }} />
-                                    </div>
-                                    <span>{isPreview ? '87%' : '--'}</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Signal Strength (if parameter selected) */}
-                        {widget.settings.signalParameter && (
-                            <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">Signal</span>
-                                <div className="flex gap-0.5">
-                                    {[1, 2, 3, 4].map((bar) => (
-                                        <div
-                                            key={bar}
-                                            className={`w-1 ${isPreview && bar <= 3 ? 'bg-green-500' : 'bg-muted'}`}
-                                            style={{ height: `${bar * 3}px` }}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Firmware (if parameter selected) */}
-                        {widget.settings.firmwareParameter && (
-                            <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">Firmware</span>
-                                <span className="font-mono">{isPreview ? 'v2.1.4' : '--'}</span>
-                            </div>
-                        )}
-
-                        {/* Uptime */}
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Uptime</span>
-                            <span>{isPreview ? '14d 6h' : '--'}</span>
-                        </div>
-
-                        {/* IP Address */}
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">IP</span>
-                            <span className="font-mono">{isPreview ? '192.168.1.45' : '--'}</span>
-                        </div>
-                    </div>
-                </div>
+                <DeviceStatusWidget
+                    widget={widget}
+                    data={{
+                        status: data.status,
+                        last_seen: data.last_seen,
+                        signal_strength: data.signalStrength,
+                        battery_level: data.battery,
+                    }}
+                    isPreview={isPreview}
+                />
             );
 
         case 'tank_gauge':
             return (
-                <div className="h-full bg-card border border-border rounded-lg p-4 flex flex-col items-center justify-center">
-                    <h4 className="text-sm text-muted-foreground mb-4">{widget.title}</h4>
-                    <div className="relative w-24 h-32 border-2 border-border rounded-lg overflow-hidden">
-                        <div
-                            className="absolute bottom-0 w-full bg-blue-500/30 transition-all"
-                            style={{ height: isPreview ? '65%' : '0%' }}
-                        />
-                    </div>
-                    <div className="text-2xl font-bold mt-4">{isPreview ? '65%' : '--'}</div>
-                </div>
+                <TankGaugeWidget
+                    widget={widget}
+                    value={isPreview ? 65 : data[widget.parameter_key!]}
+                    isPreview={isPreview}
+                />
+            );
+
+        case 'circular_gauge':
+            return (
+                <CircularGaugeWidget
+                    widget={widget}
+                    value={isPreview ? 72 : data[widget.parameter_key!]}
+                    isPreview={isPreview}
+                />
             );
 
         case 'line_chart':
+            return (
+                <LineChartWidget
+                    widget={widget}
+                    data={isPreview ? undefined : data.chartData}
+                    isPreview={isPreview}
+                />
+            );
+
+        case 'alert_widget':
+            return (
+                <AlertWidget
+                    widget={widget}
+                    alerts={isPreview ? undefined : data.alerts}
+                    isPreview={isPreview}
+                    onAcknowledge={data.onAcknowledge}
+                />
+            );
+
+        case 'available_devices':
+            return (
+                <AvailableDevicesWidget
+                    widget={widget}
+                    devices={isPreview ? undefined : data.devices}
+                    isPreview={isPreview}
+                    onAddDevice={data.onAddDevice}
+                    onSelectDevice={data.onSelectDevice}
+                />
+            );
+
+        case 'audit_log':
+            return (
+                <AuditLogWidget
+                    widget={widget}
+                    entries={isPreview ? undefined : data.auditEntries}
+                    isPreview={isPreview}
+                />
+            );
+
+        case 'threshold_editor':
+            return (
+                <ThresholdEditorWidget
+                    widget={widget}
+                    thresholds={isPreview ? undefined : data.thresholds}
+                    isPreview={isPreview}
+                    onSave={data.onThresholdSave}
+                />
+            );
+
+        case 'recording_control':
+            return (
+                <RecordingControlWidget
+                    widget={widget}
+                    isRecording={isPreview ? undefined : data.isRecording}
+                    recordingDuration={data.recordingDuration}
+                    isPreview={isPreview}
+                    onToggle={data.onToggleRecording}
+                />
+            );
+
+        case 'device_config':
+            return (
+                <DeviceConfigWidget
+                    widget={widget}
+                    fields={isPreview ? undefined : data.configFields}
+                    isPreview={isPreview}
+                    onSave={data.onConfigSave}
+                    isEditing={data.isConfigEditing}
+                />
+            );
+
+        case 'text_widget':
+            return (
+                <TextWidget
+                    widget={widget}
+                    isPreview={isPreview}
+                />
+            );
+
+        case 'logo_widget':
+            return (
+                <LogoWidget
+                    widget={widget}
+                    isPreview={isPreview}
+                />
+            );
+
+        case 'icon_widget':
+            return (
+                <IconWidget
+                    widget={widget}
+                    isPreview={isPreview}
+                    onClick={data.onIconClick}
+                />
+            );
+
+        case 'background_image':
+            return (
+                <BackgroundImageWidget
+                    widget={widget}
+                    isPreview={isPreview}
+                >
+                    {widget.children?.map((child) => (
+                        <WidgetRenderer
+                            key={child.id}
+                            widget={child}
+                            isPreview={isPreview}
+                            availableParameters={availableParameters}
+                            data={data}
+                            onEdit={onEdit}
+                            onDelete={onDelete}
+                            isNested={true}
+                        />
+                    ))}
+                </BackgroundImageWidget>
+            );
+
         case 'gauge':
         case 'counter':
         case 'status_indicator':
