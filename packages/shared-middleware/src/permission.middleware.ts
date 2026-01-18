@@ -6,8 +6,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { getPrismaClient } from '@sustainpro/shared-database';
-import { 
-    ForbiddenError, 
+import {
+    ForbiddenError,
     UnauthorizedError,
     initCacheInvalidation,
     getCacheInvalidationService,
@@ -79,7 +79,7 @@ async function getUserPermissions(userId: string): Promise<string[]> {
         FROM sps_permissions p
         INNER JOIN sps_role_permissions rp ON p.id = rp.permission_id
         INNER JOIN sps_role_assignments ra ON rp.role = ra.role
-        WHERE ra.user_id = ${userId}
+        WHERE ra.user_id = ${userId}::uuid
     `;
 
     const permissions = result.map((r: { code: string }) => r.code);

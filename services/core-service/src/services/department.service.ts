@@ -34,14 +34,17 @@ export class DepartmentService {
         icon?: string;
         color?: string;
         template_origin_id?: string;
+        coordinates?: any;
     }, createdBy?: string): Promise<Department> {
-        // Check for duplicate template in event
+        // Check for duplicate template in event - DISABLED to allow multiple areas/depts of same type
+        /*
         if (data.template_origin_id) {
             const exists = await this.repo.templateExistsInEvent(data.event_id, data.template_origin_id);
             if (exists) {
                 throw new ConflictError('This department template has already been added to this event');
             }
         }
+        */
 
         const dept = await this.repo.create(data);
 

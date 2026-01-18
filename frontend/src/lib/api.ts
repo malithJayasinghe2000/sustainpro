@@ -608,7 +608,7 @@ export const departmentsApi = {
 
     create: async (data: any) => {
         const response = await apiClient.post('/departments', data);
-        return response.data;
+        return response.data.data;
     },
 
     addService: async (departmentId: string, serviceId: string, config?: any) => {

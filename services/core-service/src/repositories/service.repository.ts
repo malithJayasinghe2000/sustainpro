@@ -160,7 +160,7 @@ export class ServiceRepository {
             SELECT ds.*, st.name as template_name, st.description as template_description
              FROM sps_department_services ds
              LEFT JOIN sps_service_templates st ON ds.service_template_id = st.id
-             WHERE ds.department_id = ${departmentId}
+             WHERE ds.department_id = ${departmentId}::uuid
              ORDER BY ds.created_at
         ` as any as DepartmentService[];
         return result;

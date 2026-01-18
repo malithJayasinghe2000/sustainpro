@@ -6,6 +6,7 @@ const prisma = getPrismaClient();
 export interface DepartmentWithServices extends Department {
     services_count?: number;
     services?: any[];
+    template?: any;
 }
 
 export class DepartmentRepository {
@@ -16,6 +17,9 @@ export class DepartmentRepository {
         const departments = await prisma.sps_departments.findMany({
             where: { event_id: eventId },
             include: {
+                sps_department_templates: {
+                    select: { name: true, description: true, icon: true, color: true }
+                },
                 _count: {
                     select: { sps_department_services: true }
                 }
@@ -25,6 +29,9 @@ export class DepartmentRepository {
 
         return departments.map(d => ({
             ...d,
+            // If template data exists, we can optionally use it or pass it along.
+            // For now, let's keep the department's own fields primary, but you can override here if needed.
+            template: d.sps_department_templates,
             services_count: d._count.sps_department_services
         })) as any as DepartmentWithServices[];
     }
@@ -36,6 +43,9 @@ export class DepartmentRepository {
         const department = await prisma.sps_departments.findUnique({
             where: { id },
             include: {
+                sps_department_templates: {
+                    select: { name: true, description: true, icon: true, color: true }
+                },
                 _count: {
                     select: { sps_department_services: true }
                 }
@@ -46,6 +56,7 @@ export class DepartmentRepository {
 
         return {
             ...department,
+            template: department.sps_department_templates,
             services_count: department._count.sps_department_services
         } as any as DepartmentWithServices;
     }
@@ -58,6 +69,7 @@ export class DepartmentRepository {
         icon?: string;
         color?: string;
         template_origin_id?: string;
+        coordinates?: any;
     }): Promise<Department> {
         const dept = await prisma.sps_departments.create({
             data: {
@@ -67,6 +79,8 @@ export class DepartmentRepository {
                 description: data.description || null,
                 icon: data.icon || 'Layers',
                 color: data.color || '#3B82F6',
+                department_template_id: data.template_origin_id || null,
+                coordinates: data.coordinates || {},
             } as any
         });
 
@@ -132,6 +146,7 @@ export class DepartmentRepository {
         const count = await prisma.sps_departments.count({
             where: {
                 event_id: eventId,
+                department_template_id: templateId
             } as any
         });
 

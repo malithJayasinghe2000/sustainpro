@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Calendar, MapPin, Clock, Settings, ArrowLeft, Edit, Trash2, Archive, Layers, Shield, Heart, Zap, Users, ArrowRight, UserPlus, Save, Image as ImageIcon, Play, Square } from 'lucide-react';
 import { eventsApi, departmentsApi, usersApi, getImageUrl } from '@/lib/api';
 import DepartmentsSelector from '@/components/DepartmentsSelector';
+import DepartmentLocationModal from '@/components/DepartmentLocationModal';
+import { ICON_MAP } from '@/lib/constants';
 import ImageUpload from '@/components/ImageUpload';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -16,10 +18,7 @@ import dynamic from 'next/dynamic';
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
 
-// Helper for dynamic icons
-const ICON_MAP: Record<string, any> = {
-    Shield, Heart, Zap, Users, Settings, Layers
-};
+
 
 export default function EventDetailPage() {
     const { user } = useAuth();
@@ -244,9 +243,28 @@ export default function EventDetailPage() {
         }
     };
 
-    const handleAddDepartment = async (template: any) => {
+    const [showLocationModal, setShowLocationModal] = useState(false);
+    const [selectedTemplateForLocation, setSelectedTemplateForLocation] = useState<any>(null);
+
+    const handleDepartmentSelect = (template: any) => {
+        setIsDeptSelectorOpen(false);
+        // Check if exists
+        const alreadyExists = departments.some(
+            dept => dept.template_origin_id === template.id
+        );
+
+        if (alreadyExists) {
+            toast.error('This department has already been added to this event');
+            return;
+        }
+
+        setSelectedTemplateForLocation(template);
+        setShowLocationModal(true);
+    };
+
+    const handleAddDepartment = async (template: any, coordinates: any[] = []) => {
         try {
-            // Check if this template is already added to the event
+            // Check if this template is already added to the event (double check)
             const alreadyExists = departments.some(
                 dept => dept.template_origin_id === template.id
             );
@@ -262,11 +280,13 @@ export default function EventDetailPage() {
                 description: template.description,
                 icon: template.icon,
                 color: template.color,
-                template_origin_id: template.id
+                template_origin_id: template.id,
+                coordinates: { points: coordinates } // Save as JSON
             });
 
             setDepartments([newDept, ...departments]);
-            setIsDeptSelectorOpen(false);
+            setShowLocationModal(false);
+            setSelectedTemplateForLocation(null);
             toast.success(`${newDept.name} added successfully`);
         } catch (error: any) {
             console.error('Add department error:', error);
@@ -274,6 +294,7 @@ export default function EventDetailPage() {
             toast.error(errorMessage);
         }
     };
+
 
     const handleLocationSelect = (lat: number, lng: number, locationName?: string) => {
         if (!canUpdate) return;
@@ -546,7 +567,12 @@ export default function EventDetailPage() {
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {departments.map((dept) => {
-                                        const Icon = ICON_MAP[dept.icon] || Layers;
+                                        const displayIcon = dept.template?.icon || dept.icon;
+                                        const displayColor = dept.template?.color || dept.color;
+                                        const displayName = dept.template?.name || dept.name;
+                                        const displayDesc = dept.template?.description || dept.description;
+                                        const Icon = ICON_MAP[displayIcon] || Layers;
+
                                         return (
                                             <div
                                                 key={dept.id}
@@ -557,8 +583,8 @@ export default function EventDetailPage() {
                                                     <div
                                                         className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110"
                                                         style={{
-                                                            backgroundColor: `${dept.color || '#3B82F6'}15`,
-                                                            color: dept.color || '#3B82F6'
+                                                            backgroundColor: `${displayColor || '#3B82F6'}15`,
+                                                            color: displayColor || '#3B82F6'
                                                         }}
                                                     >
                                                         <Icon className="w-6 h-6" />
@@ -568,9 +594,9 @@ export default function EventDetailPage() {
                                                     </div>
                                                 </div>
 
-                                                <h4 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">{dept.name}</h4>
+                                                <h4 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">{displayName}</h4>
                                                 <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
-                                                    {dept.description || 'No description provided for this department.'}
+                                                    {displayDesc || 'No description provided for this department.'}
                                                 </p>
 
                                                 <div className="pt-4 border-t border-border mt-auto flex items-center justify-between text-xs text-muted-foreground">
@@ -1201,10 +1227,19 @@ export default function EventDetailPage() {
             <DepartmentsSelector
                 isOpen={isDeptSelectorOpen}
                 onClose={() => setIsDeptSelectorOpen(false)}
-                onSelect={handleAddDepartment}
+                onSelect={handleDepartmentSelect}
             />
 
-
+            {/* Location Modal */}
+            {showLocationModal && selectedTemplateForLocation && (
+                <DepartmentLocationModal
+                    isOpen={showLocationModal}
+                    onClose={() => setShowLocationModal(false)}
+                    template={selectedTemplateForLocation}
+                    eventLocation={event?.coordinates ? { lat: event.coordinates.lat, lng: event.coordinates.lng } : { lat: 25.2048, lng: 55.2708 }}
+                    onConfirm={(coords) => handleAddDepartment(selectedTemplateForLocation, coords)}
+                />
+            )}
         </DashboardLayout >
     );
 }
