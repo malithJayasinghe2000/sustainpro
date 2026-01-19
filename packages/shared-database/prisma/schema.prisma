@@ -180,6 +180,7 @@ model sps_departments {
   id                       String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   event_id                 String                    @db.Uuid
   name                     String                    @db.VarChar(100)
+  location_name            String?                   @db.VarChar(100)
   description              String?
   icon                     String?                   @db.VarChar(50)
   color                    String?                   @db.VarChar(20)

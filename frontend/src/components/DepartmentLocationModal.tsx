@@ -23,12 +23,13 @@ interface DepartmentLocationModalProps {
     onClose: () => void;
     template: DepartmentTemplate;
     eventLocation: { lat: number; lng: number };
-    onConfirm: (coords: any[]) => void;
+    onConfirm: (coords: any[], locationName: string) => void;
 }
 
 export default function DepartmentLocationModal({ isOpen, onClose, template, eventLocation, onConfirm }: DepartmentLocationModalProps) {
-    const [selectedCoords, setSelectedCoords] = useState<any[]>([]);
+    const [locationName, setLocationName] = useState('');
 
+    // Restore missing state and handlers
     const defaultBox = [
         [(eventLocation?.lat || 25.2048) + 0.002, (eventLocation?.lng || 55.2708) - 0.002],
         [(eventLocation?.lat || 25.2048) + 0.002, (eventLocation?.lng || 55.2708) + 0.002],
@@ -91,14 +92,24 @@ export default function DepartmentLocationModal({ isOpen, onClose, template, eve
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-border bg-muted/10 flex justify-between items-center">
-                    <div className="text-sm text-muted-foreground">
-                        {polygonPoints.length === 0
-                            ? "Click on the map to start drawing the boundary"
-                            : `${polygonPoints.length} points selected`
-                        }
+                <div className="p-4 border-t border-border bg-muted/10 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                    <div className="flex-1 w-full sm:w-auto">
+                        <input
+                            type="text"
+                            placeholder="Enter zone/location name (e.g., North Wing)"
+                            className="w-full px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                            value={locationName}
+                            onChange={(e) => setLocationName(e.target.value)}
+                        />
+                        <div className="text-xs text-muted-foreground mt-1 ml-1">
+                            {polygonPoints.length === 0
+                                ? "Click on map to draw area"
+                                : `${polygonPoints.length} points selected`
+                            }
+                        </div>
                     </div>
-                    <div className="flex gap-3">
+
+                    <div className="flex gap-3 shrink-0">
                         <button
                             onClick={onClose}
                             className="px-4 py-2 hover:bg-muted text-foreground rounded-lg font-medium transition-colors"
@@ -106,8 +117,8 @@ export default function DepartmentLocationModal({ isOpen, onClose, template, eve
                             Cancel
                         </button>
                         <button
-                            onClick={() => onConfirm(polygonPoints)}
-                            disabled={polygonPoints.length < 3}
+                            onClick={() => onConfirm(polygonPoints, locationName)}
+                            disabled={polygonPoints.length < 3 || !locationName.trim()}
                             className="px-6 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                             <Check className="w-4 h-4" />

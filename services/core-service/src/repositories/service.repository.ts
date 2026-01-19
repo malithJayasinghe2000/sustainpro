@@ -202,4 +202,31 @@ export class ServiceRepository {
             return false;
         }
     }
+
+    /**
+     * Get department service by ID
+     */
+    async findDepartmentServiceById(id: string): Promise<any | null> {
+        const result = await prisma.$queryRaw`
+            SELECT ds.*, 
+                   st.name as service_name, 
+                   st.description as service_description,
+                   st.category as service_type,
+                   st.id as service_template_id,
+                   o.id as organization_id,
+                   (SELECT COUNT(*)::int FROM sps_devices d_active WHERE d_active.service_id = ds.id AND d_active.status = 'ONLINE') as active_devices,
+                   (SELECT COUNT(*)::int FROM sps_devices d_total WHERE d_total.service_id = ds.id) as total_devices,
+                    -- Mock data for stats for now
+                    45000 as total_dispensed,
+                    1500 as total_bottles_saved,
+                    250 as total_co2_saved
+             FROM sps_department_services ds
+             JOIN sps_departments d ON ds.department_id = d.id
+             JOIN sps_events e ON d.event_id = e.id
+             JOIN sps_organizations o ON e.organization_id = o.id
+             LEFT JOIN sps_service_templates st ON ds.service_template_id = st.id
+             WHERE ds.id = ${id}::uuid
+        `;
+        return (result as any[])[0] || null;
+    }
 }

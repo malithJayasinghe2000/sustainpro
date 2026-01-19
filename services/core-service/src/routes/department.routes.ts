@@ -156,7 +156,7 @@ router.delete('/:id', requireMinRole('ORG_ADMIN'), deptController.remove);
  *       200:
  *         description: Service added
  */
-router.post('/:id/services', requireMinRole('ORG_ADMIN'), deptController.addService);
+router.post('/:id/services', requireMinRole('EVENT_MANAGER'), deptController.addService);
 
 /**
  * @swagger
@@ -181,6 +181,6 @@ router.post('/:id/services', requireMinRole('ORG_ADMIN'), deptController.addServ
  *       204:
  *         description: Service removed
  */
-router.delete('/:id/services/:serviceId', requireMinRole('ORG_ADMIN'), deptController.removeService);
+router.delete('/:id/services/:serviceId', requireMinRole('EVENT_MANAGER'), deptController.removeService);
 
 export default router;

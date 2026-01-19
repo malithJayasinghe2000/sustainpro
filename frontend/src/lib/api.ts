@@ -613,7 +613,7 @@ export const departmentsApi = {
 
     addService: async (departmentId: string, serviceId: string, config?: any) => {
         const response = await apiClient.post(`/departments/${departmentId}/services`, {
-            service_id: serviceId,
+            service_template_id: serviceId,
             config: config || {}
         });
         return response.data;
@@ -633,12 +633,12 @@ export const departmentsApi = {
 export const departmentServicesApi = {
     getById: async (id: string) => {
         const response = await apiClient.get(`/department-services/${id}`);
-        return response.data;
+        return response.data.data;
     },
 
     getDevices: async (id: string) => {
         const response = await apiClient.get(`/department-services/${id}/devices`);
-        return response.data;
+        return response.data.data;
     },
 
     addDevice: async (serviceId: string, deviceId: number, role?: string) => {

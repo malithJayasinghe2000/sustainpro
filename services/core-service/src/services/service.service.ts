@@ -120,4 +120,15 @@ export class ServiceService {
 
         await publishEvent('service.unassigned', { service_id: id });
     }
+
+    /**
+     * Get department service by ID
+     */
+    async getDepartmentServiceById(id: string): Promise<any> {
+        const service = await this.repo.findDepartmentServiceById(id);
+        if (!service) {
+            throw new NotFoundError('Department service', id);
+        }
+        return service;
+    }
 }

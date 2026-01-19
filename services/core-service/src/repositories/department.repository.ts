@@ -75,6 +75,7 @@ export class DepartmentRepository {
             data: {
                 event_id: data.event_id,
                 name: data.name,
+                location_name: (data as any).location_name || null,
                 head_user_id: data.head_user_id || null,
                 description: data.description || null,
                 icon: data.icon || 'Layers',
