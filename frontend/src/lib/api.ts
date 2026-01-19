@@ -772,7 +772,7 @@ export const servicesApi = {
     getById: async (id: string) => {
         console.log('API Requesting Service ID:', id);
         const response = await apiClient.get(`/services/${id}`);
-        return response.data;
+        return response.data.data; // Return the actual service object
     },
     create: async (data: any) => {
         const response = await apiClient.post('/services', data);
@@ -788,6 +788,24 @@ export const servicesApi = {
     },
     assign: async (id: string, data: any) => {
         const response = await apiClient.post(`/services/${id}/assign`, data);
+        return response.data;
+    },
+    // Dashboard management
+    updateDashboard: async (id: string, dashboardType: 'main' | 'device' | 'public', layout: any) => {
+        // Map 'main' to 'service' for the API endpoint
+        const typeMap: Record<string, string> = { 'main': 'service', 'device': 'device', 'public': 'public' };
+        const response = await apiClient.put(`/services/${id}/dashboards/${typeMap[dashboardType]}`, { layout });
+        return response.data;
+    },
+    // Device models management
+    updateDeviceModels: async (id: string, deviceModels: Array<{ device_model_id: string; role?: string; min_count?: number; max_count?: number }>) => {
+        const response = await apiClient.put(`/services/${id}/device-models`, { device_models: deviceModels });
+        return response.data;
+    },
+    // Get dashboard by type
+    getDashboard: async (id: string, dashboardType: 'main' | 'device' | 'public') => {
+        const typeMap: Record<string, string> = { 'main': 'service', 'device': 'device', 'public': 'public' };
+        const response = await apiClient.get(`/services/${id}/dashboards/${typeMap[dashboardType]}`);
         return response.data;
     }
 };
