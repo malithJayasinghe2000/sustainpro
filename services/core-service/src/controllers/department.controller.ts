@@ -160,6 +160,7 @@ export const addService = async (req: Request, res: Response, next: NextFunction
     try {
         const service = await serviceService.addToDepartment({
             department_id: req.params.id,
+            service_template_id: req.body.service_template_id || req.body.service_id,
             ...req.body,
         }, req.user?.id);
 

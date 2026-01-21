@@ -171,33 +171,42 @@ model sps_department_templates {
   created_at         DateTime?          @default(now()) @db.Timestamptz(6)
   updated_at         DateTime?          @default(now()) @db.Timestamptz(6)
   sps_organizations  sps_organizations? @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  spsDepartments     sps_departments[]
 
   @@index([organization_id], map: "idx_dept_templates_org")
 }
 
 model sps_departments {
-  id                      String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  event_id                String                    @db.Uuid
-  name                    String                    @db.VarChar(100)
-  description             String?
-  icon                    String?                   @db.VarChar(50)
-  color                   String?                   @db.VarChar(20)
-  head_user_id            String?                   @db.Uuid
-  created_at              DateTime?                 @default(now()) @db.Timestamptz(6)
-  updated_at              DateTime?                 @default(now()) @db.Timestamptz(6)
-  sps_department_services sps_department_services[]
-  sps_events              sps_events                @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  sps_users               sps_users?                @relation(fields: [head_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  sps_role_assignments    sps_role_assignments[]
-  sps_tasks               sps_tasks[]
+  id                       String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  event_id                 String                    @db.Uuid
+  name                     String                    @db.VarChar(100)
+  location_name            String?                   @db.VarChar(100)
+  description              String?
+  icon                     String?                   @db.VarChar(50)
+  color                    String?                   @db.VarChar(20)
+  head_user_id             String?                   @db.Uuid
+  coordinates              Json?                     @default("{}") // Polygon coordinates for map
+  created_at               DateTime?                 @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?                 @default(now()) @db.Timestamptz(6)
+  sps_department_services  sps_department_services[]
+  sps_events               sps_events                @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_users                sps_users?                @relation(fields: [head_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sps_role_assignments     sps_role_assignments[]
+  sps_tasks                sps_tasks[]
+  department_template_id   String?                   @db.Uuid // Original template reference
+  sps_department_templates sps_department_templates? @relation(fields: [department_template_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  spsOrganizations         sps_organizations?        @relation(fields: [sps_organizationsId], references: [id])
+  sps_organizationsId      String?                   @db.Uuid
 
   @@index([event_id], map: "idx_depts_event")
+  @@index([department_template_id], map: "idx_depts_template")
 }
 
 model sps_device_models {
   id                        String                      @id @db.VarChar(50)
   name                      String                      @db.VarChar(100)
   description               String?
+  icon                      String?                     @db.VarChar(50)
   parameters                Json?                       @default("[]")
   created_by                String?                     @db.VarChar(50)
   created_at                DateTime?                   @default(now()) @db.Timestamptz(6)
@@ -290,6 +299,7 @@ model sps_organizations {
   sps_audit_logs            sps_audit_logs[]
   sps_dashboard_templates   sps_dashboard_templates[]
   sps_department_templates  sps_department_templates[]
+  sps_departments           sps_departments[]
   sps_devices               sps_devices[]
   sps_events                sps_events[]
   sps_role_assignments      sps_role_assignments[]
@@ -367,8 +377,10 @@ model sps_service_device_models {
   id                    String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   service_template_id   String                @db.Uuid
   device_model_id       String                @db.VarChar(50)
-  is_required           Boolean?              @default(false)
+  role                  String?               @default("primary") @db.VarChar(50)
+  min_devices           Int?                  @default(1)
   max_devices           Int?
+  is_required           Boolean?              @default(false)
   created_at            DateTime?             @default(now()) @db.Timestamptz(6)
   sps_device_models     sps_device_models     @relation(fields: [device_model_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   sps_service_templates sps_service_templates @relation(fields: [service_template_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -398,21 +410,50 @@ model sps_service_templates {
   code                      String                      @unique @db.VarChar(50)
   category                  String?                     @default("MONITORING") @db.VarChar(50)
   description               String?
-  config_schema             Json?                       @default("{}")
-  default_config            Json?                       @default("{}")
+  
+  // Service branding
+  image_url                 String?
+  
+  // Service type (GLOBAL = any org can use, INTERNAL = only sustainpro)
+  service_type              String?                     @default("GLOBAL") @db.VarChar(20)
+  
+  // Dashboard configurations
+  device_dashboard_layout   Json?                       @default("{\"widgets\": []}")
   main_dashboard_layout     Json?                       @default("{\"widgets\": []}")
   public_dashboard_layout   Json?                       @default("{\"widgets\": []}")
+  has_public_dashboard      Boolean?                    @default(false)
+  
+  // Service-level aggregation parameters
+  // Format: [{ key, name, icon, dataType, unit, aggregation, sourceParam }]
+  service_parameters        Json?                       @default("[]")
+  
+  // Configuration schemas
+  config_schema             Json?                       @default("{}")
+  default_config            Json?                       @default("{}")
   features                  Json?                       @default("[]")
   required_permissions      Json?                       @default("[]")
+  
+  // Pricing
   base_price                Decimal?                    @default(0) @db.Decimal(10, 2)
   price_per_device          Decimal?                    @default(0) @db.Decimal(10, 2)
+  
+  // Status flags
   is_public                 Boolean?                    @default(true)
   is_active                 Boolean?                    @default(true)
+  
+  // Timestamps and creator
+  created_by                String?                     @db.Uuid
   created_at                DateTime?                   @default(now()) @db.Timestamptz(6)
   updated_at                DateTime?                   @default(now()) @db.Timestamptz(6)
+  
+  // Relations
+  sps_users                 sps_users?                  @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
   sps_department_services   sps_department_services[]
   sps_service_device_models sps_service_device_models[]
   sps_service_subscriptions sps_service_subscriptions[]
+
+  @@index([service_type], map: "idx_service_templates_type")
+  @@index([is_active], map: "idx_service_templates_active")
 }
 
 // =============================================
@@ -980,6 +1021,7 @@ model sps_users {
   sps_tasks_sps_tasks_assigned_toTosps_users sps_tasks[]               @relation("sps_tasks_assigned_toTosps_users")
   sps_tasks_sps_tasks_created_byTosps_users  sps_tasks[]               @relation("sps_tasks_created_byTosps_users")
   sps_organizations                          sps_organizations?        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_service_templates                      sps_service_templates[]
 
   // New relations for system configuration
   sps_password_history sps_password_history[]

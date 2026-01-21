@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Calendar, MapPin, Clock, Settings, ArrowLeft, Edit, Trash2, Archive, Layers, Shield, Heart, Zap, Users, ArrowRight, UserPlus, Save, Image as ImageIcon, Play, Square } from 'lucide-react';
 import { eventsApi, departmentsApi, usersApi, getImageUrl } from '@/lib/api';
 import DepartmentsSelector from '@/components/DepartmentsSelector';
+import DepartmentLocationModal from '@/components/DepartmentLocationModal';
+import { ICON_MAP } from '@/lib/constants';
 import ImageUpload from '@/components/ImageUpload';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -16,10 +18,7 @@ import dynamic from 'next/dynamic';
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
 
-// Helper for dynamic icons
-const ICON_MAP: Record<string, any> = {
-    Shield, Heart, Zap, Users, Settings, Layers
-};
+
 
 export default function EventDetailPage() {
     const { user } = useAuth();
@@ -244,9 +243,28 @@ export default function EventDetailPage() {
         }
     };
 
-    const handleAddDepartment = async (template: any) => {
+    const [showLocationModal, setShowLocationModal] = useState(false);
+    const [selectedTemplateForLocation, setSelectedTemplateForLocation] = useState<any>(null);
+
+    const handleDepartmentSelect = (template: any) => {
+        setIsDeptSelectorOpen(false);
+        // Check if exists
+        const alreadyExists = departments.some(
+            dept => dept.template_origin_id === template.id
+        );
+
+        if (alreadyExists) {
+            toast.error('This department has already been added to this event');
+            return;
+        }
+
+        setSelectedTemplateForLocation(template);
+        setShowLocationModal(true);
+    };
+
+    const handleAddDepartment = async (template: any, coordinates: any[] = [], locationName: string = '') => {
         try {
-            // Check if this template is already added to the event
+            // Check if this template is already added to the event (double check)
             const alreadyExists = departments.some(
                 dept => dept.template_origin_id === template.id
             );
@@ -259,14 +277,17 @@ export default function EventDetailPage() {
             const newDept = await departmentsApi.create({
                 event_id: event.id,
                 name: template.name,
+                location_name: locationName,
                 description: template.description,
                 icon: template.icon,
                 color: template.color,
-                template_origin_id: template.id
+                template_origin_id: template.id,
+                coordinates: { points: coordinates } // Save as JSON
             });
 
             setDepartments([newDept, ...departments]);
-            setIsDeptSelectorOpen(false);
+            setShowLocationModal(false);
+            setSelectedTemplateForLocation(null);
             toast.success(`${newDept.name} added successfully`);
         } catch (error: any) {
             console.error('Add department error:', error);
@@ -274,6 +295,7 @@ export default function EventDetailPage() {
             toast.error(errorMessage);
         }
     };
+
 
     const handleLocationSelect = (lat: number, lng: number, locationName?: string) => {
         if (!canUpdate) return;
@@ -511,93 +533,155 @@ export default function EventDetailPage() {
 
                 {/* Content */}
                 {activeTab === 'dashboard' && (
-                    <div className="space-y-6">
-                        {/* Departments Section - Big Cards */}
-                        <div>
-                            <div className="flex items-center justify-between mb-6">
-                                <div>
-                                    <h3 className="text-lg font-semibold">Departments</h3>
-                                    <p className="text-sm text-muted-foreground">Manage operational units and services</p>
-                                </div>
-                                <button
-                                    className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                                    onClick={() => setIsDeptSelectorOpen(true)}
-                                >
-                                    <Layers className="w-4 h-4" />
-                                    Add Department
-                                </button>
+                    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[500px]">
+                        {/* Header Section */}
+                        <div className="flex items-center justify-between mb-6 shrink-0">
+                            <div>
+                                <h3 className="text-lg font-semibold">Departments &amp; Map</h3>
+                                <p className="text-sm text-muted-foreground">Overview of operational zones</p>
+                            </div>
+                            <button
+                                className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                onClick={() => setIsDeptSelectorOpen(true)}
+                            >
+                                <Layers className="w-4 h-4" />
+                                Add Department
+                            </button>
+                        </div>
+
+                        {/* Content Grid */}
+                        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden">
+                            {/* Left Side: Departments List (Scrollable) */}
+                            <div className="lg:col-span-1 overflow-y-auto pr-2 h-full scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                                {departments.length === 0 ? (
+                                    <div className="bg-card border border-border rounded-xl p-8 text-center h-full flex flex-col items-center justify-center">
+                                        <Layers className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                        <h3 className="text-lg font-medium mb-2">No departments</h3>
+                                        <p className="text-muted-foreground text-sm mb-6">
+                                            Add a department to see it on the list and map.
+                                        </p>
+                                        <button
+                                            className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors"
+                                            onClick={() => setIsDeptSelectorOpen(true)}
+                                        >
+                                            + Add Department
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4 pb-4">
+                                        {departments.map((dept) => {
+                                            const displayIcon = dept.template?.icon || dept.icon;
+                                            const displayColor = dept.template?.color || dept.color;
+                                            const displayName = dept.template?.name || dept.name;
+                                            const displayDesc = dept.template?.description || dept.description;
+                                            const Icon = ICON_MAP[displayIcon] || Layers;
+
+                                            const hasCoordinates = dept.coordinates?.points && dept.coordinates.points.length > 0;
+
+                                            return (
+                                                <div
+                                                    key={dept.id}
+                                                    className="bg-card hover:bg-muted/30 border border-border rounded-xl p-4 transition-all hover:shadow-md cursor-pointer group flex flex-col"
+                                                    onClick={() => router.push(`/events/${event.id}/departments/${dept.id}`)}
+                                                >
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <div
+                                                                className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
+                                                                style={{
+                                                                    backgroundColor: `${displayColor || '#3B82F6'}15`,
+                                                                    color: displayColor || '#3B82F6'
+                                                                }}
+                                                            >
+                                                                <Icon className="w-5 h-5" />
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="font-bold text-base group-hover:text-primary transition-colors">{displayName}</h4>
+                                                                {hasCoordinates ? (
+                                                                    <div className="flex items-center gap-1 text-xs text-green-600 mt-0.5" title={dept.location_name || "Location Mapped"}>
+                                                                        <MapPin className="w-3 h-3" />
+                                                                        <span className="truncate max-w-[100px]">{dept.location_name || 'Mapped'}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                                                                        <MapPin className="w-3 h-3" />
+                                                                        <span>No location</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                                                        </div>
+                                                    </div>
+
+                                                    <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
+                                                        {displayDesc || 'No description provided.'}
+                                                    </p>
+
+                                                    <div className="pt-3 border-t border-border mt-auto flex items-center justify-between text-xs text-muted-foreground">
+                                                        <span className="flex items-center gap-1">
+                                                            <Users className="w-3 h-3" /> 0 Staff
+                                                        </span>
+                                                        <span className="flex items-center gap-1">
+                                                            <Zap className="w-3 h-3" /> {dept.services_count || 0} Services
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Quick Add Button in List */}
+                                        <button
+                                            onClick={() => setIsDeptSelectorOpen(true)}
+                                            className="w-full border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/30 rounded-xl p-4 flex items-center justify-center gap-2 text-muted-foreground hover:text-primary transition-all group"
+                                        >
+                                            <div className="w-8 h-8 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+                                                <Layers className="w-4 h-4" />
+                                            </div>
+                                            <span className="font-medium text-sm">Add New Department</span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
-                            {departments.length === 0 ? (
-                                <div className="bg-card border border-border rounded-xl p-12 text-center">
-                                    <Layers className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                                    <h3 className="text-lg font-medium mb-2">No departments yet</h3>
-                                    <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                                        Departments help organize your event's services and personnel.
-                                        Add one from a template to get started.
-                                    </p>
-                                    <button
-                                        className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors"
-                                        onClick={() => setIsDeptSelectorOpen(true)}
-                                    >
-                                        + Add First Department
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {departments.map((dept) => {
-                                        const Icon = ICON_MAP[dept.icon] || Layers;
-                                        return (
-                                            <div
-                                                key={dept.id}
-                                                className="bg-card hover:bg-muted/30 border border-border rounded-xl p-6 transition-all hover:shadow-md cursor-pointer group flex flex-col h-full"
-                                                onClick={() => router.push(`/events/${event.id}/departments/${dept.id}`)}
-                                            >
-                                                <div className="flex items-start justify-between mb-4">
-                                                    <div
-                                                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110"
-                                                        style={{
-                                                            backgroundColor: `${dept.color || '#3B82F6'}15`,
-                                                            color: dept.color || '#3B82F6'
-                                                        }}
-                                                    >
-                                                        <Icon className="w-6 h-6" />
-                                                    </div>
-                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <ArrowRight className="w-5 h-5 text-muted-foreground" />
-                                                    </div>
-                                                </div>
-
-                                                <h4 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">{dept.name}</h4>
-                                                <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
-                                                    {dept.description || 'No description provided for this department.'}
-                                                </p>
-
-                                                <div className="pt-4 border-t border-border mt-auto flex items-center justify-between text-xs text-muted-foreground">
-                                                    <span className="flex items-center gap-1">
-                                                        <Users className="w-3 h-3" /> 0 Staff
-                                                    </span>
-                                                    <span className="flex items-center gap-1">
-                                                        <Zap className="w-3 h-3" /> {dept.services_count || 0} Services
-                                                    </span>
-                                                </div>
+                            {/* Right Side: Interactive Map */}
+                            <div className="lg:col-span-2 h-full rounded-xl overflow-hidden border border-border bg-muted/10 relative shadow-sm">
+                                <LeafletMap
+                                    lat={Number(event.coordinates?.lat) || 25.2048}
+                                    lng={Number(event.coordinates?.lng) || 55.2708}
+                                    className="h-full w-full"
+                                    readOnly={true}
+                                    polygons={departments
+                                        .filter(d => d.coordinates?.points && Array.isArray(d.coordinates.points) && d.coordinates.points.length >= 3)
+                                        .map(d => ({
+                                            id: d.id,
+                                            points: d.coordinates.points,
+                                            color: d.color || d.template?.color || '#3B82F6',
+                                            name: d.location_name || d.name || d.template?.name || 'Unnamed Department',
+                                            onClick: () => router.push(`/events/${event.id}/departments/${d.id}`)
+                                        }))
+                                    }
+                                />
+                                {/* Legend Overlay */}
+                                <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-border/50 max-w-[200px] z-[500]">
+                                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Departments</h4>
+                                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                        {departments.filter(d => d.coordinates?.points?.length > 0).map(d => (
+                                            <div key={d.id} className="flex items-center gap-2 text-xs">
+                                                <span
+                                                    className="w-3 h-3 rounded-full shrink-0"
+                                                    style={{ backgroundColor: d.color || d.template?.color || '#3B82F6' }}
+                                                />
+                                                <span className="truncate">{d.location_name || d.name || d.template?.name}</span>
                                             </div>
-                                        );
-                                    })}
-
-                                    {/* Quick Add Card */}
-                                    <button
-                                        onClick={() => setIsDeptSelectorOpen(true)}
-                                        className="border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/30 rounded-xl p-6 flex flex-col items-center justify-center text-center h-full min-h-[200px] transition-all group"
-                                    >
-                                        <div className="w-12 h-12 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center mb-4 transition-colors">
-                                            <Layers className="w-6 h-6 text-muted-foreground group-hover:text-primary" />
-                                        </div>
-                                        <h4 className="font-medium mb-1">Add Department</h4>
-                                        <p className="text-xs text-muted-foreground">From template</p>
-                                    </button>
+                                        ))}
+                                        {departments.filter(d => d.coordinates?.points?.length > 0).length === 0 && (
+                                            <span className="text-xs text-muted-foreground italic">No mapped zones</span>
+                                        )}
+                                    </div>
                                 </div>
-                            )}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -1201,10 +1285,19 @@ export default function EventDetailPage() {
             <DepartmentsSelector
                 isOpen={isDeptSelectorOpen}
                 onClose={() => setIsDeptSelectorOpen(false)}
-                onSelect={handleAddDepartment}
+                onSelect={handleDepartmentSelect}
             />
 
-
+            {/* Location Modal */}
+            {showLocationModal && selectedTemplateForLocation && (
+                <DepartmentLocationModal
+                    isOpen={showLocationModal}
+                    onClose={() => setShowLocationModal(false)}
+                    template={selectedTemplateForLocation}
+                    eventLocation={event?.coordinates ? { lat: event.coordinates.lat, lng: event.coordinates.lng } : { lat: 25.2048, lng: 55.2708 }}
+                    onConfirm={(coords, locationName) => handleAddDepartment(selectedTemplateForLocation, coords, locationName)}
+                />
+            )}
         </DashboardLayout >
     );
 }

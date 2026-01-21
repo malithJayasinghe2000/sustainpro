@@ -43,29 +43,77 @@ export default function ServiceDashboardPage() {
 
             setService(currentService);
 
-            // Load device model parameters
-            const deviceModels = await deviceModelsApi.getAll();
-            console.log('🔍 DEBUG: Raw Device Models Response:', deviceModels);
+            // Load parameters from multiple sources:
+            // 1. Service-level parameters (service_parameters)
+            // 2. Embedded device model parameters (from service response)
+            // 3. Fetched device model parameters (as fallback)
+            
+            // Start with service-level parameters
+            const serviceParams = (currentService.service_parameters || []).map((p: any) => ({
+                key: p.key || p.name,
+                name: p.name || p.key,
+                unit: p.unit || '',
+                data_type: p.data_type || p.type || 'number'
+            }));
+            console.log('🔍 DEBUG: Service Parameters:', serviceParams);
 
-            // Handle both 'id' (from list view) and 'device_model_id' (from detail view) conventions
-            const serviceDeviceModelIds = currentService.device_models?.map((dm: any) => dm.device_model_id || dm.id) || [];
-            console.log('🔍 DEBUG: Service Device Model IDs:', serviceDeviceModelIds);
-
-            const deviceModelsArray = Array.isArray(deviceModels) ? deviceModels : (deviceModels?.data || []);
-            console.log('🔍 DEBUG: Device Models Array:', deviceModelsArray);
-
-            const relevantModels = deviceModelsArray.filter((m: any) => serviceDeviceModelIds.includes(m.id));
-            console.log('🔍 DEBUG: Relevant Models:', relevantModels);
-
-            const params = relevantModels.flatMap((m: any) => {
-                console.log(`🔍 DEBUG: Model ${m.name} parameters:`, m.parameters);
-                return m.parameters || [];
+            // Extract parameters from embedded device models in service response
+            const embeddedDeviceModelParams = (currentService.device_models || []).flatMap((dm: any) => {
+                const model = dm.device_model || dm;
+                console.log(`🔍 DEBUG: Embedded device model:`, model);
+                return (model.parameters || []).map((p: any) => ({
+                    key: p.key || p.name,
+                    name: p.name || p.key,
+                    unit: p.unit || '',
+                    data_type: p.data_type || p.type || 'number'
+                }));
             });
-            console.log('🔍 DEBUG: Final Parameters:', params);
-            setAvailableParameters(params);
+            console.log('🔍 DEBUG: Embedded Device Model Parameters:', embeddedDeviceModelParams);
 
-            // Load dashboards
-            setDeviceTemplate(currentService.dashboard_template || { widgets: [] });
+            // Also fetch device models separately as fallback
+            let deviceModelParams: any[] = [];
+            try {
+                const deviceModels = await deviceModelsApi.getAll();
+                console.log('🔍 DEBUG: Raw Device Models Response:', deviceModels);
+
+                // Handle both 'id' (from list view) and 'device_model_id' (from detail view) conventions
+                const serviceDeviceModelIds = currentService.device_models?.map((dm: any) => dm.device_model_id || dm.id) || [];
+                console.log('🔍 DEBUG: Service Device Model IDs:', serviceDeviceModelIds);
+
+                const deviceModelsArray = Array.isArray(deviceModels) ? deviceModels : (deviceModels?.data || []);
+                console.log('🔍 DEBUG: Device Models Array:', deviceModelsArray);
+
+                const relevantModels = deviceModelsArray.filter((m: any) => serviceDeviceModelIds.includes(m.id));
+                console.log('🔍 DEBUG: Relevant Models:', relevantModels);
+
+                deviceModelParams = relevantModels.flatMap((m: any) => {
+                    console.log(`🔍 DEBUG: Model ${m.name} parameters:`, m.parameters);
+                    return (m.parameters || []).map((p: any) => ({
+                        key: p.key || p.name,
+                        name: p.name || p.key,
+                        unit: p.unit || '',
+                        data_type: p.data_type || p.type || 'number'
+                    }));
+                });
+                console.log('🔍 DEBUG: Fetched Device Model Parameters:', deviceModelParams);
+            } catch (e) {
+                console.log('🔍 DEBUG: Could not fetch device models separately:', e);
+            }
+
+            // Combine all parameters, removing duplicates by key
+            const allParams = [...serviceParams, ...embeddedDeviceModelParams, ...deviceModelParams];
+            const uniqueParams = allParams.filter((param, index, self) => 
+                index === self.findIndex(p => p.key === param.key)
+            );
+            console.log('🔍 DEBUG: Final Combined Parameters:', uniqueParams);
+            setAvailableParameters(uniqueParams);
+
+            // Load dashboards - use correct field names from database
+            console.log('🔍 DEBUG: device_dashboard_layout:', currentService.device_dashboard_layout);
+            console.log('🔍 DEBUG: main_dashboard_layout:', currentService.main_dashboard_layout);
+            console.log('🔍 DEBUG: public_dashboard_layout:', currentService.public_dashboard_layout);
+            
+            setDeviceTemplate(currentService.device_dashboard_layout || { widgets: [] });
             setMainTemplate(currentService.main_dashboard_layout || { widgets: [] });
             setPublicTemplate(currentService.public_dashboard_layout || { widgets: [] });
         } catch (error) {
@@ -80,12 +128,16 @@ export default function ServiceDashboardPage() {
         console.log(`Saving ${activeTab} dashboard template...`, template);
         setIsSaving(true);
         try {
-            const updatePayload: any = {};
-            if (activeTab === 'device') updatePayload.dashboard_template = template;
-            if (activeTab === 'main') updatePayload.main_dashboard_layout = template;
-            if (activeTab === 'public') updatePayload.public_dashboard_layout = template;
+            // Map activeTab to dashboard_type for the API
+            const dashboardTypeMap: Record<string, 'main' | 'device' | 'public'> = {
+                'device': 'device',
+                'main': 'main',
+                'public': 'public'
+            };
+            const dashboardType = dashboardTypeMap[activeTab];
 
-            const result = await servicesApi.update(serviceId, updatePayload);
+            // Use the new updateDashboard API method
+            const result = await servicesApi.updateDashboard(serviceId, dashboardType, template);
 
             console.log('Save result:', result);
 

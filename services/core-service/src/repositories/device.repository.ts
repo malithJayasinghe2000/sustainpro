@@ -50,7 +50,7 @@ export class DeviceRepository {
                     dept.name as dept_name
                 FROM sps_devices d
                 LEFT JOIN sps_department_services ds ON d.service_id = ds.id
-                LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+                LEFT JOIN sps_service_templates s ON ds.service_template_id = s.id
                 LEFT JOIN sps_departments dept ON ds.department_id = dept.id
                 WHERE d.organization_id = ${organizationId}
                 ORDER BY d.created_at DESC
@@ -65,7 +65,7 @@ export class DeviceRepository {
                     dept.name as dept_name
                 FROM sps_devices d
                 LEFT JOIN sps_department_services ds ON d.service_id = ds.id
-                LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+                LEFT JOIN sps_service_templates s ON ds.service_template_id = s.id
                 LEFT JOIN sps_departments dept ON ds.department_id = dept.id
                 ORDER BY d.created_at DESC
             ` as any as Device[];
@@ -82,7 +82,7 @@ export class DeviceRepository {
                     dept.name as dept_name
                 FROM sps_devices d
                 LEFT JOIN sps_department_services ds ON d.service_id = ds.id
-                LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+                LEFT JOIN sps_service_templates s ON ds.service_template_id = s.id
                 LEFT JOIN sps_departments dept ON ds.department_id = dept.id
                 WHERE d.id = ${id} AND d.organization_id = ${organizationId}
             ` as any as Device[];
@@ -95,7 +95,7 @@ export class DeviceRepository {
                     dept.name as dept_name
                 FROM sps_devices d
                 LEFT JOIN sps_department_services ds ON d.service_id = ds.id
-                LEFT JOIN sps_service_templates s ON ds.service_id = s.id
+                LEFT JOIN sps_service_templates s ON ds.service_template_id = s.id
                 LEFT JOIN sps_departments dept ON ds.department_id = dept.id
                 WHERE d.id = ${id}
             ` as any as Device[];
