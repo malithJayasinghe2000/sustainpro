@@ -13,13 +13,15 @@ interface DashboardBuilderDragDropProps {
     initialTemplate?: DashboardTemplate;
     onSave: (template: DashboardTemplate) => void;
     onCancel?: () => void;
+    onChange?: () => void; // Called when widgets are modified
 }
 
 export default function DashboardBuilderDragDrop({
     availableParameters,
     initialTemplate,
     onSave,
-    onCancel
+    onCancel,
+    onChange
 }: DashboardBuilderDragDropProps) {
     // Robust initialization
     const [widgets, setWidgets] = useState<WidgetConfig[]>(
@@ -82,10 +84,12 @@ export default function DashboardBuilderDragDrop({
         };
 
         setWidgets([...widgets, newWidget]);
+        onChange?.(); // Track changes
     };
 
     const updateWidget = (id: string, updates: Partial<WidgetConfig>) => {
         setWidgets(updateWidgetDeep(widgets, id, updates));
+        onChange?.(); // Track changes
     };
 
     const deleteWidget = (id: string) => {
@@ -94,6 +98,7 @@ export default function DashboardBuilderDragDrop({
             setSelectedWidgetId(null);
             setShowSettings(false);
         }
+        onChange?.(); // Track changes
     };
 
     const moveWidget = (widgetId: string, newParentId: string | null) => {
@@ -142,21 +147,36 @@ export default function DashboardBuilderDragDrop({
 
     const onLayoutChange = (layout: readonly any[]) => {
         // Only updates top-level widgets
-        setWidgets(currentWidgets => currentWidgets.map(w => {
-            const layoutItem = layout.find(l => l.i === w.id);
-            if (layoutItem) {
-                return {
-                    ...w,
-                    position: {
-                        x: layoutItem.x,
-                        y: layoutItem.y,
-                        w: layoutItem.w,
-                        h: layoutItem.h
+        let hasChanged = false;
+        setWidgets(currentWidgets => {
+            const updatedWidgets = currentWidgets.map(w => {
+                const layoutItem = layout.find(l => l.i === w.id);
+                if (layoutItem) {
+                    // Check if position actually changed
+                    if (w.position.x !== layoutItem.x || 
+                        w.position.y !== layoutItem.y || 
+                        w.position.w !== layoutItem.w || 
+                        w.position.h !== layoutItem.h) {
+                        hasChanged = true;
                     }
-                };
-            }
-            return w;
-        }));
+                    return {
+                        ...w,
+                        position: {
+                            x: layoutItem.x,
+                            y: layoutItem.y,
+                            w: layoutItem.w,
+                            h: layoutItem.h
+                        }
+                    };
+                }
+                return w;
+            });
+            return updatedWidgets;
+        });
+        // Only trigger onChange if positions actually changed
+        if (hasChanged) {
+            onChange?.();
+        }
     };
 
     const handleSave = () => {
@@ -316,7 +336,7 @@ export default function DashboardBuilderDragDrop({
                                     {...({} as any)}
                                 >
                                     {widgets.map((widget) => (
-                                        <div key={widget.id}>
+                                        <div key={widget.id} className="group">
                                             <div className="h-full">
                                                 <WidgetRenderer
                                                     widget={widget}
@@ -327,17 +347,17 @@ export default function DashboardBuilderDragDrop({
                                                 />
                                             </div>
                                             {!previewMode && (
-                                                <div className="absolute top-2 right-2 flex gap-1 z-10">
+                                                <div className="absolute -top-8 right-0 flex gap-1 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); openSettings(widget.id); }}
-                                                        className="p-1.5 bg-background/90 backdrop-blur-sm border border-border rounded hover:bg-muted transition-colors"
+                                                        className="p-1.5 bg-background shadow-md border border-border rounded hover:bg-muted transition-colors"
                                                         title="Settings"
                                                     >
                                                         <Settings className="w-3.5 h-3.5" />
                                                     </button>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); deleteWidget(widget.id); }}
-                                                        className="p-1.5 bg-background/90 backdrop-blur-sm border border-border rounded hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                                                        className="p-1.5 bg-background shadow-md border border-border rounded hover:bg-destructive hover:text-destructive-foreground transition-colors"
                                                         title="Delete"
                                                     >
                                                         <Trash2 className="w-3.5 h-3.5" />

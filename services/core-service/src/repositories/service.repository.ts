@@ -426,13 +426,13 @@ export class ServiceRepository {
                    st.description as service_description,
                    st.category as service_type,
                    st.id as service_template_id,
+                   st.main_dashboard_layout as main_dashboard_layout,
+                   st.device_dashboard_layout as device_dashboard_layout,
+                   st.public_dashboard_layout as public_dashboard_layout,
+                   st.service_parameters as service_parameters,
                    o.id as organization_id,
                    (SELECT COUNT(*)::int FROM sps_devices d_active WHERE d_active.service_id = ds.id AND d_active.status = 'ONLINE') as active_devices,
-                   (SELECT COUNT(*)::int FROM sps_devices d_total WHERE d_total.service_id = ds.id) as total_devices,
-                    -- Mock data for stats for now
-                    45000 as total_dispensed,
-                    1500 as total_bottles_saved,
-                    250 as total_co2_saved
+                   (SELECT COUNT(*)::int FROM sps_devices d_total WHERE d_total.service_id = ds.id) as total_devices
              FROM sps_department_services ds
              LEFT JOIN sps_departments d ON ds.department_id = d.id
              LEFT JOIN sps_events e ON d.event_id = e.id

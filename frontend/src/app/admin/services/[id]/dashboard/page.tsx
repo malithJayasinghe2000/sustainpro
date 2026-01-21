@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import DashboardBuilderDragDrop from '@/components/dashboard/DashboardBuilderDragDrop';
 import { servicesApi, deviceModelsApi } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle } from 'lucide-react';
 
 export default function ServiceDashboardPage() {
     const router = useRouter();
@@ -16,6 +16,14 @@ export default function ServiceDashboardPage() {
     const [service, setService] = useState<any>(null);
     const [activeTab, setActiveTab] = useState<'device' | 'main' | 'public'>('device');
     const [availableParameters, setAvailableParameters] = useState<any[]>([]);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [pendingTab, setPendingTab] = useState<'device' | 'main' | 'public' | null>(null);
+    const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+    const [showBackModal, setShowBackModal] = useState(false);
+
+    // const [service, setService] = useState<any>(null);
+    // const [activeTab, setActiveTab] = useState<'device' | 'main' | 'public'>('device');
+    // const [availableParameters, setAvailableParameters] = useState<any[]>([]);
 
     // Separate templates for each view
     const [deviceTemplate, setDeviceTemplate] = useState<any>({ widgets: [] });
@@ -43,20 +51,10 @@ export default function ServiceDashboardPage() {
 
             setService(currentService);
 
-            // Load parameters from multiple sources:
-            // 1. Service-level parameters (service_parameters)
-            // 2. Embedded device model parameters (from service response)
-            // 3. Fetched device model parameters (as fallback)
+            // Load parameters from device models ONLY (not service_parameters)
+            // Device model parameters are the actual data fields that devices report
+            // These are used to configure widgets to display real telemetry data
             
-            // Start with service-level parameters
-            const serviceParams = (currentService.service_parameters || []).map((p: any) => ({
-                key: p.key || p.name,
-                name: p.name || p.key,
-                unit: p.unit || '',
-                data_type: p.data_type || p.type || 'number'
-            }));
-            console.log('🔍 DEBUG: Service Parameters:', serviceParams);
-
             // Extract parameters from embedded device models in service response
             const embeddedDeviceModelParams = (currentService.device_models || []).flatMap((dm: any) => {
                 const model = dm.device_model || dm;
@@ -100,12 +98,12 @@ export default function ServiceDashboardPage() {
                 console.log('🔍 DEBUG: Could not fetch device models separately:', e);
             }
 
-            // Combine all parameters, removing duplicates by key
-            const allParams = [...serviceParams, ...embeddedDeviceModelParams, ...deviceModelParams];
+            // Combine device model parameters only, removing duplicates by key
+            const allParams = [...embeddedDeviceModelParams, ...deviceModelParams];
             const uniqueParams = allParams.filter((param, index, self) => 
                 index === self.findIndex(p => p.key === param.key)
             );
-            console.log('🔍 DEBUG: Final Combined Parameters:', uniqueParams);
+            console.log('🔍 DEBUG: Final Device Model Parameters:', uniqueParams);
             setAvailableParameters(uniqueParams);
 
             // Load dashboards - use correct field names from database
@@ -145,14 +143,56 @@ export default function ServiceDashboardPage() {
             if (activeTab === 'main') setMainTemplate(template);
             if (activeTab === 'public') setPublicTemplate(template);
 
-            toast.success(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Dashboard saved!`);
+            toast.success(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Dashboard saved successfully! ✓`);
+            setHasUnsavedChanges(false);
         } catch (error) {
             console.error('Save error details:', error);
-            toast.error('Failed to save dashboard');
+            toast.error('Failed to save dashboard. Please try again.');
         } finally {
             setIsSaving(false);
         }
     };
+
+    // Handle tab switching with unsaved changes check
+    const handleTabSwitch = (newTab: 'device' | 'main' | 'public') => {
+        if (hasUnsavedChanges) {
+            setPendingTab(newTab);
+            setShowUnsavedModal(true);
+        } else {
+            setActiveTab(newTab);
+        }
+    };
+
+    // Confirm discard and switch tab
+    const confirmDiscard = () => {
+        if (pendingTab) {
+            setActiveTab(pendingTab);
+            setHasUnsavedChanges(false);
+        }
+        setShowUnsavedModal(false);
+        setPendingTab(null);
+    };
+
+    // Handle back navigation with unsaved changes check
+    const handleBack = () => {
+        if (hasUnsavedChanges) {
+            setShowBackModal(true);
+        } else {
+            router.back();
+        }
+    };
+
+    // Confirm back navigation
+    const confirmBack = () => {
+        setShowBackModal(false);
+        setHasUnsavedChanges(false);
+        router.back();
+    };
+
+    // Track changes from builder
+    const handleBuilderChange = useCallback(() => {
+        setHasUnsavedChanges(true);
+    }, []);
 
     if (isLoading) {
         return (
@@ -179,29 +219,32 @@ export default function ServiceDashboardPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b bg-background z-10">
                     <div className="flex items-center gap-4">
-                        <button onClick={() => router.back()} className="p-2 hover:bg-muted rounded-full">
+                        <button onClick={handleBack} className="p-2 hover:bg-muted rounded-full">
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                         <div>
                             <h1 className="text-xl font-bold flex items-center gap-2">
                                 {service?.name || 'Loading...'}
                                 <span className="text-muted-foreground font-normal text-sm">/ Dashboard Builder</span>
+                                {hasUnsavedChanges && (
+                                    <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">Unsaved</span>
+                                )}
                             </h1>
                             <div className="flex gap-2 mt-1">
                                 <button
-                                    onClick={() => setActiveTab('device')}
+                                    onClick={() => handleTabSwitch('device')}
                                     className={`text-xs px-3 py-1 rounded-full border ${activeTab === 'device' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted hover:bg-muted/80'}`}
                                 >
                                     Device Detail
                                 </button>
                                 <button
-                                    onClick={() => setActiveTab('main')}
+                                    onClick={() => handleTabSwitch('main')}
                                     className={`text-xs px-3 py-1 rounded-full border ${activeTab === 'main' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted hover:bg-muted/80'}`}
                                 >
                                     Main Service View
                                 </button>
                                 <button
-                                    onClick={() => setActiveTab('public')}
+                                    onClick={() => handleTabSwitch('public')}
                                     className={`text-xs px-3 py-1 rounded-full border ${activeTab === 'public' ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted hover:bg-muted/80'}`}
                                 >
                                     Public Widget
@@ -218,9 +261,78 @@ export default function ServiceDashboardPage() {
                         availableParameters={availableParameters}
                         initialTemplate={getCurrentTemplate()}
                         onSave={handleSave}
-                        onCancel={() => router.back()}
+                        onCancel={handleBack}
+                        onChange={handleBuilderChange}
                     />
                 </div>
+
+                {/* Unsaved Changes Modal */}
+                {showUnsavedModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                        <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg">Unsaved Changes</h3>
+                                    <p className="text-sm text-muted-foreground">You have unsaved changes in this dashboard.</p>
+                                </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-6">
+                                If you switch tabs now, your changes will be lost. Would you like to save first?
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => { setShowUnsavedModal(false); setPendingTab(null); }}
+                                    className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmDiscard}
+                                    className="px-4 py-2 text-sm bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90"
+                                >
+                                    Discard Changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Back Navigation Modal */}
+                {showBackModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                        <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg">Leave Dashboard Builder?</h3>
+                                    <p className="text-sm text-muted-foreground">You have unsaved changes.</p>
+                                </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-6">
+                                If you leave now, your changes will be lost. Would you like to save first?
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setShowBackModal(false)}
+                                    className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted"
+                                >
+                                    Stay
+                                </button>
+                                <button
+                                    onClick={confirmBack}
+                                    className="px-4 py-2 text-sm bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90"
+                                >
+                                    Leave Without Saving
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </DashboardLayout>
     );
