@@ -18,6 +18,7 @@ import uploadRoutes from './routes/upload.routes';
 import deviceRoutes from './routes/device.routes';
 import deviceModelRoutes from './routes/device-model.routes';
 import auditLogRoutes from './routes/audit-log.routes';
+import systemNotificationRoutes from './routes/system-notification.routes';
 
 const logger = createLogger({ service: 'core-service' });
 
@@ -48,6 +49,7 @@ setupSwagger(app, {
         { name: 'Devices', description: 'Device registration & management' },
         { name: 'Settings', description: 'System settings' },
         { name: 'Uploads', description: 'File upload operations' },
+        { name: 'Notifications', description: 'System notifications' },
     ],
 });
 
@@ -78,6 +80,7 @@ app.use('/api/v1/upload', authenticateToken, uploadRoutes);
 app.use('/api/v1/devices', authenticateToken, deviceRoutes);
 app.use('/api/v1/device-models', authenticateToken, deviceModelRoutes);
 app.use('/api/v1/audit-logs', authenticateToken, auditLogRoutes);
+app.use('/api/v1/notifications', authenticateToken, systemNotificationRoutes);
 
 
 // Admin routes - Super Admin only

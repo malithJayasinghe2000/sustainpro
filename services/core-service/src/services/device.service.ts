@@ -169,7 +169,7 @@ export class DeviceService {
         }
 
         const newApiKey = this.generateApiKey();
-        const updated = await deviceRepository.update(id, { 
+        const updated = await deviceRepository.update(id, {
             // We'd need to add api_key to UpdateDeviceInput or handle separately
         } as any);
 
@@ -177,6 +177,81 @@ export class DeviceService {
 
         return { device: updated, apiKey: newApiKey };
     }
+
+    /**
+     * Register a device via USB provisioning
+     * This is a special endpoint for device self-registration
+     */
+    async register(data: {
+        hardware_id: string;
+        device_code: string;
+        location?: string;
+        service_id?: string;
+        organization_id: string;
+    }): Promise<{ device: Device; apiKey: string; isNew: boolean }> {
+        // Check if device already exists by hardware_id (stored in metadata)
+        const existingDevices = await deviceRepository.findAll(data.organization_id);
+        const existingDevice = existingDevices.find(d =>
+            d.metadata?.hardware_id === data.hardware_id
+        );
+
+        if (existingDevice) {
+            // Device already registered, return it with a regenerated API key
+            logger.info('Device already registered, regenerating API key', {
+                hardware_id: data.hardware_id,
+                deviceId: existingDevice.id
+            });
+
+            const newApiKey = this.generateApiKey();
+            const updated = await deviceRepository.update(String(existingDevice.id), {
+                name: data.device_code,
+                service_id: data.service_id,
+                metadata: {
+                    ...existingDevice.metadata,
+                    location: data.location,
+                    hardware_id: data.hardware_id,
+                },
+            });
+
+            return { device: updated, apiKey: newApiKey, isNew: false };
+        }
+
+        // Create new device
+        const deviceCode = data.device_code || this.generateDeviceCode();
+        const apiKey = this.generateApiKey();
+
+        const newDevice = await deviceRepository.create({
+            device_code: deviceCode,
+            organization_id: data.organization_id,
+            name: data.device_code,
+            service_id: data.service_id,
+            api_key: apiKey,
+            metadata: {
+                hardware_id: data.hardware_id,
+                location: data.location,
+                provisioned_at: new Date().toISOString(),
+            },
+        });
+
+        logger.info('New device registered via USB provisioning', {
+            id: newDevice.id,
+            hardware_id: data.hardware_id,
+            deviceCode
+        });
+
+        // Publish event
+        publishEvent('device.registered', {
+            device_id: newDevice.id,
+            device_code: deviceCode,
+            hardware_id: data.hardware_id,
+            organization_id: data.organization_id,
+        }).catch((err) => {
+            logger.warn('Failed to publish device.registered event', { error: err.message });
+        });
+
+        return { device: newDevice, apiKey, isNew: true };
+    }
 }
 
 export const deviceService = new DeviceService();
+

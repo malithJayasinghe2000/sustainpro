@@ -131,7 +131,7 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
         const { id } = req.params;
         const user = (req as any).user;
         const orgId = user?.isSuperAdmin ? undefined : user?.organization_id;
-        
+
         const { name, type, service_id, status, metadata } = req.body;
 
         const device = await deviceService.update(id, {
@@ -247,6 +247,72 @@ export const regenerateApiKey = async (req: Request, res: Response, next: NextFu
             data: device,
             api_key: apiKey,
             message: 'API key regenerated. Save the new API key - it will not be shown again.',
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * POST /devices/register - Register a device via USB provisioning
+ */
+export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const user = (req as any).user;
+        const { hardware_id, device_code, location, service_id, organization_id } = req.body;
+
+        // Validate required fields
+        if (!hardware_id) {
+            res.status(400).json({
+                success: false,
+                error: 'hardware_id is required',
+            });
+            return;
+        }
+
+        // Use provided org_id or user's org
+        const orgId = organization_id || user?.organization_id;
+
+        if (!orgId) {
+            res.status(400).json({
+                success: false,
+                error: 'organization_id is required',
+            });
+            return;
+        }
+
+        // Check organization access
+        if (!user?.isSuperAdmin && orgId !== user?.organization_id) {
+            res.status(403).json({
+                success: false,
+                error: 'Access denied: Cannot register device for another organization',
+            });
+            return;
+        }
+
+        const { device, apiKey, isNew } = await deviceService.register({
+            hardware_id,
+            device_code: device_code || hardware_id,
+            location,
+            service_id,
+            organization_id: orgId,
+        });
+
+        logger.info('Device registered via USB provisioning', {
+            id: device.id,
+            hardware_id,
+            isNew,
+            registeredBy: user?.id
+        });
+
+        res.status(isNew ? 201 : 200).json({
+            success: true,
+            data: device,
+            api_key: apiKey,
+            is_new: isNew,
+            message: isNew
+                ? 'Device registered successfully. Save the API key - it will not be shown again.'
+                : 'Device already registered. API key has been regenerated.',
         });
     } catch (error) {
         next(error);

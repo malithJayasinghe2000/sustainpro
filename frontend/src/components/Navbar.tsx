@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { Sun, Moon, Bell, Clock, AlertTriangle, Info, XCircle, X } from 'lucide-react';
+import { Sun, Moon, Bell, Clock, AlertTriangle, Info, XCircle, X, CheckCheck, Loader2, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminApi } from '@/lib/api';
+import { adminApi, systemNotificationsApi, SystemNotification } from '@/lib/api';
 import UniversalCreator from './UniversalCreator';
 import { getFullImageUrl } from './ImageUpload';
 import { Plus, Activity, Cpu } from 'lucide-react';
@@ -14,6 +15,7 @@ export default function Navbar() {
     const { theme, toggleTheme } = useTheme();
     const { settings } = useSettings();
     const { user } = useAuth();
+    const router = useRouter();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [mounted, setMounted] = useState(false);
     const [showAlerts, setShowAlerts] = useState(false);
@@ -25,27 +27,105 @@ export default function Navbar() {
     // Get settings values with fallbacks
     const siteTitle = settings?.site_title || 'SPS IoT';
     const siteLogo = settings?.site_logo; // User configured logo from settings
-    const orgLogo = user?.logo_url || user?.org_logo; // Organization-specific logo (backend returns logo_url)
+    const orgLogo = (user as any)?.logo_url || (user as any)?.org_logo; // Organization-specific logo (backend returns logo_url)
     // Use getFullImageUrl to resolve relative URLs to full URLs, fallback to default logo
     const logo = getFullImageUrl(orgLogo || siteLogo) || '/logo.png';
     const globalAlert = settings?.global_alert_message;
     const alertType = settings?.global_alert_type || 'INFO';
     const [logoError, setLogoError] = useState(false);
 
-    // Dummy alerts data
-    const alerts = [
-        { id: 1, device: 'Device 37', message: 'Has gone offline (offline for 13h 4m)', type: 'critical', time: '2 hours ago' },
-        { id: 2, device: 'Device 42', message: 'High temperature detected (35°C)', type: 'critical', time: '3 hours ago' },
-        { id: 3, device: 'Device 15', message: 'Low battery warning (15%)', type: 'critical', time: '5 hours ago' },
-        { id: 4, device: 'Device 28', message: 'Connection unstable', type: 'critical', time: '6 hours ago' },
-        { id: 5, device: 'Device 09', message: 'Sensor malfunction detected', type: 'critical', time: '8 hours ago' },
-    ];
+    // Real notifications state
+    const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [notificationsLoading, setNotificationsLoading] = useState(false);
+    const [markingAllRead, setMarkingAllRead] = useState(false);
 
-    const criticalAlertsCount = alerts.length;
+    // Format relative time
+    const formatRelativeTime = (dateString: string) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    };
+
+    // Get notification type color
+    const getNotificationColor = (type: string) => {
+        switch (type) {
+            case 'critical': return 'bg-red-500';
+            case 'warning': return 'bg-yellow-500';
+            default: return 'bg-blue-500';
+        }
+    };
+
+    // Fetch notifications from API
+    const fetchNotifications = useCallback(async () => {
+        try {
+            setNotificationsLoading(true);
+            const response = await systemNotificationsApi.getAll({ limit: 10 });
+            setNotifications(response.data);
+            setUnreadCount(response.meta.unread_count);
+        } catch (error) {
+            console.error('Failed to fetch notifications:', error);
+        } finally {
+            setNotificationsLoading(false);
+        }
+    }, []);
+
+    // Handle notification click - mark as read and navigate if action_url exists
+    const handleNotificationClick = async (notification: SystemNotification) => {
+        // Mark as read if not already
+        if (!notification.is_read) {
+            try {
+                await systemNotificationsApi.markAsRead(notification.id);
+                setNotifications(prev => prev.map(n =>
+                    n.id === notification.id ? { ...n, is_read: true } : n
+                ));
+                setUnreadCount(prev => Math.max(0, prev - 1));
+            } catch (error) {
+                console.error('Failed to mark notification as read:', error);
+            }
+        }
+
+        // Navigate if action_url exists
+        if (notification.action_url) {
+            setShowAlerts(false);
+            router.push(notification.action_url);
+        }
+    };
+
+    // Mark all notifications as read
+    const handleMarkAllAsRead = async () => {
+        try {
+            setMarkingAllRead(true);
+            await systemNotificationsApi.markAllAsRead();
+            setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+            setUnreadCount(0);
+        } catch (error) {
+            console.error('Failed to mark all notifications as read:', error);
+        } finally {
+            setMarkingAllRead(false);
+        }
+    };
 
     useEffect(() => {
         setMounted(true);
-    }, []);
+        // Fetch notifications on mount
+        fetchNotifications();
+    }, [fetchNotifications]);
+
+    // Poll notifications every 30 seconds
+    useEffect(() => {
+        const interval = setInterval(fetchNotifications, 30000);
+        return () => clearInterval(interval);
+    }, [fetchNotifications]);
 
     // Separate effect for the timer that depends on the timezone
     const effectiveTimezone = user?.timezone || settings?.default_timezone || 'Asia/Dubai';
@@ -290,44 +370,88 @@ export default function Navbar() {
                                         className="relative p-2 text-muted-foreground hover:bg-muted hover:text-foreground rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-primary/20"
                                     >
                                         <Bell className="w-5 h-5" />
-                                        {criticalAlertsCount > 0 && (
+                                        {unreadCount > 0 && (
                                             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-card"></span>
                                         )}
                                     </button>
 
                                     {/* Alerts Dropdown Panel */}
                                     {showAlerts && (
-                                        <div className="absolute right-0 mt-3 w-80 bg-popover rounded-xl shadow-xl border border-border overflow-hidden ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-200">
+                                        <div className="absolute right-0 mt-3 w-96 bg-popover rounded-xl shadow-xl border border-border overflow-hidden ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-200">
                                             <div className="p-3 border-b border-border bg-muted/30 flex items-center justify-between">
                                                 <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
-                                                <span className="text-[10px] font-medium px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full border border-red-200 dark:border-red-800">
-                                                    {criticalAlertsCount} New
-                                                </span>
+                                                {unreadCount > 0 && (
+                                                    <span className="text-[10px] font-medium px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full border border-red-200 dark:border-red-800">
+                                                        {unreadCount} New
+                                                    </span>
+                                                )}
                                             </div>
-                                            <div className="max-h-[300px] overflow-y-auto">
-                                                {alerts.map((alert) => (
-                                                    <div
-                                                        key={alert.id}
-                                                        className="p-3 border-b border-border hover:bg-muted/50 transition-colors cursor-pointer group"
-                                                    >
-                                                        <div className="flex gap-3">
-                                                            <div className="mt-1 w-2 h-2 rounded-full bg-red-500 flex-shrink-0 group-hover:bg-red-600 transition-colors" />
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex justify-between items-start">
-                                                                    <p className="text-sm font-medium text-foreground truncate">{alert.device}</p>
-                                                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">{alert.time}</span>
+                                            <div className="max-h-[350px] overflow-y-auto">
+                                                {notificationsLoading ? (
+                                                    <div className="flex items-center justify-center py-8">
+                                                        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                                                    </div>
+                                                ) : notifications.length === 0 ? (
+                                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                                                        <Bell className="w-8 h-8 mb-2 opacity-50" />
+                                                        <p className="text-sm">No notifications</p>
+                                                    </div>
+                                                ) : (
+                                                    notifications.map((notification) => (
+                                                        <div
+                                                            key={notification.id}
+                                                            onClick={() => handleNotificationClick(notification)}
+                                                            className={`p-3 border-b border-border hover:bg-muted/50 transition-colors cursor-pointer group ${notification.is_read ? 'opacity-60' : ''
+                                                                }`}
+                                                        >
+                                                            <div className="flex gap-3">
+                                                                <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 transition-colors ${notification.is_read ? 'bg-muted-foreground/30' : getNotificationColor(notification.type)
+                                                                    }`} />
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex justify-between items-start">
+                                                                        <p className="text-sm font-medium text-foreground truncate">{notification.title}</p>
+                                                                        <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                                                                            {formatRelativeTime(notification.created_at)}
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 group-hover:text-foreground transition-colors">
+                                                                        {notification.message}
+                                                                    </p>
+                                                                    <div className="flex items-center gap-2 mt-1.5">
+                                                                        {notification.source_name && (
+                                                                            <span className="inline-block text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">
+                                                                                {notification.source_name}
+                                                                            </span>
+                                                                        )}
+                                                                        {notification.action_url && notification.action_label && (
+                                                                            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded font-medium">
+                                                                                {notification.action_label}
+                                                                                <ExternalLink className="w-2.5 h-2.5" />
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
-                                                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 group-hover:text-foreground transition-colors">{alert.message}</p>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    ))
+                                                )}
                                             </div>
-                                            <div className="p-2 bg-muted/30 border-t border-border">
-                                                <button className="w-full py-1 text-xs text-primary hover:text-primary/80 font-medium hover:underline">
-                                                    Mark all as read
-                                                </button>
-                                            </div>
+                                            {notifications.length > 0 && unreadCount > 0 && (
+                                                <div className="p-2 bg-muted/30 border-t border-border">
+                                                    <button
+                                                        onClick={handleMarkAllAsRead}
+                                                        disabled={markingAllRead}
+                                                        className="w-full py-1.5 text-xs text-primary hover:text-primary/80 font-medium hover:underline flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                                    >
+                                                        {markingAllRead ? (
+                                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                                        ) : (
+                                                            <CheckCheck className="w-3 h-3" />
+                                                        )}
+                                                        Mark all as read
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

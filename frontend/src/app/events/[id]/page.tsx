@@ -1217,8 +1217,8 @@ export default function EventDetailPage() {
                                     <Clock className="w-6 h-6 text-orange-900 dark:text-orange-900" />
                                 </div>
                                 <div>
-                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100">Request to End Event</h4>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                    <h4 className="font-semibold text-black dark:text-black">Request to End Event</h4>
+                                    <p className="text-sm text-black dark:text-black mt-1">
                                         As an Event Manager, you can request to end this event. The organization administrators will be notified and can approve your request.
                                     </p>
                                 </div>
