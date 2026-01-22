@@ -24,9 +24,7 @@ const ICON_MAP: Record<string, any> = {
     Shield, Heart, Zap, Users, Settings, Layers
 };
 
-import dynamic from 'next/dynamic';
-// Dynamically import Leaflet map to avoid SSR issues
-const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
+import GoogleMap from '@/components/GoogleMap';
 
 interface DepartmentDetailPageProps {
     params: Promise<{ id: string; deptId: string }>;
@@ -204,7 +202,7 @@ export default function DepartmentDetailPage({ params }: DepartmentDetailPagePro
 
                         {/* Right: Specific Department Map */}
                         <div className="lg:col-span-1 h-[160px] bg-muted/10 rounded-xl overflow-hidden border border-border relative shadow-sm">
-                            <LeafletMap
+                            <GoogleMap
                                 lat={Number(event.coordinates?.lat) || 25.2048}
                                 lng={Number(event.coordinates?.lng) || 55.2708}
                                 className="h-full w-full"

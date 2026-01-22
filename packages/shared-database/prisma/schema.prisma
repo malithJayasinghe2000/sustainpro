@@ -405,47 +405,47 @@ model sps_service_subscriptions {
 }
 
 model sps_service_templates {
-  id                        String                      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name                      String                      @unique @db.VarChar(100)
-  code                      String                      @unique @db.VarChar(50)
-  category                  String?                     @default("MONITORING") @db.VarChar(50)
-  description               String?
-  
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String  @unique @db.VarChar(100)
+  code        String  @unique @db.VarChar(50)
+  category    String? @default("MONITORING") @db.VarChar(50)
+  description String?
+
   // Service branding
-  image_url                 String?
-  
+  image_url String?
+
   // Service type (GLOBAL = any org can use, INTERNAL = only sustainpro)
-  service_type              String?                     @default("GLOBAL") @db.VarChar(20)
-  
+  service_type String? @default("GLOBAL") @db.VarChar(20)
+
   // Dashboard configurations
-  device_dashboard_layout   Json?                       @default("{\"widgets\": []}")
-  main_dashboard_layout     Json?                       @default("{\"widgets\": []}")
-  public_dashboard_layout   Json?                       @default("{\"widgets\": []}")
-  has_public_dashboard      Boolean?                    @default(false)
-  
+  device_dashboard_layout Json?    @default("{\"widgets\": []}")
+  main_dashboard_layout   Json?    @default("{\"widgets\": []}")
+  public_dashboard_layout Json?    @default("{\"widgets\": []}")
+  has_public_dashboard    Boolean? @default(false)
+
   // Service-level aggregation parameters
   // Format: [{ key, name, icon, dataType, unit, aggregation, sourceParam }]
-  service_parameters        Json?                       @default("[]")
-  
+  service_parameters Json? @default("[]")
+
   // Configuration schemas
-  config_schema             Json?                       @default("{}")
-  default_config            Json?                       @default("{}")
-  features                  Json?                       @default("[]")
-  required_permissions      Json?                       @default("[]")
-  
+  config_schema        Json? @default("{}")
+  default_config       Json? @default("{}")
+  features             Json? @default("[]")
+  required_permissions Json? @default("[]")
+
   // Pricing
-  base_price                Decimal?                    @default(0) @db.Decimal(10, 2)
-  price_per_device          Decimal?                    @default(0) @db.Decimal(10, 2)
-  
+  base_price       Decimal? @default(0) @db.Decimal(10, 2)
+  price_per_device Decimal? @default(0) @db.Decimal(10, 2)
+
   // Status flags
-  is_public                 Boolean?                    @default(true)
-  is_active                 Boolean?                    @default(true)
-  
+  is_public Boolean? @default(true)
+  is_active Boolean? @default(true)
+
   // Timestamps and creator
-  created_by                String?                     @db.Uuid
-  created_at                DateTime?                   @default(now()) @db.Timestamptz(6)
-  updated_at                DateTime?                   @default(now()) @db.Timestamptz(6)
-  
+  created_by String?   @db.Uuid
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+
   // Relations
   sps_users                 sps_users?                  @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
   sps_department_services   sps_department_services[]
@@ -1024,14 +1024,15 @@ model sps_users {
   sps_service_templates                      sps_service_templates[]
 
   // New relations for system configuration
-  sps_password_history sps_password_history[]
-  sps_user_two_factor  sps_user_two_factor?
-  sps_api_keys         sps_api_keys[]
-  sps_user_sessions    sps_user_sessions[]
-  sps_login_attempts   sps_login_attempts[]
-  sps_refresh_tokens   sps_refresh_tokens[]
-  sps_otp_codes        sps_otp_codes[]
+  sps_password_history   sps_password_history[]
+  sps_user_two_factor    sps_user_two_factor?
+  sps_api_keys           sps_api_keys[]
+  sps_user_sessions      sps_user_sessions[]
+  sps_login_attempts     sps_login_attempts[]
+  sps_refresh_tokens     sps_refresh_tokens[]
+  sps_otp_codes          sps_otp_codes[]
   // sps_user_sessions    sps_user_sessions[]
+  spsSystemNotifications sps_system_notifications[]
 
   @@index([email], map: "idx_users_email")
   @@index([organization_id], map: "idx_users_org")
@@ -1093,4 +1094,55 @@ model sps_user_sessions {
   @@index([user_id], map: "idx_user_sessions_user")
   @@index([last_activity], map: "idx_user_sessions_activity")
   @@index([is_active], map: "idx_user_sessions_active")
+}
+
+// =============================================
+// SYSTEM NOTIFICATIONS - User-targeted notifications
+// =============================================
+// Used for in-app notifications that target specific users or roles
+// Examples: Event end requests, approval notifications, system alerts
+
+model sps_system_notifications {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Target user (who should see this notification)
+  target_user_id String @db.Uuid
+
+  // Optional organization context
+  organization_id String? @db.Uuid
+
+  // Notification content
+  type    String @default("INFO") @db.VarChar(20) // INFO, WARNING, CRITICAL
+  title   String @db.VarChar(255)
+  message String
+
+  // Source of the notification
+  source      String  @default("system") @db.VarChar(50) // system, event, device, service
+  source_id   String? @db.Uuid // ID of the related entity (event_id, device_id, etc.)
+  source_name String? @db.VarChar(255) // Human-readable name of the source
+
+  // Link/Action
+  action_url   String? @db.VarChar(500) // Optional URL to navigate to
+  action_label String? @db.VarChar(100) // Optional button label
+
+  // Status
+  is_read      Boolean   @default(false)
+  read_at      DateTime? @db.Timestamptz(6)
+  is_dismissed Boolean   @default(false)
+  dismissed_at DateTime? @db.Timestamptz(6)
+
+  // Metadata
+  metadata Json? @default("{}")
+
+  // Timestamps
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at DateTime? @db.Timestamptz(6) // Optional expiration
+
+  // Relations
+  sps_users sps_users @relation(fields: [target_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([target_user_id, is_read], map: "idx_sys_notif_user_read")
+  @@index([target_user_id, created_at(sort: Desc)], map: "idx_sys_notif_user_date")
+  @@index([organization_id], map: "idx_sys_notif_org")
+  @@index([source, source_id], map: "idx_sys_notif_source")
 }

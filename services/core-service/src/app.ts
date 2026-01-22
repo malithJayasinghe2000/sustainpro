@@ -2,9 +2,21 @@ import express from 'express';
 import path from 'path';
 import os from 'os';
 import { config } from './config';
-import { authenticateToken, errorHandler, notFoundHandler, requireRole } from '@sustainpro/shared-middleware';
+import { 
+    authenticateToken, 
+    errorHandler, 
+    notFoundHandler, 
+    requireRole,
+    setApiSecurityConfigFetcher,
+    setMaintenanceSettingsFetcher,
+    dynamicApiLimiter,
+    maintenanceMode,
+} from '@sustainpro/shared-middleware';
 import { createLogger } from '@sustainpro/shared-utils';
 import { setupSwagger } from '@sustainpro/shared-swagger';
+import { getPrismaClient } from '@sustainpro/shared-database';
+
+const prisma = getPrismaClient();
 
 // Import routes
 import organizationRoutes from './routes/organization.routes';
@@ -18,14 +30,49 @@ import uploadRoutes from './routes/upload.routes';
 import deviceRoutes from './routes/device.routes';
 import deviceModelRoutes from './routes/device-model.routes';
 import auditLogRoutes from './routes/audit-log.routes';
+import systemNotificationRoutes from './routes/system-notification.routes';
 
 const logger = createLogger({ service: 'core-service' });
 
 const app = express();
 
+// Setup dynamic middleware fetchers
+setApiSecurityConfigFetcher(async () => {
+    try {
+        const config = await prisma.sps_api_security_config.findUnique({
+            where: { id: 'sps_api_security' },
+        });
+        return config;
+    } catch (error) {
+        logger.error('Failed to fetch API security config', { error });
+        return null;
+    }
+});
+
+setMaintenanceSettingsFetcher(async () => {
+    try {
+        const settings = await prisma.sps_system_settings.findUnique({
+            where: { id: 'default' },
+        });
+        return settings ? {
+            maintenance_mode: settings.maintenance_mode ?? false,
+            maintenance_message: 'System is currently under maintenance. Please try again later.',
+        } : null;
+    } catch (error) {
+        logger.error('Failed to fetch maintenance settings', { error });
+        return null;
+    }
+});
+
 // Middleware (CORS handled by nginx gateway)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Apply dynamic rate limiting to all API routes
+app.use('/api', dynamicApiLimiter);
+
+// Apply maintenance mode check (after auth, before other routes)
+app.use('/api', maintenanceMode);
 
 // Request logging
 app.use((req, res, next) => {
@@ -48,6 +95,7 @@ setupSwagger(app, {
         { name: 'Devices', description: 'Device registration & management' },
         { name: 'Settings', description: 'System settings' },
         { name: 'Uploads', description: 'File upload operations' },
+        { name: 'Notifications', description: 'System notifications' },
     ],
 });
 
@@ -78,6 +126,7 @@ app.use('/api/v1/upload', authenticateToken, uploadRoutes);
 app.use('/api/v1/devices', authenticateToken, deviceRoutes);
 app.use('/api/v1/device-models', authenticateToken, deviceModelRoutes);
 app.use('/api/v1/audit-logs', authenticateToken, auditLogRoutes);
+app.use('/api/v1/notifications', authenticateToken, systemNotificationRoutes);
 
 
 // Admin routes - Super Admin only

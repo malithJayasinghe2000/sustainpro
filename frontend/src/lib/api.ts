@@ -1067,3 +1067,113 @@ export const auditLogsApi = {
         window.URL.revokeObjectURL(url);
     },
 };
+
+// =============================================
+// System Notifications API
+// =============================================
+
+export interface SystemNotification {
+    id: string;
+    type: 'critical' | 'warning' | 'info';
+    title: string;
+    message: string;
+    source: string;
+    source_id?: string;
+    source_name?: string;
+    action_url?: string;
+    action_label?: string;
+    is_read: boolean;
+    created_at: string;
+    read_at?: string;
+    metadata?: {
+        device_code?: string;
+        rule_name?: string;
+        resolved_at?: string;
+        event_id?: string;
+        event_name?: string;
+        event_code?: string;
+        requested_by?: string;
+        requested_at?: string;
+    };
+}
+
+export interface NotificationsResponse {
+    success: boolean;
+    data: SystemNotification[];
+    meta: {
+        total: number;
+        unread_count: number;
+        limit: number;
+        offset: number;
+    };
+}
+
+export const systemNotificationsApi = {
+    /**
+     * Get all notifications for the current user
+     */
+    getAll: async (params?: {
+        is_read?: boolean;
+        type?: 'critical' | 'warning' | 'info';
+        limit?: number;
+        offset?: number;
+    }): Promise<NotificationsResponse> => {
+        const response = await apiClient.get('/notifications', { params });
+        return response.data;
+    },
+
+    /**
+     * Get unread notification count
+     */
+    getUnreadCount: async (): Promise<number> => {
+        const response = await apiClient.get('/notifications/unread-count');
+        return response.data.data.count;
+    },
+
+    /**
+     * Get a specific notification by ID
+     */
+    getById: async (id: string): Promise<SystemNotification> => {
+        const response = await apiClient.get(`/notifications/${id}`);
+        return response.data.data;
+    },
+
+    /**
+     * Mark a notification as read
+     */
+    markAsRead: async (id: string): Promise<SystemNotification> => {
+        const response = await apiClient.post(`/notifications/${id}/read`);
+        return response.data.data;
+    },
+
+    /**
+     * Mark all notifications as read
+     */
+    markAllAsRead: async (): Promise<{ marked_count: number }> => {
+        const response = await apiClient.post('/notifications/mark-all-read');
+        return response.data.data;
+    },
+
+    /**
+     * Dismiss a notification
+     */
+    dismiss: async (id: string): Promise<void> => {
+        await apiClient.post(`/notifications/${id}/dismiss`);
+    },
+
+    /**
+     * Create a new notification (admin only)
+     */
+    create: async (data: {
+        type: 'critical' | 'warning' | 'info';
+        title: string;
+        message: string;
+        source?: string;
+        source_id?: string;
+        source_name?: string;
+        metadata?: any;
+    }): Promise<SystemNotification> => {
+        const response = await apiClient.post('/notifications', data);
+        return response.data.data;
+    },
+};
