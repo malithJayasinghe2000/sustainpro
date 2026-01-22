@@ -623,7 +623,16 @@ export default function SystemSettingsPage() {
                         min={15}
                         max={1440}
                         suffix="minutes"
+                        disabled={!sessionPolicies.session_timeout_enabled}
                     />
+                </div>
+                <ToggleField
+                    label="Enable Idle Timeout"
+                    description="Automatically log out users after idle period"
+                    checked={sessionPolicies.idle_timeout_enabled}
+                    onChange={(v: boolean) => setSessionPolicies({ ...sessionPolicies, idle_timeout_enabled: v })}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <InputField
                         label="Idle Timeout"
                         type="number"
@@ -632,6 +641,7 @@ export default function SystemSettingsPage() {
                         min={5}
                         max={120}
                         suffix="minutes"
+                        disabled={!sessionPolicies.idle_timeout_enabled}
                     />
                 </div>
             </div>
@@ -695,6 +705,33 @@ export default function SystemSettingsPage() {
                     suffix="days"
                 />
             </div>
+
+            <SectionHeader
+                icon={<Shield className="w-5 h-5" />}
+                title="Session Security"
+                description="Advanced session security options"
+                color="red"
+            />
+            <div className="bg-muted/50 rounded-xl p-4 space-y-2">
+                <ToggleField
+                    label="Bind Session to IP Address"
+                    description="Invalidate session if IP address changes"
+                    checked={sessionPolicies.bind_session_to_ip}
+                    onChange={(v: boolean) => setSessionPolicies({ ...sessionPolicies, bind_session_to_ip: v })}
+                />
+                <ToggleField
+                    label="Bind Session to User Agent"
+                    description="Invalidate session if browser/device changes"
+                    checked={sessionPolicies.bind_session_to_user_agent}
+                    onChange={(v: boolean) => setSessionPolicies({ ...sessionPolicies, bind_session_to_user_agent: v })}
+                />
+                <ToggleField
+                    label="Regenerate Session on Login"
+                    description="Create new session ID on each login (recommended)"
+                    checked={sessionPolicies.regenerate_session_on_login}
+                    onChange={(v: boolean) => setSessionPolicies({ ...sessionPolicies, regenerate_session_on_login: v })}
+                />
+            </div>
         </div>
     );
 
@@ -721,7 +758,7 @@ export default function SystemSettingsPage() {
                     type="number"
                     value={loginPolicies.lockout_duration_minutes}
                     onChange={(v: number) => setLoginPolicies({ ...loginPolicies, lockout_duration_minutes: v })}
-                    min={5}
+                    min={1}
                     max={1440}
                     suffix="minutes"
                 />
@@ -749,7 +786,7 @@ export default function SystemSettingsPage() {
                         type="number"
                         value={loginPolicies.max_lockout_duration_minutes}
                         onChange={(v: number) => setLoginPolicies({ ...loginPolicies, max_lockout_duration_minutes: v })}
-                        min={60}
+                        min={1}
                         max={10080}
                         suffix="minutes"
                         disabled={!loginPolicies.progressive_lockout}
@@ -1295,10 +1332,9 @@ export default function SystemSettingsPage() {
                         label="Timezone"
                         value={notificationSettings.quiet_hours_timezone}
                         onChange={(v: string) => setNotificationSettings({ ...notificationSettings, quiet_hours_timezone: v })}
-                        options={[
-                            { value: 'Asia/Dubai', label: 'Asia/Dubai' },
-                            { value: 'UTC', label: 'UTC' },
-                        ]}
+                        options={timezoneOptions}
+                        searchable
+                        placeholder="Search timezones..."
                     />
                 </div>
                 <ToggleField
@@ -1372,9 +1408,9 @@ export default function SystemSettingsPage() {
     if (isLoading) {
         return (
             <DashboardLayout>
-                <div className="flex items-center justify-center min-h-[60vh]">
-                    <RefreshCw className="w-8 h-8 animate-spin text-primary" />
-                </div>
+                <div className="flex items-center justify-center py-20">
+                        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                    </div>
             </DashboardLayout>
         );
     }

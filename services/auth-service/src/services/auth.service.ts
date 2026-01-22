@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { UserRepository } from '../repositories/user.repository';
 import { passwordValidationService } from './password-validation.service';
+import { getLoginPolicies, getSessionPolicies, getTwoFactorConfig } from './settings.service';
 import { RefreshTokenRepository } from '../repositories/refresh-token.repository';
 import { OtpRepository, OtpPurpose } from '../repositories/otp.repository';
 import { SessionRepository } from '../repositories/session.repository';
@@ -65,6 +66,14 @@ export class AuthService {
      */
     async login(request: LoginRequest) {
         const { email, password, deviceInfo, ipAddress, userAgent } = request;
+        
+        // Fetch dynamic settings from database
+        const [loginPolicies, sessionPolicies, twoFactorConfig] = await Promise.all([
+            getLoginPolicies(),
+            getSessionPolicies(),
+            getTwoFactorConfig(),
+        ]);
+        
         const user = await this.userRepo.findByEmail(email);
 
         if (!user) {
@@ -92,13 +101,43 @@ export class AuthService {
         // Verify password
         const validPass = await argon2.verify(user.password_hash, password);
         if (!validPass) {
-            // Increment failed attempts
+            // Increment failed attempts using database settings
             const attempts = (user.failed_login_attempts || 0) + 1;
             let lockUntil: Date | undefined;
+            
+            // Use database settings for max login attempts
+            const maxAttempts = loginPolicies.max_login_attempts;
+            let lockDuration = loginPolicies.lockout_duration_minutes;
 
-            if (attempts >= config.security.maxLoginAttempts) {
-                lockUntil = new Date(Date.now() + config.security.accountLockDurationMinutes * 60000);
-                logger.warn('Account locked due to failed attempts', { userId: user.id, attempts });
+            if (attempts >= maxAttempts) {
+                // Apply progressive lockout if enabled (based on previous lock count, estimated from attempts)
+                if (loginPolicies.progressive_lockout && user.failed_login_attempts && user.failed_login_attempts >= maxAttempts) {
+                    // Estimate lockout count based on how many times user has exceeded max attempts
+                    const estimatedLockoutCount = Math.floor(user.failed_login_attempts / maxAttempts);
+                    const multiplier = loginPolicies.progressive_lockout_multiplier;
+                    const originalDuration = lockDuration;
+                    lockDuration = Math.min(
+                        lockDuration * Math.pow(multiplier, estimatedLockoutCount),
+                        loginPolicies.max_lockout_duration_minutes
+                    );
+                    logger.info('Progressive lockout applied', {
+                        originalDuration,
+                        multiplier,
+                        estimatedLockoutCount,
+                        calculatedDuration: lockDuration,
+                        maxLockoutDuration: loginPolicies.max_lockout_duration_minutes,
+                    });
+                }
+                
+                lockUntil = new Date(Date.now() + lockDuration * 60000);
+                logger.warn('Account locked due to failed attempts', { 
+                    userId: user.id, 
+                    attempts, 
+                    maxAttempts,
+                    lockDuration,
+                    lockUntil: lockUntil.toISOString(),
+                    progressiveLockoutEnabled: loginPolicies.progressive_lockout,
+                });
             }
 
             await this.userRepo.incrementFailedAttempts(user.id, lockUntil);
@@ -108,15 +147,19 @@ export class AuthService {
         // Reset failed attempts on success
         await this.userRepo.resetFailedAttempts(user.id);
 
-        // Check if 2FA is required
-        if ((user as any).two_factor_enabled || config.twoFactor.required) {
-            // Generate and send OTP for 2FA
+        // Check if 2FA is required (use database settings)
+        const requires2FA = (user as any).two_factor_enabled || 
+                           twoFactorConfig.enforce_globally || 
+                           (twoFactorConfig.enforce_for_admins && user.is_super_admin);
+                           
+        if (requires2FA && twoFactorConfig.enabled) {
+            // Generate and send OTP for 2FA using database settings
             const otpResult = await this.otpRepo.create({
                 userId: user.id,
                 purpose: 'login_2fa',
-                expiresInMinutes: config.otp.expiryMinutes,
-                codeLength: config.otp.length,
-                maxAttempts: config.otp.maxAttempts,
+                expiresInMinutes: twoFactorConfig.email_otp_expiry_minutes,
+                codeLength: twoFactorConfig.email_otp_length,
+                maxAttempts: twoFactorConfig.email_otp_max_attempts,
             });
 
             // Send OTP via notification service
@@ -126,7 +169,7 @@ export class AuthService {
                 data: {
                     code: otpResult.code,
                     purpose: 'login_2fa',
-                    expiryMinutes: config.otp.expiryMinutes,
+                    expiryMinutes: twoFactorConfig.email_otp_expiry_minutes,
                     userName: user.full_name,
                 },
                 metadata: { userId: user.id, source: 'auth-service' },
@@ -154,6 +197,9 @@ export class AuthService {
      * Complete login after password verification (and optional 2FA)
      */
     private async completeLogin(user: any, context: { deviceInfo?: string; ipAddress?: string; userAgent?: string }) {
+        // Fetch session settings from database
+        const sessionPolicies = await getSessionPolicies();
+        
         // Get roles and permissions
         const roles = await this.userRepo.getUserRoles(user.id);
         const permissions = await this.userRepo.getUserPermissions(user.id);
@@ -165,7 +211,7 @@ export class AuthService {
                 .map(r => r.event_id as string)
         )];
 
-        // Generate tokens
+        // Generate tokens using database settings
         const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
             id: user.id,
             email: user.email,
@@ -176,13 +222,17 @@ export class AuthService {
             eventIds, // Include assigned event IDs
         };
 
+        // Use database settings for token expiration
+        const tokenExpireMinutes = sessionPolicies.access_token_expire_minutes;
+        const refreshTokenExpireDays = sessionPolicies.refresh_token_expire_days;
+
         const accessToken = jwt.sign(payload, config.jwt.secret, {
-            expiresIn: `${config.jwt.tokenExpireMinutes}m`,
+            expiresIn: `${tokenExpireMinutes}m`,
         });
 
         // Generate and store refresh token securely
         const refreshTokenValue = this.generateSecureToken();
-        const refreshTokenExpiry = new Date(Date.now() + config.jwt.refreshTokenExpireDays * 24 * 60 * 60 * 1000);
+        const refreshTokenExpiry = new Date(Date.now() + refreshTokenExpireDays * 24 * 60 * 60 * 1000);
 
         const tokenRecord = await this.refreshTokenRepo.create({
             userId: user.id,
@@ -265,13 +315,47 @@ export class AuthService {
     /**
      * Refresh access token using refresh token
      */
-    async refreshToken(refreshTokenValue: string, context?: { deviceInfo?: string; ipAddress?: string }) {
+    async refreshToken(refreshTokenValue: string, context?: { deviceInfo?: string; ipAddress?: string; userAgent?: string }) {
+        // Fetch session settings from database
+        const sessionPolicies = await getSessionPolicies();
+        
         // Find the token in database
         const tokenRecord = await this.refreshTokenRepo.findValidToken(refreshTokenValue);
 
         if (!tokenRecord) {
             logger.warn('Refresh token not found or invalid');
             throw new ForbiddenError('Invalid refresh token');
+        }
+
+        // Validate session binding if enabled
+        if (sessionPolicies.bind_session_to_ip || sessionPolicies.bind_session_to_user_agent) {
+            // Check IP binding
+            if (sessionPolicies.bind_session_to_ip && tokenRecord.ip_address && context?.ipAddress) {
+                if (tokenRecord.ip_address !== context.ipAddress) {
+                    logger.warn('Session IP mismatch during token refresh', {
+                        userId: tokenRecord.user_id,
+                        originalIp: tokenRecord.ip_address,
+                        currentIp: context.ipAddress,
+                    });
+                    await this.refreshTokenRepo.revokeToken(refreshTokenValue, 'ip_mismatch');
+                    throw new ForbiddenError('Session validation failed - IP address changed');
+                }
+            }
+
+            // Check User Agent binding (with normalization for minor version changes)
+            if (sessionPolicies.bind_session_to_user_agent && tokenRecord.device_info && context?.userAgent) {
+                const normalizeUA = (ua: string) => ua.replace(/\d+\.\d+\.\d+/g, 'X.X.X');
+                const storedUA = normalizeUA(tokenRecord.device_info);
+                const currentUA = normalizeUA(context.userAgent);
+                
+                if (storedUA !== currentUA) {
+                    logger.warn('Session User Agent mismatch during token refresh', {
+                        userId: tokenRecord.user_id,
+                    });
+                    await this.refreshTokenRepo.revokeToken(refreshTokenValue, 'user_agent_mismatch');
+                    throw new ForbiddenError('Session validation failed - browser/device changed');
+                }
+            }
         }
 
         const user = await this.userRepo.findById(tokenRecord.user_id);
@@ -309,7 +393,7 @@ export class AuthService {
         };
 
         const accessToken = jwt.sign(payload, config.jwt.secret, {
-            expiresIn: `${config.jwt.tokenExpireMinutes}m`,
+            expiresIn: `${sessionPolicies.access_token_expire_minutes}m`,
         });
 
         logger.debug('Access token refreshed', { userId: user.id });
@@ -447,13 +531,16 @@ export class AuthService {
             return { success: true, message: successMessage };
         }
 
-        // Generate OTP
+        // Fetch 2FA settings for OTP configuration
+        const twoFactorConfig = await getTwoFactorConfig();
+
+        // Generate OTP using database settings
         const otpResult = await this.otpRepo.create({
             userId: user.id,
             purpose: 'password_reset',
-            expiresInMinutes: config.otp.expiryMinutes,
-            codeLength: config.otp.length,
-            maxAttempts: config.otp.maxAttempts,
+            expiresInMinutes: twoFactorConfig.email_otp_expiry_minutes,
+            codeLength: twoFactorConfig.email_otp_length,
+            maxAttempts: twoFactorConfig.email_otp_max_attempts,
         });
 
         // Send OTP via notification service
@@ -463,7 +550,7 @@ export class AuthService {
             data: {
                 code: otpResult.code,
                 purpose: 'password_reset',
-                expiryMinutes: config.otp.expiryMinutes,
+                expiryMinutes: twoFactorConfig.email_otp_expiry_minutes,
                 userName: user.full_name,
             },
             metadata: { userId: user.id, source: 'auth-service' },
@@ -521,13 +608,16 @@ export class AuthService {
             throw new BadRequestError('Email is already verified');
         }
 
-        // Generate OTP
+        // Fetch 2FA settings for OTP configuration
+        const twoFactorConfig = await getTwoFactorConfig();
+
+        // Generate OTP using database settings
         const otpResult = await this.otpRepo.create({
             userId: user.id,
             purpose: 'email_verification',
-            expiresInMinutes: config.otp.expiryMinutes,
-            codeLength: config.otp.length,
-            maxAttempts: config.otp.maxAttempts,
+            expiresInMinutes: twoFactorConfig.email_otp_expiry_minutes,
+            codeLength: twoFactorConfig.email_otp_length,
+            maxAttempts: twoFactorConfig.email_otp_max_attempts,
         });
 
         // Send OTP via notification service
@@ -537,7 +627,7 @@ export class AuthService {
             data: {
                 code: otpResult.code,
                 purpose: 'email_verification',
-                expiryMinutes: config.otp.expiryMinutes,
+                expiryMinutes: twoFactorConfig.email_otp_expiry_minutes,
                 userName: user.full_name,
             },
             metadata: { userId, source: 'auth-service' },
@@ -628,14 +718,39 @@ export class AuthService {
     /**
      * Check session validity (for session timeout)
      */
-    async validateSession(sessionId: string): Promise<boolean> {
-        if (!config.security.sessionTimeoutEnabled) {
+    async validateSession(sessionId: string, ipAddress?: string, userAgent?: string): Promise<boolean> {
+        // Fetch session settings from database
+        const sessionPolicies = await getSessionPolicies();
+        
+        // Check session binding (IP and User Agent)
+        if (sessionPolicies.bind_session_to_ip || sessionPolicies.bind_session_to_user_agent) {
+            const bindingResult = await this.sessionRepo.validateSessionBinding(
+                sessionId,
+                ipAddress || null,
+                userAgent || null,
+                sessionPolicies.bind_session_to_ip,
+                sessionPolicies.bind_session_to_user_agent
+            );
+
+            if (!bindingResult.valid) {
+                logger.warn('Session binding validation failed', {
+                    sessionId,
+                    reason: bindingResult.reason,
+                    bindToIp: sessionPolicies.bind_session_to_ip,
+                    bindToUserAgent: sessionPolicies.bind_session_to_user_agent,
+                });
+                await this.sessionRepo.deactivate(sessionId);
+                return false;
+            }
+        }
+        
+        if (!sessionPolicies.session_timeout_enabled) {
             return true;
         }
 
         const isTimedOut = await this.sessionRepo.isSessionTimedOut(
             sessionId,
-            config.security.sessionTimeoutMinutes
+            sessionPolicies.session_timeout_minutes
         );
 
         if (isTimedOut) {
