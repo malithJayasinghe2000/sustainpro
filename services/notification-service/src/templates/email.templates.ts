@@ -50,7 +50,7 @@ function getImageUrl(url: string | null | undefined): string | null {
     return `${API_GATEWAY_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-async function getSystemSettings(): Promise<{ primaryColor: string; logoUrl: string; companyName: string; supportEmail: string }> {
+export async function getSystemSettings(): Promise<{ primaryColor: string; logoUrl: string; companyName: string; supportEmail: string }> {
     const now = Date.now();
 
     // Default logo is strictly from frontend
