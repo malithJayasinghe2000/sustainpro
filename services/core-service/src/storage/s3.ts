@@ -3,6 +3,8 @@ import {
     PutObjectCommand,
     DeleteObjectCommand,
     HeadObjectCommand,
+    ListBucketsCommand,
+    HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { config } from '../config';
 import { createLogger } from '@sustainpro/shared-utils';
@@ -57,6 +59,53 @@ export const isS3Configured = (): boolean => {
     // AWS access keys start with 'AKIA' for long-term or 'ASIA' for temporary
     const validKeyPattern = /^(AKIA|ASIA)[A-Z0-9]{16}$/;
     return validKeyPattern.test(accessKeyId);
+};
+
+/**
+ * Get S3 storage status for health checks
+ */
+export const getS3Status = async (): Promise<{
+    configured: boolean;
+    connected: boolean;
+    bucket: string;
+    region: string;
+    error?: string;
+}> => {
+    const status = {
+        configured: isS3Configured(),
+        connected: false,
+        bucket: config.aws.s3Bucket,
+        region: config.aws.region,
+    };
+
+    if (!status.configured) {
+        return { ...status, error: 'S3 credentials not configured' };
+    }
+
+    const client = getS3Client();
+    if (!client) {
+        return { ...status, error: 'Failed to create S3 client' };
+    }
+
+    try {
+        // Check bucket access
+        await client.send(new HeadBucketCommand({
+            Bucket: config.aws.s3Bucket,
+        }));
+        status.connected = true;
+        logger.info('S3 bucket accessible', { bucket: config.aws.s3Bucket });
+    } catch (error: any) {
+        const errorMessage = error.name === 'NotFound' 
+            ? `Bucket "${config.aws.s3Bucket}" not found`
+            : error.name === 'Forbidden'
+            ? 'Access denied - check IAM permissions'
+            : error.message || 'Unknown error';
+        
+        logger.error('S3 connection failed', { error: errorMessage });
+        return { ...status, error: errorMessage };
+    }
+
+    return status;
 };
 
 /**

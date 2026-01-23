@@ -31,6 +31,7 @@ import deviceRoutes from './routes/device.routes';
 import deviceModelRoutes from './routes/device-model.routes';
 import auditLogRoutes from './routes/audit-log.routes';
 import systemNotificationRoutes from './routes/system-notification.routes';
+import { getS3Status, isS3Configured } from './storage/s3';
 
 const logger = createLogger({ service: 'core-service' });
 
@@ -130,6 +131,29 @@ app.use('/api/v1/notifications', authenticateToken, systemNotificationRoutes);
 
 
 // Admin routes - Super Admin only
+
+// S3 Storage status endpoint
+app.get('/api/v1/admin/storage-status', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const s3Status = await getS3Status();
+        res.json({
+            success: true,
+            data: {
+                provider: s3Status.configured ? 's3' : 'local',
+                s3: s3Status,
+                message: s3Status.configured 
+                    ? (s3Status.connected ? 'S3 storage is active and connected' : `S3 configured but not connected: ${s3Status.error}`)
+                    : 'Using local storage (S3 not configured)',
+            },
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to check storage status',
+        });
+    }
+});
+
 app.get('/api/v1/admin/system-health', authenticateToken, requireRole('SUPER_ADMIN'), (req, res) => {
     const cpus = os.cpus();
     const totalMemory = os.totalmem();
