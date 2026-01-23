@@ -14,9 +14,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 import Modal from '@/components/Modal';
-import dynamic from 'next/dynamic';
-
-const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
+import GoogleMap from '@/components/GoogleMap';
 
 
 
@@ -647,7 +645,7 @@ export default function EventDetailPage() {
 
                             {/* Right Side: Interactive Map */}
                             <div className="lg:col-span-2 h-full rounded-xl overflow-hidden border border-border bg-muted/10 relative shadow-sm">
-                                <LeafletMap
+                                <GoogleMap
                                     lat={Number(event.coordinates?.lat) || 25.2048}
                                     lng={Number(event.coordinates?.lng) || 55.2708}
                                     className="h-full w-full"
@@ -1060,7 +1058,7 @@ export default function EventDetailPage() {
                                     Location Map
                                 </h3>
                                 <div className="rounded-lg overflow-hidden border border-border bg-muted/30 h-[400px] relative">
-                                    <LeafletMap
+                                    <GoogleMap
                                         lat={formData.coordinates?.lat}
                                         lng={formData.coordinates?.lng}
                                         onLocationSelect={canUpdate ? handleLocationSelect : undefined}
@@ -1219,8 +1217,8 @@ export default function EventDetailPage() {
                                     <Clock className="w-6 h-6 text-orange-900 dark:text-orange-900" />
                                 </div>
                                 <div>
-                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100">Request to End Event</h4>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                    <h4 className="font-semibold text-black dark:text-black">Request to End Event</h4>
+                                    <p className="text-sm text-black dark:text-black mt-1">
                                         As an Event Manager, you can request to end this event. The organization administrators will be notified and can approve your request.
                                     </p>
                                 </div>

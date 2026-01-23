@@ -191,4 +191,53 @@ export class SessionRepository {
 
         return records as SessionRecord[];
     }
+
+    /**
+     * Validate session binding (IP and User Agent)
+     * Returns { valid: boolean, reason?: string }
+     */
+    async validateSessionBinding(
+        sessionId: string,
+        currentIp: string | null,
+        currentUserAgent: string | null,
+        bindToIp: boolean,
+        bindToUserAgent: boolean
+    ): Promise<{ valid: boolean; reason?: string }> {
+        const session = await this.findById(sessionId);
+
+        if (!session) {
+            return { valid: false, reason: 'Session not found' };
+        }
+
+        if (!session.is_active) {
+            return { valid: false, reason: 'Session is inactive' };
+        }
+
+        // Check IP binding
+        if (bindToIp && session.ip_address && currentIp) {
+            if (session.ip_address !== currentIp) {
+                return { 
+                    valid: false, 
+                    reason: 'Session IP mismatch - session may have been hijacked' 
+                };
+            }
+        }
+
+        // Check User Agent binding
+        if (bindToUserAgent && session.user_agent && currentUserAgent) {
+            // Normalize user agents for comparison (remove minor version differences)
+            const normalizeUA = (ua: string) => ua.replace(/\d+\.\d+\.\d+/g, 'X.X.X');
+            const storedUA = normalizeUA(session.user_agent);
+            const currentUA = normalizeUA(currentUserAgent);
+            
+            if (storedUA !== currentUA) {
+                return { 
+                    valid: false, 
+                    reason: 'Session browser/device mismatch' 
+                };
+            }
+        }
+
+        return { valid: true };
+    }
 }

@@ -60,6 +60,51 @@ router.get('/by-service/:serviceId', deviceController.getByService);
 
 /**
  * @swagger
+ * /devices/register:
+ *   post:
+ *     tags: [Devices]
+ *     summary: Register device via USB provisioning
+ *     description: Register a new device or update existing device via USB provisioning workflow
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - hardware_id
+ *             properties:
+ *               hardware_id:
+ *                 type: string
+ *                 description: Hardware ID from the device
+ *               device_code:
+ *                 type: string
+ *                 description: Friendly name/code for the device
+ *               location:
+ *                 type: string
+ *                 description: Physical location of the device
+ *               service_id:
+ *                 type: string
+ *                 description: Service to assign the device to
+ *               organization_id:
+ *                 type: string
+ *                 description: Organization ID (uses user's org if not provided)
+ *     responses:
+ *       201:
+ *         description: Device registered successfully
+ *       200:
+ *         description: Device already exists, API key regenerated
+ *       400:
+ *         description: Missing required fields
+ *       403:
+ *         description: Access denied
+ */
+router.post('/register', deviceController.register);
+
+/**
+ * @swagger
  * /devices:
  *   get:
  *     tags: [Devices]

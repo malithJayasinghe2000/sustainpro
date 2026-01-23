@@ -13,6 +13,7 @@ import {
     maskSensitiveData
 } from '@sustainpro/shared-utils';
 import { publishEvent } from '../messaging/publisher';
+import { systemNotificationRepository } from '../repositories/system-notification.repository';
 
 const logger = createLogger({ service: 'core-service' });
 
@@ -503,6 +504,37 @@ export class EventService {
                 requested_at: new Date().toISOString(),
             });
 
+            // Create in-app notifications for super admins and org admins
+            try {
+                await systemNotificationRepository.notifySuperAndOrgAdmins(
+                    event.organization_id,
+                    {
+                        type: 'warning',
+                        title: 'Event End Request',
+                        message: `An event manager has requested to end the event "${event.name}" (${event.code}). Please review and approve or decline this request.`,
+                        source: 'event',
+                        source_id: id,
+                        source_name: event.name,
+                        action_url: `/events/${id}`,
+                        action_label: 'Review Request',
+                        metadata: {
+                            event_id: id,
+                            event_name: event.name,
+                            event_code: event.code,
+                            requested_by: requestedByUserId,
+                            requested_at: new Date().toISOString(),
+                        }
+                    }
+                );
+                logger.info('In-app notifications sent for event end request', { eventId: id });
+            } catch (notifError) {
+                // Don't fail the request if notification fails
+                logger.error('Failed to send in-app notifications for event end request', {
+                    eventId: id,
+                    error: notifError
+                });
+            }
+
             return updated!;
         } catch (error) {
             await auditLogger.log({
@@ -566,6 +598,36 @@ export class EventService {
                 requested_by: requestedByUserId,
                 requested_at: new Date().toISOString(),
             });
+
+            // Create in-app notifications for super admins and org admins
+            try {
+                await systemNotificationRepository.notifySuperAndOrgAdmins(
+                    event.organization_id,
+                    {
+                        type: 'critical',
+                        title: 'Event Delete Request',
+                        message: `An event manager has requested to delete the event "${event.name}" (${event.code}). Please review and approve or decline this request.`,
+                        source: 'event',
+                        source_id: id,
+                        source_name: event.name,
+                        action_url: `/events/${id}`,
+                        action_label: 'Review Request',
+                        metadata: {
+                            event_id: id,
+                            event_name: event.name,
+                            event_code: event.code,
+                            requested_by: requestedByUserId,
+                            requested_at: new Date().toISOString(),
+                        }
+                    }
+                );
+                logger.info('In-app notifications sent for event delete request', { eventId: id });
+            } catch (notifError) {
+                logger.error('Failed to send in-app notifications for event delete request', {
+                    eventId: id,
+                    error: notifError
+                });
+            }
 
             return updated!;
         } catch (error) {

@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { departmentServicesApi, devicesApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import ProvisioningModal from '@/components/provisioning/ProvisioningModal';
+import WidgetRenderer from '@/components/dashboard/WidgetRenderer';
+import { WidgetConfig } from '@/types/dashboard';
 import {
     ArrowLeft,
     Plus,
@@ -16,7 +18,10 @@ import {
     CheckCircle,
     Copy,
     Cpu,
-    Usb
+    Usb,
+    LayoutDashboard,
+    Settings,
+    AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -32,6 +37,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     const [assignedDevices, setAssignedDevices] = useState<any[]>([]);
     const [availableDevices, setAvailableDevices] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [aggregatedData, setAggregatedData] = useState<Record<string, any>>({});
 
     // Modals
     const [showAddDeviceModal, setShowAddDeviceModal] = useState(false);
@@ -63,6 +69,14 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                     };
                 }
                 return device;
+            }));
+
+            // Also update aggregated data for dashboard widgets
+            setAggregatedData((prev: Record<string, any>) => ({
+                ...prev,
+                ...payload.data,
+                status: 'ONLINE',
+                last_seen: payload.timestamp || new Date().toISOString()
             }));
         };
 
@@ -97,6 +111,12 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             ]);
 
             setServiceInstance(instanceData);
+            
+            // Debug: Log the dashboard layout to understand what's being returned
+            console.log('🔍 DEBUG: Service Instance Data:', instanceData);
+            console.log('🔍 DEBUG: main_dashboard_layout:', instanceData?.main_dashboard_layout);
+            console.log('🔍 DEBUG: widgets:', instanceData?.main_dashboard_layout?.widgets);
+            
             setAssignedDevices(Array.isArray(devicesData) ? devicesData : (devicesData?.data || []));
             setAvailableDevices(Array.isArray(allDevicesData) ? allDevicesData : (allDevicesData?.data || []));
             console.log('Loaded service instance:', instanceData);
@@ -202,39 +222,96 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                     </div>
                 </div>
 
-                {/* Service Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* Service Dashboard - Dynamic Widgets */}
+                {serviceInstance.main_dashboard_layout?.widgets?.length > 0 ? (
                     <div className="bg-card border border-border rounded-xl p-6">
-                        <p className="text-sm text-muted-foreground mb-2">Total Devices</p>
-                        <h3 className="text-2xl font-bold">
-                            {serviceInstance.active_devices || 0}
-                            <span className="text-muted-foreground text-sm font-normal ml-2">
-                                / {serviceInstance.total_devices || 0} Online
-                            </span>
-                        </h3>
+                        <div className="flex items-center gap-2 mb-4">
+                            <LayoutDashboard className="w-5 h-5 text-primary" />
+                            <h3 className="font-semibold">Service Dashboard</h3>
+                        </div>
+                        <div 
+                            className="grid gap-4"
+                            style={{
+                                gridTemplateColumns: 'repeat(12, 1fr)',
+                                gridAutoRows: '80px'
+                            }}
+                        >
+                            {serviceInstance.main_dashboard_layout.widgets.map((widget: WidgetConfig) => (
+                                <div
+                                    key={widget.id}
+                                    style={{
+                                        gridColumn: `span ${widget.position?.w || 3}`,
+                                        gridRow: `span ${widget.position?.h || 2}`
+                                    }}
+                                >
+                                    <WidgetRenderer
+                                        widget={widget}
+                                        isPreview={false}
+                                        data={aggregatedData}
+                                    />
+                                </div>
+                            ))}
+                        </div>
                     </div>
+                ) : (
+                    /* Fallback: No Dashboard Configured */
+                    <div className="space-y-6">
+                        {/* Info Banner */}
+                        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                            <div className="flex-1">
+                                <h4 className="font-medium text-amber-800 dark:text-amber-200">No Dashboard Configured</h4>
+                                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                                    This service template doesn&apos;t have a dashboard layout configured yet. 
+                                    A Super Admin can configure the dashboard in the Service Templates section.
+                                </p>
+                                {serviceInstance.service_template_id && (
+                                    <button
+                                        onClick={() => router.push(`/admin/services/${serviceInstance.service_template_id}/dashboard`)}
+                                        className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200 hover:underline"
+                                    >
+                                        <Settings className="w-4 h-4" />
+                                        Configure Dashboard Template
+                                    </button>
+                                )}
+                            </div>
+                        </div>
 
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <p className="text-sm text-muted-foreground mb-2">Total Water Dispensed</p>
-                        <h3 className="text-2xl font-bold">
-                            {Number(serviceInstance.total_dispensed || 0).toLocaleString()} <span className="text-sm font-normal">L</span>
-                        </h3>
-                    </div>
+                        {/* Basic Stats Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div className="bg-card border border-border rounded-xl p-6">
+                                <p className="text-sm text-muted-foreground mb-2">Total Devices</p>
+                                <h3 className="text-2xl font-bold">
+                                    {serviceInstance.active_devices || 0}
+                                    <span className="text-muted-foreground text-sm font-normal ml-2">
+                                        / {serviceInstance.total_devices || 0} Online
+                                    </span>
+                                </h3>
+                            </div>
 
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <p className="text-sm text-muted-foreground mb-2">Bottles Saved</p>
-                        <h3 className="text-2xl font-bold">
-                            {Number(serviceInstance.total_bottles_saved || 0).toLocaleString()}
-                        </h3>
-                    </div>
+                            <div className="bg-card border border-border rounded-xl p-6">
+                                <p className="text-sm text-muted-foreground mb-2">Active Devices</p>
+                                <h3 className="text-2xl font-bold">
+                                    {serviceInstance.active_devices || 0}
+                                </h3>
+                            </div>
 
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <p className="text-sm text-muted-foreground mb-2">CO₂ Saved</p>
-                        <h3 className="text-2xl font-bold">
-                            {Number(serviceInstance.total_co2_saved || 0).toLocaleString()} <span className="text-sm font-normal">kg</span>
-                        </h3>
+                            <div className="bg-card border border-border rounded-xl p-6">
+                                <p className="text-sm text-muted-foreground mb-2">Status</p>
+                                <h3 className="text-2xl font-bold text-green-600">
+                                    {serviceInstance.active_devices > 0 ? 'Active' : 'Inactive'}
+                                </h3>
+                            </div>
+
+                            <div className="bg-card border border-border rounded-xl p-6">
+                                <p className="text-sm text-muted-foreground mb-2">Service Type</p>
+                                <h3 className="text-lg font-bold">
+                                    {serviceInstance.service_type || 'N/A'}
+                                </h3>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Devices Section */}
                 <div>

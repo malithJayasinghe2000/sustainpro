@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import { AuthService, LoginRequest } from '../services/auth.service';
+import { getSessionPolicies } from '../services/settings.service';
 import { config } from '../config';
 import { AppError, auditLogger, AuditCategory, AuditAction, AuditStatus } from '@sustainpro/shared-utils';
 
@@ -79,12 +80,15 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
             durationMs: Date.now() - startTime,
         });
 
-        // Set refresh token as HTTP-only cookie
+        // Fetch session settings from database for cookie expiration
+        const sessionPolicies = await getSessionPolicies();
+
+        // Set refresh token as HTTP-only cookie using database settings
         res.cookie('refresh_token', loginResult.refreshToken, {
             httpOnly: true,
             secure: config.nodeEnv === 'production',
             sameSite: 'strict',
-            maxAge: config.jwt.refreshTokenExpireDays * 24 * 60 * 60 * 1000,
+            maxAge: sessionPolicies.refresh_token_expire_days * 24 * 60 * 60 * 1000,
         });
 
         res.json({
@@ -135,12 +139,15 @@ export const verify2FA = async (req: Request, res: Response, next: NextFunction)
 
         const result = await authService.verify2FA(tempToken, code, clientInfo);
 
-        // Set refresh token as HTTP-only cookie
+        // Fetch session settings from database for cookie expiration
+        const sessionPolicies = await getSessionPolicies();
+
+        // Set refresh token as HTTP-only cookie using database settings
         res.cookie('refresh_token', result.refreshToken, {
             httpOnly: true,
             secure: config.nodeEnv === 'production',
             sameSite: 'strict',
-            maxAge: config.jwt.refreshTokenExpireDays * 24 * 60 * 60 * 1000,
+            maxAge: sessionPolicies.refresh_token_expire_days * 24 * 60 * 60 * 1000,
         });
 
         res.json({
@@ -251,7 +258,13 @@ export const refresh = async (req: Request, res: Response, next: NextFunction): 
             return;
         }
 
-        const result = await authService.refreshToken(refreshToken);
+        // Pass context for session binding validation
+        const context = {
+            ipAddress: req.ip || req.socket?.remoteAddress || '',
+            userAgent: req.headers['user-agent'] || '',
+        };
+
+        const result = await authService.refreshToken(refreshToken, context);
 
         res.json({
             success: true,

@@ -1,5 +1,6 @@
 import { createLogger } from '@sustainpro/shared-utils';
 import { emailService } from '../services/email.service';
+import { shouldSendNotification } from '../services/notification-settings.service';
 import * as templates from '../templates/email.templates';
 
 const logger = createLogger({ service: 'notification-service' });
@@ -108,6 +109,32 @@ async function handleEmailNotification(routingKey: string, payload: any): Promis
     try {
         // Determine notification type from routing key or payload
         const notificationType = payload.type || extractTypeFromRoutingKey(routingKey);
+        
+        // Determine notification category and urgency for settings check
+        let notificationCategory: 'alert' | 'report' | 'update' | 'otp' | 'security' = 'update';
+        let isUrgent = false;
+        
+        // Categorize notification types
+        if (['otp', 'email_verification', 'password_reset', 'login_2fa', 'phone_verification'].includes(notificationType)) {
+            notificationCategory = 'otp';
+        } else if (['password_changed', '2fa_enabled', '2fa_disabled'].includes(notificationType)) {
+            notificationCategory = 'security';
+        } else if (['alert', 'alert.critical', 'alert.warning', 'alert.info'].includes(notificationType)) {
+            notificationCategory = 'alert';
+            isUrgent = notificationType === 'alert.critical' || payload.alertType === 'critical';
+        }
+
+        // Check if notification should be sent based on settings
+        const sendCheck = await shouldSendNotification(notificationCategory, isUrgent);
+        if (!sendCheck.allowed) {
+            logger.info('📧 Notification skipped due to settings', {
+                type: notificationType,
+                category: notificationCategory,
+                reason: sendCheck.reason,
+                email: payload.email,
+            });
+            return true; // Return true to acknowledge message (don't retry)
+        }
 
         let result;
 

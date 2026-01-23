@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Droplet, Gauge, Thermometer, Zap, Wind, Waves, Battery, Wifi, Cpu, HardDrive, Cloud, Sun, Moon, CloudRain, AlertCircle, Leaf, Clock, Recycle, Package, PlayCircle } from 'lucide-react';
+import { Activity, Droplet, Gauge, Thermometer, Zap, Wind, Waves, Battery, Wifi, Cpu, HardDrive, Cloud, Sun, Moon, CloudRain, AlertCircle, Leaf, Clock, Recycle, Package, PlayCircle, Settings, Trash2 } from 'lucide-react';
 import { WidgetConfig } from '@/types/dashboard';
 
 // Import new widget components
@@ -144,26 +144,6 @@ export default function WidgetRenderer({
                             </div>
                         )}
                     </div>
-                    {
-                        onEdit && onDelete && !isPreview && (
-                            <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onEdit(widget.id); }}
-                                    className="p-1.5 bg-background/90 backdrop-blur-sm border border-border rounded hover:bg-muted transition-colors cursor-pointer"
-                                    title="Settings"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                </button>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onDelete(widget.id); }}
-                                    className="p-1.5 bg-background/90 backdrop-blur-sm border border-border rounded hover:bg-destructive hover:text-destructive-foreground transition-colors cursor-pointer"
-                                    title="Delete"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                                </button>
-                            </div>
-                        )
-                    }
                 </div>
             );
 
@@ -181,7 +161,7 @@ export default function WidgetRenderer({
                         {widget.children?.map((child) => (
                             <div
                                 key={child.id}
-                                className="min-h-[100px] relative group h-full"
+                                className="min-h-[100px] relative group/nested h-full"
                                 style={{ gridColumn: `span ${child.settings.colSpan || 1}` }}
                             >
                                 <WidgetRenderer
@@ -193,6 +173,25 @@ export default function WidgetRenderer({
                                     isNested={true}
                                     data={data}
                                 />
+                                {/* Nested widget action buttons */}
+                                {!isPreview && onEdit && onDelete && (
+                                    <div className="absolute -top-6 right-0 flex gap-1 z-30 opacity-0 group-hover/nested:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onEdit(child.id); }}
+                                            className="p-1 bg-background shadow-md border border-border rounded hover:bg-muted transition-colors"
+                                            title="Settings"
+                                        >
+                                            <Settings className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onDelete(child.id); }}
+                                            className="p-1 bg-background shadow-md border border-border rounded hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                                            title="Delete"
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )) || (
                                 <div className="col-span-full flex items-center justify-center text-muted-foreground text-sm border-2 border-dashed border-border rounded-lg min-h-[120px]">
@@ -200,24 +199,6 @@ export default function WidgetRenderer({
                                 </div>
                             )}
                     </div>
-                    {onEdit && onDelete && !isPreview && (
-                        <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onEdit(widget.id); }}
-                                className="p-1.5 bg-background/90 backdrop-blur-sm border border-border rounded hover:bg-muted transition-colors cursor-pointer"
-                                title="Settings"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDelete(widget.id); }}
-                                className="p-1.5 bg-background/90 backdrop-blur-sm border border-border rounded hover:bg-destructive hover:text-destructive-foreground transition-colors cursor-pointer"
-                                title="Delete"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                            </button>
-                        </div>
-                    )}
                 </div>
             );
 
@@ -356,33 +337,165 @@ export default function WidgetRenderer({
                     isPreview={isPreview}
                 >
                     {widget.children?.map((child) => (
-                        <WidgetRenderer
-                            key={child.id}
-                            widget={child}
-                            isPreview={isPreview}
-                            availableParameters={availableParameters}
-                            data={data}
-                            onEdit={onEdit}
-                            onDelete={onDelete}
-                            isNested={true}
-                        />
+                        <div key={child.id} className="relative group/nested">
+                            <WidgetRenderer
+                                widget={child}
+                                isPreview={isPreview}
+                                availableParameters={availableParameters}
+                                data={data}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
+                                isNested={true}
+                            />
+                            {/* Nested widget action buttons */}
+                            {!isPreview && onEdit && onDelete && (
+                                <div className="absolute -top-6 right-0 flex gap-1 z-30 opacity-0 group-hover/nested:opacity-100 transition-opacity">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onEdit(child.id); }}
+                                        className="p-1 bg-background shadow-md border border-border rounded hover:bg-muted transition-colors"
+                                        title="Settings"
+                                    >
+                                        <Settings className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onDelete(child.id); }}
+                                        className="p-1 bg-background shadow-md border border-border rounded hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                                        title="Delete"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     ))}
                 </BackgroundImageWidget>
             );
 
-        case 'gauge':
-        case 'counter':
-        case 'status_indicator':
+        case 'section':
+            // Section divider with label
             return (
-                <div className="h-full bg-card border border-border rounded-lg p-4 flex items-center justify-center">
-                    <span className="text-sm text-muted-foreground">{widget.title} (Preview)</span>
+                <div className="h-full flex items-center gap-4 px-2">
+                    <div className="h-px flex-1 bg-border"></div>
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                        {widget.title || 'Section'}
+                    </h3>
+                    <div className="h-px flex-1 bg-border"></div>
+                </div>
+            );
+
+        case 'transparent_parameter':
+            // Minimalist parameter display without card background
+            const transparentParam = getParameterDetails(widget.parameter_key);
+            const TransparentIcon = getSmartIcon(transparentParam || undefined);
+            return (
+                <div className="h-full flex flex-col items-center justify-center text-center p-2">
+                    <TransparentIcon className="w-8 h-8 text-primary/60 mb-2" />
+                    <div className="text-2xl font-bold">
+                        {isPreview ? '42' : (data[widget.parameter_key!] ?? '--')}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                        {transparentParam?.name || widget.title} {transparentParam?.unit ? `(${transparentParam.unit})` : ''}
+                    </div>
+                </div>
+            );
+
+        case 'table_view':
+            // Data table widget
+            return (
+                <div className="h-full bg-card border border-border rounded-lg p-4 flex flex-col">
+                    <h4 className="text-sm font-medium text-muted-foreground mb-3">{widget.title || 'Data Table'}</h4>
+                    <div className="flex-1 overflow-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-border">
+                                    <th className="text-left py-2 px-2 font-medium">Parameter</th>
+                                    <th className="text-right py-2 px-2 font-medium">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {isPreview ? (
+                                    <>
+                                        <tr className="border-b border-border/50"><td className="py-2 px-2">Temperature</td><td className="text-right py-2 px-2">25°C</td></tr>
+                                        <tr className="border-b border-border/50"><td className="py-2 px-2">Humidity</td><td className="text-right py-2 px-2">60%</td></tr>
+                                        <tr><td className="py-2 px-2">Pressure</td><td className="text-right py-2 px-2">1013 hPa</td></tr>
+                                    </>
+                                ) : (
+                                    Object.entries(data).slice(0, widget.settings.pageSize || 10).map(([key, value]) => (
+                                        <tr key={key} className="border-b border-border/50">
+                                            <td className="py-2 px-2">{key}</td>
+                                            <td className="text-right py-2 px-2">{String(value)}</td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+
+        case 'chart_table_toggle':
+            // Toggle between chart and table view
+            return (
+                <div className="h-full bg-card border border-border rounded-lg p-4 flex flex-col">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-muted-foreground">{widget.title || 'Chart/Table'}</h4>
+                        <div className="flex gap-1 bg-muted rounded-md p-0.5">
+                            <button className="px-2 py-1 text-xs rounded bg-background shadow-sm">Chart</button>
+                            <button className="px-2 py-1 text-xs rounded text-muted-foreground">Table</button>
+                        </div>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+                        {isPreview ? 'Chart/Table Preview' : 'No data available'}
+                    </div>
+                </div>
+            );
+
+        case 'gauge':
+            // Use CircularGaugeWidget for gauge type
+            return (
+                <CircularGaugeWidget
+                    widget={widget}
+                    value={isPreview ? 72 : data[widget.parameter_key!]}
+                    isPreview={isPreview}
+                />
+            );
+
+        case 'counter':
+            // Big number display with animation
+            const counterParam = getParameterDetails(widget.parameter_key);
+            const counterValue = isPreview ? 1234 : (data[widget.parameter_key!] ?? 0);
+            return (
+                <div className="h-full bg-card border border-border rounded-lg p-4 flex flex-col items-center justify-center">
+                    <div className="text-4xl font-bold tabular-nums">
+                        {widget.settings.prefix || ''}{Number(counterValue).toLocaleString()}{widget.settings.suffix || ''}
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-2">
+                        {counterParam?.name || widget.title}
+                    </div>
+                </div>
+            );
+
+        case 'status_indicator':
+            // Status badge indicator
+            const statusValue = isPreview ? 'ONLINE' : (data.status || 'UNKNOWN');
+            const statusColors: Record<string, string> = {
+                'ONLINE': 'bg-green-500',
+                'OFFLINE': 'bg-gray-400',
+                'WARNING': 'bg-amber-500',
+                'ERROR': 'bg-red-500',
+                'UNKNOWN': 'bg-gray-300'
+            };
+            return (
+                <div className="h-full bg-card border border-border rounded-lg p-4 flex items-center justify-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${statusColors[statusValue] || statusColors.UNKNOWN} animate-pulse`}></div>
+                    <span className="font-medium">{widget.title || statusValue}</span>
                 </div>
             );
 
         default:
             return (
                 <div className="h-full bg-card border border-border rounded-lg p-4 flex items-center justify-center">
-                    <span className="text-sm text-muted-foreground">Unknown widget type</span>
+                    <span className="text-sm text-muted-foreground">Unknown widget type: {widget.type}</span>
                 </div>
             );
     }

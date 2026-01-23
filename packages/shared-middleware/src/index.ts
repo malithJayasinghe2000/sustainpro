@@ -5,3 +5,4 @@ export * from './rate-limiter';
 export * from './error-handler';
 export * from './permission.middleware';
 export * from './ownership.middleware';
+export * from './maintenance.middleware';

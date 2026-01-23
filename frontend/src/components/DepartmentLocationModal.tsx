@@ -7,8 +7,7 @@ import departmentsApi from '@/lib/api'; // Ensure this path is correct based on 
 
 import dynamic from 'next/dynamic';
 
-// Dynamically import Leaflet map to avoid SSR issues
-const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
+import GoogleMap from '@/components/GoogleMap';
 
 interface DepartmentTemplate {
     id: string;
@@ -73,7 +72,7 @@ export default function DepartmentLocationModal({ isOpen, onClose, template, eve
 
                 {/* Map Area */}
                 <div className="flex-1 relative min-h-[400px]">
-                    <LeafletMap
+                    <GoogleMap
                         lat={eventLocation?.lat || 25.2048}
                         lng={eventLocation?.lng || 55.2708}
                         onLocationSelect={handleLocationSelect}

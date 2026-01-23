@@ -1,9 +1,7 @@
-version: "3.8"
-
 services:
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: sustainpro
+    container_name: sustainpro-pgadmin
     restart: unless-stopped
     ports:
       - "5050:80"
@@ -13,11 +11,11 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     networks:
-      - sustainpro-network
+      - docker_sustainpro-network
 
 volumes:
   pgadmin_data:
 
 networks:
-  sustainpro-network:
+  docker_sustainpro-network:
     external: true

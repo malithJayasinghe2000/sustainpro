@@ -17,10 +17,8 @@ import { RichSelect } from '@/components/ui/RichSelect';
 import { Textarea } from '@/components/ui/Textarea';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
-import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
-
-const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false });
+import GoogleMap from '@/components/GoogleMap';
 
 interface WizardStep {
     id: 'OVERVIEW' | 'LOCATION' | 'MANAGER' | 'REVIEW';
@@ -374,7 +372,7 @@ export default function NewEventPage() {
             <h2 className="header-section">Location & Logistics</h2>
 
             <div className="rounded-xl overflow-hidden border border-border h-[400px]">
-                <LeafletMap
+                <GoogleMap
                     key={`location-map-${currentStep}`}
                     lat={formData.coordinates?.lat}
                     lng={formData.coordinates?.lng}

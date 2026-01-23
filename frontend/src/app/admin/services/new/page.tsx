@@ -407,7 +407,7 @@ export default function NewServicePage() {
                             <div className="space-y-3">
                                 {serviceParameters.map((param, index) => (
                                     <div key={index} className="p-4 border border-border rounded-lg bg-card">
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                                             <Input
                                                 label="Parameter Key"
                                                 value={param.key}
@@ -421,27 +421,45 @@ export default function NewServicePage() {
                                                 placeholder="e.g. Total Volume"
                                             />
                                             <div>
-                                                <label className="text-xs font-medium mb-1.5 block">Data Type</label>
+                                                <label className="text-xs font-medium mb-1.5 block">Source Parameter</label>
                                                 <select
-                                                    value={param.dataType}
-                                                    onChange={(e) => updateServiceParameter(index, 'dataType', e.target.value)}
+                                                    value={param.sourceParam || ''}
+                                                    onChange={(e) => updateServiceParameter(index, 'sourceParam', e.target.value)}
                                                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                                                 >
-                                                    {DATA_TYPES.map(dt => (
-                                                        <option key={dt} value={dt}>{dt}</option>
+                                                    <option value="">Select device parameter...</option>
+                                                    {serviceDeviceModels.flatMap(sdm => {
+                                                        const model = availableDeviceModels.find(m => m.id === sdm.id);
+                                                        return (model?.parameters || []).map((p: any) => (
+                                                            <option key={`${model?.id}-${p.key}`} value={p.key}>
+                                                                {p.name || p.key} ({model?.name})
+                                                            </option>
+                                                        ));
+                                                    })}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-medium mb-1.5 block">Aggregation</label>
+                                                <select
+                                                    value={param.aggregation || 'LATEST'}
+                                                    onChange={(e) => updateServiceParameter(index, 'aggregation', e.target.value)}
+                                                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                                >
+                                                    {AGGREGATION_TYPES.map(agg => (
+                                                        <option key={agg} value={agg}>{agg}</option>
                                                     ))}
                                                 </select>
                                             </div>
                                             <div className="flex gap-2">
                                                 <div className="flex-1">
-                                                    <label className="text-xs font-medium mb-1.5 block">Aggregation</label>
+                                                    <label className="text-xs font-medium mb-1.5 block">Data Type</label>
                                                     <select
-                                                        value={param.aggregation || 'LATEST'}
-                                                        onChange={(e) => updateServiceParameter(index, 'aggregation', e.target.value)}
+                                                        value={param.dataType}
+                                                        onChange={(e) => updateServiceParameter(index, 'dataType', e.target.value)}
                                                         className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                                                     >
-                                                        {AGGREGATION_TYPES.map(agg => (
-                                                            <option key={agg} value={agg}>{agg}</option>
+                                                        {DATA_TYPES.map(dt => (
+                                                            <option key={dt} value={dt}>{dt}</option>
                                                         ))}
                                                     </select>
                                                 </div>
@@ -453,7 +471,7 @@ export default function NewServicePage() {
                                                 </button>
                                             </div>
                                         </div>
-                                        <div className="mt-3 grid grid-cols-2 gap-4">
+                                        <div className="mt-3 grid grid-cols-3 gap-4">
                                             <Input
                                                 label="Unit"
                                                 value={param.unit || ''}
@@ -466,6 +484,16 @@ export default function NewServicePage() {
                                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateServiceParameter(index, 'icon', e.target.value)}
                                                 placeholder="e.g. droplet"
                                             />
+                                            <div className="flex items-end">
+                                                <p className="text-xs text-muted-foreground pb-2">
+                                                    {param.aggregation === 'SUM' && '∑ Sum of all device values'}
+                                                    {param.aggregation === 'AVG' && 'x̄ Average of all device values'}
+                                                    {param.aggregation === 'MIN' && '↓ Minimum value across devices'}
+                                                    {param.aggregation === 'MAX' && '↑ Maximum value across devices'}
+                                                    {param.aggregation === 'COUNT' && '# Count of devices'}
+                                                    {param.aggregation === 'LATEST' && '→ Latest value from any device'}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
