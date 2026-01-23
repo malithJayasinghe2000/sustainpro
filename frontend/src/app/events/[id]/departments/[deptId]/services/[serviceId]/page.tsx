@@ -7,6 +7,7 @@ import { departmentServicesApi, devicesApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import ProvisioningModal from '@/components/provisioning/ProvisioningModal';
 import WidgetRenderer from '@/components/dashboard/WidgetRenderer';
+import DeviceTable from '@/components/devices/DeviceTable';
 import { WidgetConfig } from '@/types/dashboard';
 import {
     ArrowLeft,
@@ -322,73 +323,21 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                                 Manage devices for this service
                             </p>
                         </div>
+                        <button
+                            onClick={() => setShowAddDeviceModal(true)}
+                            className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Device
+                        </button>
                     </div>
 
-                    {assignedDevices.length === 0 ? (
-                        <div className="text-center py-16 bg-card border border-border rounded-xl">
-                            <Smartphone className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                            <p className="text-muted-foreground mb-6">No devices assigned yet.</p>
-                            <button
-                                onClick={() => setShowAddDeviceModal(true)}
-                                className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Add First Device
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {/* Device Cards */}
-                            {assignedDevices.map((device) => (
-                                <div
-                                    key={device.assignment_id || device.id}
-                                    onClick={() => router.push(`/events/${eventId}/departments/${deptId}/services/${serviceId}/devices/${device.device_id || device.id}`)}
-                                    className="bg-card border border-border rounded-xl p-6 hover:shadow-lg transition-all group relative cursor-pointer"
-                                >
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                                            <Smartphone className="w-6 h-6 text-primary" />
-                                        </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleRemoveDevice(device.device_id || device.id);
-                                            }}
-                                            className="opacity-0 group-hover:opacity-100 p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-all"
-                                            title="Remove Device"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-
-                                    <h4 className="font-bold text-lg mb-1">{device.device_name || device.name || device.device_code}</h4>
-                                    <p className="text-sm text-muted-foreground mb-4">Code: {device.device_code}</p>
-
-                                    <div className="pt-4 border-t border-border flex items-center justify-between text-xs">
-                                        <span className={`px-2 py-1 rounded-full border ${device.status === 'ONLINE'
-                                            ? 'bg-green-500/10 text-green-600 border-green-500/20'
-                                            : 'bg-gray-500/10 text-gray-500 border-gray-500/20'
-                                            }`}>
-                                            {device.status || 'OFFLINE'}
-                                        </span>
-                                        <span className="text-muted-foreground">{device.role || 'primary'}</span>
-                                    </div>
-                                </div>
-                            ))}
-
-                            {/* Add Device Card */}
-                            <button
-                                onClick={() => setShowAddDeviceModal(true)}
-                                className="border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/30 rounded-xl p-6 flex flex-col items-center justify-center text-center min-h-[240px] transition-all group"
-                            >
-                                <div className="w-12 h-12 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center mb-4 transition-colors">
-                                    <Plus className="w-6 h-6 text-muted-foreground group-hover:text-primary" />
-                                </div>
-                                <h4 className="font-medium mb-1">Add Device</h4>
-                                <p className="text-xs text-muted-foreground">Assign a device</p>
-                            </button>
-                        </div>
-                    )}
+                    <DeviceTable
+                        serviceId={serviceId}
+                        eventId={eventId}
+                        deptId={deptId}
+                        onRefresh={loadData}
+                    />
                 </div>
 
                 {/* Add Device Modal - Selection Type */}
