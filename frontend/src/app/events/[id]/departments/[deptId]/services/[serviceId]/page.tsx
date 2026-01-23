@@ -119,6 +119,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             
             setAssignedDevices(Array.isArray(devicesData) ? devicesData : (devicesData?.data || []));
             setAvailableDevices(Array.isArray(allDevicesData) ? allDevicesData : (allDevicesData?.data || []));
+            console.log('Loaded service instance:', instanceData);
         } catch (error) {
             console.error('Failed to load service instance:', error);
             toast.error('Failed to load service instance');
@@ -491,6 +492,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                 )}
 
                 {/* Provisioning Modal */}
+               
                 {showProvisioningModal && (
                     <ProvisioningModal
                         visible={showProvisioningModal}
@@ -501,6 +503,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                         currentServiceId={serviceId}
                         currentOrganizationId={serviceInstance?.organization_id}
                         currentServiceType={serviceInstance?.service_type || 'waterwall'}
+                        currentServiceName={serviceInstance?.service_name || 'Waterwall'}
                     />
                 )}
             </div>

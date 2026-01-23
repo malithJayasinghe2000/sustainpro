@@ -37,5 +37,5 @@ echo 4. Restarting the local setup...
 call scripts\setup-local.bat
 
 echo.
-echo ✅ Fix attempt complete.
+echo  Fix attempt complete.
 pause

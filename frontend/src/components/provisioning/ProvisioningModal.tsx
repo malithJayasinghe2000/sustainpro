@@ -13,10 +13,11 @@ interface IProvisioningModalProps {
     currentServiceType?: string; // e.g. 'waterwall'
     currentServiceId?: string;
     currentOrganizationId?: string;
+    currentServiceName?: string;
 }
 
 const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
-    visible, onClose, currentServiceType = 'waterwall', currentServiceId, currentOrganizationId
+    visible, onClose, currentServiceType = 'waterwall', currentServiceId, currentOrganizationId, currentServiceName 
 }) => {
     const { isConnected, requestPort, sendCommand, logs, identity } = useWebSerial();
     const [currentStep, setCurrentStep] = useState(0);
@@ -59,6 +60,7 @@ const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
                     sendCommand('admin:identify');
                 } else {
                     clearInterval(interval);
+                    console.log('Device Identity Received:', identity);
                     verifyIdentity(identity);
                 }
             }, 1000);
@@ -67,8 +69,8 @@ const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
     }, [isConnected, identity]);
 
     const verifyIdentity = (id: SerialDeviceIdentity) => {
-        if (id.type !== currentServiceType) {
-            message.error(`Type Mismatch! Device is '${id.type}', expected '${currentServiceType}'`);
+        if (id.type !== currentServiceName) {
+            message.error(`Type Mismatch! Device is '${id.type}', expected '${currentServiceName}'`);
             return;
         }
         message.success(`Verified: ${id.hw_id}`);
