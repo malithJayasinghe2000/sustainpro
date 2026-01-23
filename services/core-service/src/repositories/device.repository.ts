@@ -52,7 +52,7 @@ export class DeviceRepository {
                 LEFT JOIN sps_department_services ds ON d.service_id = ds.id
                 LEFT JOIN sps_service_templates s ON ds.service_template_id = s.id
                 LEFT JOIN sps_departments dept ON ds.department_id = dept.id
-                WHERE d.organization_id = ${organizationId}
+                WHERE d.organization_id = ${organizationId}::uuid
                 ORDER BY d.created_at DESC
             ` as any as Device[];
             return result;
@@ -74,6 +74,7 @@ export class DeviceRepository {
     }
 
     async findById(id: string, organizationId?: string): Promise<Device | null> {
+        const deviceId = parseInt(id);
         if (organizationId) {
             const result = await prisma.$queryRaw`
                 SELECT 
@@ -84,7 +85,7 @@ export class DeviceRepository {
                 LEFT JOIN sps_department_services ds ON d.service_id = ds.id
                 LEFT JOIN sps_service_templates s ON ds.service_template_id = s.id
                 LEFT JOIN sps_departments dept ON ds.department_id = dept.id
-                WHERE d.id = ${id} AND d.organization_id = ${organizationId}
+                WHERE d.id = ${deviceId} AND d.organization_id = ${organizationId}::uuid
             ` as any as Device[];
             return result[0] || null;
         } else {
@@ -97,7 +98,7 @@ export class DeviceRepository {
                 LEFT JOIN sps_department_services ds ON d.service_id = ds.id
                 LEFT JOIN sps_service_templates s ON ds.service_template_id = s.id
                 LEFT JOIN sps_departments dept ON ds.department_id = dept.id
-                WHERE d.id = ${id}
+                WHERE d.id = ${deviceId}
             ` as any as Device[];
             return result[0] || null;
         }
@@ -126,7 +127,7 @@ export class DeviceRepository {
              FROM sps_devices d
              LEFT JOIN sps_department_services ds ON d.service_id = ds.id
              LEFT JOIN sps_service_templates s ON ds.service_id = s.id
-             WHERE d.organization_id = ${organizationId}
+             WHERE d.organization_id = ${organizationId}::uuid
              ORDER BY d.created_at DESC
         ` as any as Device[];
         return result;
@@ -218,7 +219,7 @@ export class DeviceRepository {
                     COUNT(*) FILTER (WHERE status = 'ACTIVE') as active,
                     COUNT(*) FILTER (WHERE status = 'OFFLINE') as offline
                 FROM sps_devices
-                WHERE organization_id = ${organizationId}
+                WHERE organization_id = ${organizationId}::uuid
             ` as any;
             return {
                 total: parseInt(result[0].total),
