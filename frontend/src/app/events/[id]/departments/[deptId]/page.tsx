@@ -271,9 +271,9 @@ export default function DepartmentDetailPage({ params }: DepartmentDetailPagePro
                                         </button>
                                     </div>
 
-                                    <h4 className="font-bold text-lg mb-2">{service.name || service.service_name}</h4>
+                                    <h4 className="font-bold text-lg mb-2">{service.sps_service_templates?.name || service.service_name}</h4>
                                     <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-                                        {service.description || 'No description'}
+                                        {service.sps_service_templates?.description || 'No description'}
                                     </p>
 
                                     <div className="pt-4 border-t border-border flex items-center justify-between text-xs">

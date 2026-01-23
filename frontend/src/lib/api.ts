@@ -636,9 +636,16 @@ export const departmentServicesApi = {
         return response.data.data;
     },
 
-    getDevices: async (id: string) => {
-        const response = await apiClient.get(`/department-services/${id}/devices`);
-        return response.data.data;
+    getDevices: async (id: string, params?: {
+        page?: number;
+        limit?: number;
+        search?: string;
+        status?: 'ONLINE' | 'OFFLINE';
+        sortBy?: string;
+        sortOrder?: 'asc' | 'desc';
+    }) => {
+        const response = await apiClient.get(`/department-services/${id}/devices`, { params });
+        return response.data; // Returns { success, data, pagination }
     },
 
     addDevice: async (serviceId: string, deviceId: number, role?: string) => {
