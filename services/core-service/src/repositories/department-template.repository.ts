@@ -38,13 +38,25 @@ export interface UpdateDepartmentTemplateInput {
 
 export class DepartmentTemplateRepository {
     async findAll(organizationId?: string): Promise<DepartmentTemplate[]> {
-        const result = await prisma.$queryRaw`
-            SELECT * FROM sps_department_templates 
-             WHERE (organization_id IS NULL OR organization_id = ${organizationId || null}) 
-             AND is_active = true 
-             ORDER BY organization_id NULLS FIRST, name ASC
-        ` as any as DepartmentTemplate[];
-        return result;
+        // If organizationId is provided, get global templates + org-specific templates
+        // If not provided, get only global templates
+        if (organizationId) {
+            const result = await prisma.$queryRaw`
+                SELECT * FROM sps_department_templates 
+                WHERE (organization_id IS NULL OR organization_id = ${organizationId}::uuid) 
+                AND is_active = true 
+                ORDER BY organization_id NULLS FIRST, name ASC
+            ` as any as DepartmentTemplate[];
+            return result;
+        } else {
+            const result = await prisma.$queryRaw`
+                SELECT * FROM sps_department_templates 
+                WHERE organization_id IS NULL 
+                AND is_active = true 
+                ORDER BY name ASC
+            ` as any as DepartmentTemplate[];
+            return result;
+        }
     }
 
     async findById(id: string): Promise<DepartmentTemplate | null> {

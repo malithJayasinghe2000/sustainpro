@@ -1,12 +1,16 @@
 import { config } from '../config';
+import { getPrismaClient } from '@sustainpro/shared-database';
+
+const prisma = getPrismaClient();
 
 /**
- * Email Template Generator
- * Matches SustainPro Dashboard UI Design Pattern
- * - Clean white cards with borders
- * - Icon containers with colored backgrounds (matching profile page)
- * - Section-based layout
- * - Professional typography
+ * Clean, Professional Email Template
+ * Matches Akkio design:
+ * - Simple white card
+ * - Blue top accent line
+ * - Clean typography
+ * - No colored inner boxes
+ * - Divider line before footer
  */
 
 interface BaseTemplateData {
@@ -16,92 +20,156 @@ interface BaseTemplateData {
     logoUrl?: string;
 }
 
-// System Colors (matches globals.css / dashboard)
-const COLORS = {
-    background: '#f8fafc',      // Page background
-    card: '#ffffff',            // Card background
-    border: '#e2e8f0',          // Border color
-    primary: '#004737',         // Primary brand (teal)
-    primaryLight: '#e6f2ef',    // Primary background (10% opacity equivalent)
-    foreground: '#0f172a',      // Main text
-    muted: '#64748b',           // Secondary text
-    mutedBg: '#f1f5f9',         // Muted background
-    success: '#16a34a',
-    successLight: '#f0fdf4',
-    successBorder: '#bbf7d0',
-    warning: '#d97706',
-    warningLight: '#fffbeb',
-    warningBorder: '#fde68a',
-    error: '#dc2626',
-    errorLight: '#fef2f2',
-    errorBorder: '#fecaca',
-    info: '#2563eb',
-    infoLight: '#eff6ff',
-    infoBorder: '#bfdbfe',
-};
+// System settings cache
+let cachedSettings: { primaryColor: string; logoUrl: string; companyName: string; supportEmail: string } | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 60 * 1000;
 
-// Base HTML template - matches dashboard card layout
-const baseHtmlTemplate = (content: string, data: BaseTemplateData = {}): string => {
-    const companyName = data.companyName || config.templates.companyName;
-    const supportEmail = data.supportEmail || config.templates.supportEmail;
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:8080';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-    let logoUrl = data.logoUrl || config.templates.logoUrl;
-    if (logoUrl === 'https://sustainpro.io/logo.png') {
-        logoUrl = '';
+function getImageUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+
+    // If it's already a full URL, return as-is
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url;
     }
 
-    const year = new Date().getFullYear();
+    // Special case: Default "logo.png" lives in frontend public folder
+    if (url === 'logo.png' || url === '/logo.png') {
+        return `${FRONTEND_URL}/logo.png`;
+    }
+
+    // If it's a relative API path, prefix with API gateway
+    if (url.startsWith('/api/')) {
+        return `${API_GATEWAY_URL}${url}`;
+    }
+
+    // For other relative paths (uploads), use the API gateway
+    return `${API_GATEWAY_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+async function getSystemSettings(): Promise<{ primaryColor: string; logoUrl: string; companyName: string; supportEmail: string }> {
+    const now = Date.now();
+
+    // Default logo is strictly from frontend
+    const defaultLogoUrl = `${FRONTEND_URL}/logo.png`;
+
+    const defaults = {
+        primaryColor: '#2563EB', // Akkio blue
+        logoUrl: defaultLogoUrl,
+        companyName: config.templates.companyName || 'SustainPro',
+        supportEmail: config.templates.supportEmail || 'support@sustainpro.io'
+    };
+
+    if (cachedSettings && (now - cacheTimestamp) < CACHE_TTL_MS) {
+        return cachedSettings;
+    }
+
+    try {
+        const settings = await prisma.sps_system_settings.findUnique({ where: { id: 'sps_main_config' } });
+        if (settings) {
+            // Logic:
+            // 1. If site_logo is present, try to process it.
+            // 2. If valid logo found, use it.
+            // 3. Fallback to defaultLogoUrl.
+            let dbLogoUrl = settings.site_logo ? getImageUrl(settings.site_logo) : null;
+
+            cachedSettings = {
+                primaryColor: settings.primary_color || defaults.primaryColor,
+                logoUrl: dbLogoUrl || defaults.logoUrl,
+                companyName: settings.system_name || defaults.companyName,
+                supportEmail: settings.support_email || defaults.supportEmail
+            };
+            cacheTimestamp = now;
+            return cachedSettings;
+        }
+    } catch (error) {
+        console.log('Using default settings (DB fetch failed)');
+    }
+
+    cachedSettings = defaults;
+    cacheTimestamp = now;
+    return defaults;
+}
+
+function getSettingsSync() {
+    return cachedSettings || {
+        primaryColor: '#2563EB',
+        logoUrl: `${FRONTEND_URL}/logo.png`,
+        companyName: 'SustainPro',
+        supportEmail: 'support@sustainpro.io'
+    };
+}
+
+getSystemSettings().catch(() => { });
+
+// ============================================
+// BASE TEMPLATE
+// ============================================
+
+const baseTemplate = (content: string, data: BaseTemplateData = {}): string => {
+    const settings = getSettingsSync();
+    const companyName = data.companyName || settings.companyName;
+    const supportEmail = data.supportEmail || settings.supportEmail;
+    const primaryColor = settings.primaryColor;
+    const logoUrl = data.logoUrl || settings.logoUrl;
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${companyName}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body style="margin: 0; padding: 0; background-color: ${COLORS.background}; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.background};">
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5; color: #111827;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
         <tr>
-            <td style="padding: 32px 16px;">
-                <!-- Main Container -->
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 580px; margin: 0 auto;">
+            <td align="center">
+                
+                <!-- Main Card -->
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 4px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); overflow: hidden; text-align: left;">
                     
-                    <!-- Header Section (like breadcrumb area) -->
+                    <!-- Top Accent Bar (Thick Blue Line) -->
                     <tr>
-                        <td style="padding: 0 0 24px;">
-                            ${logoUrl
-            ? `<img src="${logoUrl}" alt="${companyName}" style="height: 32px; width: auto;">`
-            : `<span style="font-size: 18px; font-weight: 700; color: ${COLORS.foreground}; letter-spacing: -0.3px;">${companyName}</span>`
-        }
-                        </td>
+                        <td style="height: 6px; background-color: ${primaryColor}; width: 100%;"></td>
                     </tr>
                     
-                    <!-- Main Card (matches bg-card border border-border rounded-xl) -->
+                    <!-- Content Padding Container -->
                     <tr>
-                        <td>
-                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.card}; border: 1px solid ${COLORS.border}; border-radius: 12px; overflow: hidden;">
-                                <tr>
-                                    <td style="padding: 32px;">
-                                        ${content}
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                    
-                    <!-- Footer -->
-                    <tr>
-                        <td style="padding: 24px 0 0; text-align: center;">
-                            <p style="margin: 0 0 6px; font-size: 12px; color: ${COLORS.muted};">&copy; ${year} ${companyName}. All rights reserved.</p>
-                            <p style="margin: 0; font-size: 12px; color: ${COLORS.muted};">
-                                Questions? <a href="mailto:${supportEmail}" style="color: ${COLORS.primary}; text-decoration: none;">${supportEmail}</a>
+                        <td style="padding: 48px;">
+                        
+                            <!-- Logo (${logoUrl}) -->
+                            <div style="margin-bottom: 40px;">
+                                <img src="${logoUrl}" alt="${companyName}" height="32" style="display: block; max-height: 32px;" onerror="this.onerror=null; this.src='https://placehold.co/120x32?text=${companyName}'; " />
+                            </div>
+                            
+                            <!-- Dynamic Content -->
+                            ${content}
+                            
+                            <!-- Footer Divider -->
+                            <div style="margin-top: 48px; border-top: 1px solid #e5e7eb; padding-top: 24px;"></div>
+                            
+                            <!-- Footer Content -->
+                            <p style="margin: 0 0 16px 0; font-size: 14px; color: #6b7280;">
+                                Having trouble with your account? <a href="mailto:${supportEmail}" style="color: ${primaryColor}; text-decoration: none; border-bottom: 1px dotted ${primaryColor};">Contact us</a>
                             </p>
+                            
+                            <p style="margin: 0; font-size: 14px; color: #9ca3af;">
+                                Best,<br/>
+                                ~ ${companyName} team
+                            </p>
+                            
                         </td>
                     </tr>
                 </table>
+                
+                <!-- Simple Copyright -->
+                <p style="text-align: center; margin-top: 24px; font-size: 12px; color: #9ca3af;">
+                    © ${new Date().getFullYear()} ${companyName}.
+                </p>
+                
             </td>
         </tr>
     </table>
@@ -109,152 +177,107 @@ const baseHtmlTemplate = (content: string, data: BaseTemplateData = {}): string 
 </html>`;
 };
 
-// Helper: Create an icon box (matches the dashboard pattern: w-10 h-10 bg-primary/10 rounded-lg)
-const iconBox = (bgColor: string, iconSvg: string) => `
-    <td style="width: 40px; height: 40px; background-color: ${bgColor}; border-radius: 8px; text-align: center; vertical-align: middle;">
-        ${iconSvg}
-    </td>
-`;
-
-// Helper: Create a section header (matches header-section class)
-const sectionHeader = (title: string, subtitle?: string) => `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
-        <tr>
-            <td>
-                <h2 style="margin: 0; font-size: 15px; font-weight: 600; color: ${COLORS.foreground}; text-transform: uppercase; letter-spacing: 0.5px;">${title}</h2>
-                ${subtitle ? `<p style="margin: 6px 0 0; font-size: 13px; color: ${COLORS.muted};">${subtitle}</p>` : ''}
-            </td>
-        </tr>
-    </table>
-`;
-
-// Helper: Create an info row (matches the account info display)
-const infoRow = (icon: string, iconBg: string, label: string, value: string, isLast: boolean = false) => `
-    <tr>
-        <td style="padding: 16px; ${!isLast ? `border-bottom: 1px solid ${COLORS.border};` : ''}">
-            <table role="presentation" cellpadding="0" cellspacing="0">
-                <tr>
-                    ${iconBox(iconBg, icon)}
-                    <td style="padding-left: 16px; vertical-align: middle;">
-                        <p style="margin: 0; font-size: 11px; color: ${COLORS.muted}; text-transform: uppercase; letter-spacing: 0.3px;">${label}</p>
-                        <p style="margin: 4px 0 0; font-size: 14px; font-weight: 500; color: ${COLORS.foreground};">${value}</p>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-`;
-
-// SVG Icons
-const ICONS = {
-    shield: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
-    key: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>`,
-    check: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
-    alert: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`,
-    info: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`,
-    mail: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`,
-    user: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
-    clock: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-    server: (color: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>`,
+/**
+ * Primary Blue Button
+ */
+const button = (text: string, url: string): string => {
+    const settings = getSettingsSync();
+    return `
+        <div style="margin: 32px 0;">
+            <a href="${url}" style="display: inline-block; background-color: ${settings.primaryColor}; color: #ffffff; padding: 12px 24px; font-size: 15px; font-weight: 500; text-decoration: none; border-radius: 6px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+                ${text}
+            </a>
+        </div>
+    `;
 };
 
 // ============================================
-// OTP / Verification Code Templates
+// TEMPLATE FUNCTIONS
 // ============================================
 
-export interface OtpTemplateData extends BaseTemplateData {
-    code: string;
-    expiryMinutes?: number;
-    purpose: 'email_verification' | 'password_reset' | 'login_2fa' | 'phone_verification';
-}
-
-const otpConfig = {
-    email_verification: { title: 'Email Verification', subtitle: 'Verify your email address to continue' },
-    password_reset: { title: 'Password Reset', subtitle: 'Use this code to reset your password' },
-    login_2fa: { title: 'Two-Factor Authentication', subtitle: 'Complete your login with this verification code' },
-    phone_verification: { title: 'Phone Verification', subtitle: 'Verify your phone number' },
-};
-
-export const generateOtpEmailHtml = (data: OtpTemplateData): string => {
-    const purpose = data.purpose && otpConfig[data.purpose] ? data.purpose : 'login_2fa';
-    const cfg = otpConfig[purpose];
-    const expiryMinutes = data.expiryMinutes || config.templates.otpExpiryMinutes;
+// 1. WELCOME EMAIL (No Info Box)
+export const generateWelcomeHtml = (data: WelcomeEmailData): string => {
+    const settings = getSettingsSync();
+    const loginUrl = data.loginUrl || `${FRONTEND_URL}/login`;
 
     const content = `
-        <!-- Section Header -->
-        ${sectionHeader(cfg.title, cfg.subtitle)}
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">Welcome to ${settings.companyName}!</h1>
         
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            ${data.recipientName ? `Hi <strong>${data.recipientName}</strong>,<br/><br/>` : ''}
+            Your account has been created${data.organizationName ? ` for ${data.organizationName}` : ''}. You are all set to start using the platform.
+        </p>
+
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+           To get started, simply click the button below to log into your dashboard.
         </p>
         
-        <!-- Code Box (matches the card section style) -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.mutedBg}; border: 1px solid ${COLORS.border}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 24px; text-align: center;">
-                    <p style="margin: 0 0 12px; font-size: 12px; color: ${COLORS.muted}; text-transform: uppercase; letter-spacing: 0.5px;">Your verification code</p>
-                    <p style="margin: 0; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: ${COLORS.primary}; font-family: 'Courier New', monospace;">${data.code}</p>
-                    <p style="margin: 16px 0 0; font-size: 13px; color: ${COLORS.muted};">
-                        Expires in <strong style="color: ${COLORS.foreground};">${expiryMinutes} minutes</strong>
-                    </p>
-                </td>
-            </tr>
-        </table>
-        
-        <!-- Warning Box (matches info box pattern from profile page) -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.warningLight}; border: 1px solid ${COLORS.warningBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(217, 119, 6, 0.15)', ICONS.alert(COLORS.warning))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #92400e;">Security Notice</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #a16207;">Never share this code with anyone. We will never ask for it.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
+        ${button('Start Using SupportPro', loginUrl)}
     `;
 
-    return baseHtmlTemplate(content, data);
+    return baseTemplate(content, data);
 };
 
-export const generateOtpEmailText = (data: OtpTemplateData): string => {
-    const purpose = data.purpose && otpConfig[data.purpose] ? data.purpose : 'login_2fa';
-    const cfg = otpConfig[purpose];
-    const expiryMinutes = data.expiryMinutes || config.templates.otpExpiryMinutes;
-    const companyName = data.companyName || config.templates.companyName;
+// 2. WELCOME WITH CREDENTIALS (Removed Colored Boxes)
+// Now displays credentials as simple text list
+export const generateWelcomeCredentialsHtml = (data: WelcomeCredentialsData): string => {
+    const content = `
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">Welcome to the team!</h1>
+        
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            ${data.recipientName ? `Hi <strong>${data.recipientName}</strong>,<br/><br/>` : ''}
+            An administrator has created your account. Here are your temporary login details:
+        </p>
+        
+        <div style="margin: 24px 0; padding: 0;">
+            <p style="margin: 0 0 8px 0; font-size: 16px; color: #374151;">
+                <strong>Email:</strong><br/>
+                <span style="font-family: monospace; color: #111827;">${data.userEmail}</span>
+            </p>
+            <p style="margin: 0; font-size: 16px; color: #374151;">
+                <strong>Temporary Password:</strong><br/>
+                <span style="font-family: monospace; color: #111827;">${data.tempPassword}</span>
+            </p>
+        </div>
 
-    return `
-${companyName} - ${cfg.title}
+        ${data.isTemporaryPassword ? `
+        <p style="margin: 0 0 24px 0; font-size: 15px; color: #6b7280; font-style: italic;">
+            Note: For security, you will be asked to set a new password when you first log in.
+        </p>` : ''}
+        
+        ${button('Log In Now', data.loginUrl)}
+    `;
 
-Hello${data.recipientName ? ` ${data.recipientName}` : ''},
-
-Your verification code: ${data.code}
-
-This code expires in ${expiryMinutes} minutes.
-
-Security: Never share this code with anyone.
-
----
-${new Date().getFullYear()} ${companyName}
-`.trim();
+    return baseTemplate(content, data);
 };
 
-// ============================================
-// Password Changed Notification
-// ============================================
+// 3. OTP / VERIFICATION (Simple Text Code)
+export const generateOtpEmailHtml = (data: OtpTemplateData): string => {
+    const title = otpTitles[data.purpose] || 'Verification Code';
+    const settings = getSettingsSync();
 
-export interface PasswordChangedData extends BaseTemplateData {
-    changedAt?: Date;
-    ipAddress?: string;
-    userAgent?: string;
-}
+    const content = `
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">${title}</h1>
+        
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            Use the verification code below to complete your action:
+        </p>
+        
+        <div style="margin: 32px 0;">
+            <span style="font-size: 36px; font-weight: 700; letter-spacing: 4px; color: ${settings.primaryColor}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                ${data.code}
+            </span>
+        </div>
+        
+        <p style="margin: 0 0 0 0; font-size: 15px; color: #6b7280;">
+            This code will expire in ${data.expiryMinutes || 10} minutes. If you didn't request this code, you can ignore this email.
+        </p>
+    `;
 
+    return baseTemplate(content, data);
+};
+
+// 4. PASSWORD CHANGED
 export const generatePasswordChangedHtml = (data: PasswordChangedData): string => {
     const changedAt = (data.changedAt || new Date()).toLocaleString('en-US', {
         dateStyle: 'medium',
@@ -262,641 +285,162 @@ export const generatePasswordChangedHtml = (data: PasswordChangedData): string =
     });
 
     const content = `
-        <!-- Section Header -->
-        ${sectionHeader('Password Changed', 'Your account password has been updated')}
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">Security Update</h1>
         
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            ${data.recipientName ? `Hi <strong>${data.recipientName}</strong>,<br/><br/>` : ''}
+            Your account password was successfully changed on <strong>${changedAt}</strong>.
         </p>
         
-        <!-- Success Box -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 16px; background-color: ${COLORS.successLight}; border: 1px solid ${COLORS.successBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(22, 163, 74, 0.15)', ICONS.check(COLORS.success))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #166534;">Password updated successfully</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #15803d;">Changed at: ${changedAt}</p>
-                                ${data.ipAddress ? `<p style="margin: 2px 0 0; font-size: 11px; color: #16a34a;">IP: ${data.ipAddress}</p>` : ''}
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-        
-        <!-- Warning Box -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.warningLight}; border: 1px solid ${COLORS.warningBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(217, 119, 6, 0.15)', ICONS.alert(COLORS.warning))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #92400e;">Wasn't you?</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #a16207;">Contact support immediately to secure your account.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
+        <p style="margin: 0; font-size: 15px; color: #6b7280;">
+            If you did not make this change, please contact support immediately to secure your account.
+        </p>
     `;
 
-    return baseHtmlTemplate(content, data);
+    return baseTemplate(content, data);
 };
 
-export const generatePasswordChangedText = (data: PasswordChangedData): string => {
-    const changedAt = (data.changedAt || new Date()).toLocaleString();
-    const companyName = data.companyName || config.templates.companyName;
-
-    return `
-${companyName} - Password Changed
-
-Hello${data.recipientName ? ` ${data.recipientName}` : ''},
-
-Your password was changed on ${changedAt}.
-
-If this wasn't you, contact support immediately.
-
----
-${new Date().getFullYear()} ${companyName}
-`.trim();
-};
-
-// ============================================
-// 2FA Enabled/Disabled Notification
-// ============================================
-
-export interface TwoFactorStatusData extends BaseTemplateData {
-    enabled: boolean;
-    method?: string;
-}
-
+// 5. 2FA STATUS
 export const generateTwoFactorStatusHtml = (data: TwoFactorStatusData): string => {
-    const method = data.method || 'email';
-
-    const enabledContent = `
-        <!-- Section Header -->
-        ${sectionHeader('Two-Factor Authentication', 'Security settings updated')}
-        
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
-        </p>
-        
-        <!-- Status Box (Success) -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 16px; background-color: ${COLORS.successLight}; border: 1px solid ${COLORS.successBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(22, 163, 74, 0.15)', ICONS.shield(COLORS.success))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #166534;">2FA is now enabled</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #15803d;">Your account is protected with ${method} verification.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-        
-        <!-- Info Box -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.infoLight}; border: 1px solid ${COLORS.infoBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(37, 99, 235, 0.15)', ICONS.info(COLORS.info))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #1e40af;">How it works</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #1d4ed8;">You'll receive a 6-digit code via email for every login. Codes expire after 10 minutes.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    `;
-
-    const disabledContent = `
-        <!-- Section Header -->
-        ${sectionHeader('Two-Factor Authentication', 'Security settings updated')}
-        
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
-        </p>
-        
-        <!-- Status Box (Warning) -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 16px; background-color: ${COLORS.warningLight}; border: 1px solid ${COLORS.warningBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(217, 119, 6, 0.15)', ICONS.shield(COLORS.warning))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #92400e;">2FA has been disabled</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #a16207;">Your account is now less secure. We recommend re-enabling 2FA.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-        
-        <p style="margin: 0; font-size: 13px; color: ${COLORS.muted};">
-            If you didn't make this change, please contact support immediately.
-        </p>
-    `;
-
-    return baseHtmlTemplate(data.enabled ? enabledContent : disabledContent, data);
-};
-
-export const generateTwoFactorStatusText = (data: TwoFactorStatusData): string => {
-    const companyName = data.companyName || config.templates.companyName;
-    const status = data.enabled ? 'Enabled' : 'Disabled';
-
-    return `
-${companyName} - 2FA ${status}
-
-Hello${data.recipientName ? ` ${data.recipientName}` : ''},
-
-Two-factor authentication has been ${data.enabled ? 'enabled' : 'disabled'}.
-
-${data.enabled ? 'Your account is now more secure.' : 'Warning: Your account is less secure.'}
-
----
-${new Date().getFullYear()} ${companyName}
-`.trim();
-};
-
-// ============================================
-// Welcome Email
-// ============================================
-
-export interface WelcomeEmailData extends BaseTemplateData {
-    loginUrl?: string;
-    organizationName?: string;
-}
-
-export const generateWelcomeHtml = (data: WelcomeEmailData): string => {
-    const loginUrl = data.loginUrl || 'https://app.sustainpro.io/login';
-    const companyName = data.companyName || config.templates.companyName;
+    const title = data.enabled ? 'Two-factor Authentication Enabled' : 'Two-factor Authentication Disabled';
+    const message = data.enabled
+        ? 'Your account is now protected with an extra layer of security.'
+        : 'Two-factor authentication has been turned off on your account.';
 
     const content = `
-        <!-- Section Header -->
-        ${sectionHeader('Welcome to ' + companyName, 'Your account is ready')}
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">${title}</h1>
         
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
-        </p>
-        <p style="margin: 0 0 24px; font-size: 14px; color: ${COLORS.muted};">
-            Your account has been successfully created${data.organizationName ? ` for <strong style="color: ${COLORS.foreground};">${data.organizationName}</strong>` : ''}.
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            ${message}
         </p>
         
-        <!-- CTA Button -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
-            <tr>
-                <td>
-                    <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${COLORS.primary}; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 500; border-radius: 8px;">
-                        Access Dashboard
-                    </a>
-                </td>
-            </tr>
-        </table>
-        
-        <!-- Getting Started Box -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.infoLight}; border: 1px solid ${COLORS.infoBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(37, 99, 235, 0.15)', ICONS.info(COLORS.info))}
-                            <td style="padding-left: 16px; vertical-align: top;">
-                                <p style="margin: 0 0 8px; font-size: 13px; font-weight: 500; color: #1e40af;">Getting Started</p>
-                                <p style="margin: 0 0 4px; font-size: 12px; color: #1d4ed8;">1. Complete your profile setup</p>
-                                <p style="margin: 0 0 4px; font-size: 12px; color: #1d4ed8;">2. Enable two-factor authentication</p>
-                                <p style="margin: 0; font-size: 12px; color: #1d4ed8;">3. Explore the dashboard</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
+        <p style="margin: 0; font-size: 15px; color: #6b7280;">
+            If you didn't make this change, please contact support.
+        </p>
     `;
 
-    return baseHtmlTemplate(content, data);
+    return baseTemplate(content, data);
 };
 
-export const generateWelcomeText = (data: WelcomeEmailData): string => {
-    const companyName = data.companyName || config.templates.companyName;
-    const loginUrl = data.loginUrl || 'https://app.sustainpro.io/login';
-
-    return `
-Welcome to ${companyName}
-
-Hello${data.recipientName ? ` ${data.recipientName}` : ''},
-
-Your account has been created${data.organizationName ? ` for ${data.organizationName}` : ''}.
-
-Login: ${loginUrl}
-
-Getting Started:
-1. Complete your profile
-2. Enable 2FA
-3. Explore the dashboard
-
----
-${new Date().getFullYear()} ${companyName}
-`.trim();
-};
-
-// ============================================
-// Alert Notification
-// ============================================
-
-export interface AlertEmailData extends BaseTemplateData {
-    alertType: 'critical' | 'warning' | 'info';
-    title: string;
-    message: string;
-    deviceName?: string;
-    eventName?: string;
-    timestamp?: Date;
-    actionUrl?: string;
-}
-
+// 6. ALERT (Clean List)
 export const generateAlertHtml = (data: AlertEmailData): string => {
-    const timestamp = (data.timestamp || new Date()).toLocaleString('en-US', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    });
-
-    const alertStyles = {
-        critical: { bg: COLORS.errorLight, border: COLORS.errorBorder, color: '#991b1b', iconBg: 'rgba(220, 38, 38, 0.15)', icon: ICONS.alert(COLORS.error) },
-        warning: { bg: COLORS.warningLight, border: COLORS.warningBorder, color: '#92400e', iconBg: 'rgba(217, 119, 6, 0.15)', icon: ICONS.alert(COLORS.warning) },
-        info: { bg: COLORS.infoLight, border: COLORS.infoBorder, color: '#1e40af', iconBg: 'rgba(37, 99, 235, 0.15)', icon: ICONS.info(COLORS.info) },
-    };
-
-    const style = alertStyles[data.alertType];
-
     const content = `
-        <!-- Section Header -->
-        ${sectionHeader(data.alertType.toUpperCase() + ' Alert', data.title)}
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">${data.title}</h1>
         
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            ${data.message}
         </p>
         
-        <!-- Alert Box -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 20px; background-color: ${style.bg}; border: 1px solid ${style.border}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox(style.iconBg, style.icon)}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; color: ${style.color};">${data.message}</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
+        <div style="margin-bottom: 24px;">
+            ${data.deviceName ? `<p style="margin: 0 0 4px 0; font-size: 15px; color: #4b5563;"><strong>Device:</strong> ${data.deviceName}</p>` : ''}
+            ${data.eventName ? `<p style="margin: 0 0 4px 0; font-size: 15px; color: #4b5563;"><strong>Event:</strong> ${data.eventName}</p>` : ''}
+            <p style="margin: 0; font-size: 15px; color: #4b5563;"><strong>Time:</strong> ${(data.timestamp || new Date()).toLocaleString()}</p>
+        </div>
         
-        <!-- Details (matches info row pattern) -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.mutedBg}; border: 1px solid ${COLORS.border}; border-radius: 8px; margin: 0 0 20px;">
-            ${data.deviceName ? infoRow(ICONS.server(COLORS.primary), COLORS.primaryLight, 'Device', data.deviceName) : ''}
-            ${data.eventName ? infoRow(ICONS.clock(COLORS.primary), COLORS.primaryLight, 'Event', data.eventName) : ''}
-            ${infoRow(ICONS.clock(COLORS.primary), COLORS.primaryLight, 'Time', timestamp, true)}
-        </table>
-        
-        ${data.actionUrl ? `
-        <!-- CTA Button -->
-        <table role="presentation" cellpadding="0" cellspacing="0">
-            <tr>
-                <td>
-                    <a href="${data.actionUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${COLORS.primary}; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 500; border-radius: 8px;">
-                        View Details
-                    </a>
-                </td>
-            </tr>
-        </table>` : ''}
+        ${data.actionUrl ? button('View Alert Details', data.actionUrl) : ''}
     `;
 
-    return baseHtmlTemplate(content, data);
+    return baseTemplate(content, data);
 };
 
-export const generateAlertText = (data: AlertEmailData): string => {
-    const companyName = data.companyName || config.templates.companyName;
-    const timestamp = (data.timestamp || new Date()).toLocaleString();
-
-    return `
-${companyName} - ${data.alertType.toUpperCase()} Alert
-
-${data.title}
-
-${data.message}
-
-${data.deviceName ? `Device: ${data.deviceName}` : ''}
-${data.eventName ? `Event: ${data.eventName}` : ''}
-Time: ${timestamp}
-
-${data.actionUrl ? `View: ${data.actionUrl}` : ''}
-
----
-${new Date().getFullYear()} ${companyName}
-`.trim();
-};
-
-// ============================================
-// Welcome Credentials Email (Admin-Created Users)
-// ============================================
-
-export interface WelcomeCredentialsData extends BaseTemplateData {
-    userName: string;
-    userEmail: string;
-    tempPassword: string;
-    loginUrl: string;
-    isTemporaryPassword: boolean;
-}
-
-export const generateWelcomeCredentialsHtml = (data: WelcomeCredentialsData): string => {
-    const content = `
-        ${sectionHeader('Welcome to the Team', 'Your account has been created')}
-        
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello <strong style="color: ${COLORS.foreground};">${data.userName}</strong>,
-        </p>
-        
-        <p style="margin: 0 0 24px; font-size: 14px; color: ${COLORS.muted}; line-height: 1.6;">
-            An administrator has created your account. Use the credentials below to access the platform.
-        </p>
-        
-        <!-- Credentials Card -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.mutedBg}; border: 1px solid ${COLORS.border}; border-radius: 8px;">
-            ${infoRow(ICONS.mail(COLORS.primary), COLORS.primaryLight, 'Email', data.userEmail, false)}
-            ${infoRow(ICONS.key(COLORS.primary), COLORS.primaryLight, 'Temporary Password', `<code style="font-family: 'Courier New', monospace; font-size: 15px; font-weight: 600; letter-spacing: 1px; color: ${COLORS.primary};">${data.tempPassword}</code>`, true)}
-        </table>
-        
-        ${data.isTemporaryPassword ? `
-        <!-- Notice Box -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.infoLight}; border: 1px solid ${COLORS.infoBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(37, 99, 235, 0.15)', ICONS.info(COLORS.info))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #1e40af;">Password Change Required</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #1d4ed8;">You will be asked to create a new password when you first log in.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-        ` : ''}
-        
-        <!-- CTA Button -->
-        <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
-            <tr>
-                <td>
-                    <a href="${data.loginUrl}" style="display: inline-block; padding: 14px 28px; background-color: ${COLORS.primary}; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px;">
-                        Log In to Your Account
-                    </a>
-                </td>
-            </tr>
-        </table>
-        
-        <!-- Security Warning -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: ${COLORS.warningLight}; border: 1px solid ${COLORS.warningBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(217, 119, 6, 0.15)', ICONS.alert(COLORS.warning))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #92400e;">Keep Your Credentials Safe</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #a16207;">Do not share your password with anyone. Delete this email after you've logged in.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    `;
-
-    return baseHtmlTemplate(content, data);
-};
-
-export const generateWelcomeCredentialsText = (data: WelcomeCredentialsData): string => {
-    const companyName = data.companyName || config.templates.companyName;
-
-    return `
-${companyName} - Welcome to the Team
-
-Hello ${data.userName},
-
-An administrator has created your account. Use the credentials below to access the platform.
-
-Email: ${data.userEmail}
-Temporary Password: ${data.tempPassword}
-
-${data.isTemporaryPassword ? 'IMPORTANT: You will be asked to create a new password when you first log in.' : ''}
-
-Log in here: ${data.loginUrl}
-
-Security: Do not share your password with anyone. Delete this email after you've logged in.
-
----
-${new Date().getFullYear()} ${companyName}
-`.trim();
-};
-
-// ============================================
-// Event End Request Notification
-// ============================================
-
-export interface EventEndRequestData extends BaseTemplateData {
-    eventName: string;
-    eventCode?: string;
-    requestedByName: string;
-    requestTime: string;
-    eventUrl: string;
-    organizationName?: string;
-}
-
+// 7. EVENT END REQUEST (Clean)
 export const generateEventEndRequestHtml = (data: EventEndRequestData): string => {
     const content = `
-        ${sectionHeader('Event End Request', 'Action Required')}
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">Event End Request</h1>
         
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            ${data.recipientName ? `Hi <strong>${data.recipientName}</strong>,<br/><br/>` : ''}
+            An event manager has requested to end the following event:
         </p>
         
-        <p style="margin: 0 0 24px; font-size: 14px; color: ${COLORS.muted}; line-height: 1.6;">
-            An event manager has requested to end the following event. Please review and take action.
-        </p>
+        <div style="margin-bottom: 24px; border-left: 3px solid #e5e7eb; padding-left: 16px;">
+            <p style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #111827;">${data.eventName}</p>
+            <p style="margin: 0 0 4px 0; font-size: 14px; color: #6b7280;">Requested by: ${data.requestedByName}</p>
+            <p style="margin: 0; font-size: 14px; color: #6b7280;">Time: ${data.requestTime}</p>
+        </div>
         
-        <!-- Event Details Card -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.mutedBg}; border: 1px solid ${COLORS.border}; border-radius: 8px;">
-            ${infoRow(ICONS.clock(COLORS.primary), COLORS.primaryLight, 'Event Name', data.eventName, false)}
-            ${data.eventCode ? infoRow(ICONS.server(COLORS.primary), COLORS.primaryLight, 'Event Code', data.eventCode, false) : ''}
-            ${infoRow(ICONS.user(COLORS.primary), COLORS.primaryLight, 'Requested By', data.requestedByName, false)}
-            ${infoRow(ICONS.clock(COLORS.warning), COLORS.warningLight, 'Request Time', data.requestTime, true)}
-        </table>
-        
-        <!-- Warning Box -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.warningLight}; border: 1px solid ${COLORS.warningBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(217, 119, 6, 0.15)', ICONS.alert(COLORS.warning))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #92400e;">Action Required</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #a16207;">Please review this request and end the event if appropriate.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-        
-        <!-- CTA Button -->
-        <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
-            <tr>
-                <td>
-                    <a href="${data.eventUrl}" style="display: inline-block; padding: 14px 28px; background-color: ${COLORS.primary}; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px;">
-                        View Event
-                    </a>
-                </td>
-            </tr>
-        </table>
+        ${button('Review Event', data.eventUrl)}
     `;
 
-    return baseHtmlTemplate(content, data);
+    return baseTemplate(content, data);
 };
 
-export const generateEventEndRequestText = (data: EventEndRequestData): string => {
-    const companyName = data.companyName || config.templates.companyName;
-
-    return `
-${companyName} - Event End Request
-
-Hello${data.recipientName ? ` ${data.recipientName}` : ''},
-
-An event manager has requested to end the following event:
-
-Event Name: ${data.eventName}
-${data.eventCode ? `Event Code: ${data.eventCode}` : ''}
-Requested By: ${data.requestedByName}
-Request Time: ${data.requestTime}
-
-Please review and take action:
-${data.eventUrl}
-
----
-${new Date().getFullYear()} ${companyName}
-`.trim();
-};
-
-// ============================================
-// Event Delete Request Notification
-// ============================================
-
-export interface EventDeleteRequestData extends BaseTemplateData {
-    eventName: string;
-    eventCode?: string;
-    requestedByName: string;
-    requestTime: string;
-    eventUrl: string;
-    organizationName?: string;
-}
-
+// 8. EVENT DELETE REQUEST (Clean)
 export const generateEventDeleteRequestHtml = (data: EventDeleteRequestData): string => {
     const content = `
-        ${sectionHeader('Event Delete Request', 'Critical Action Required')}
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">Event Delete Request</h1>
         
-        <!-- Greeting -->
-        <p style="margin: 0 0 20px; font-size: 14px; color: ${COLORS.muted};">
-            Hello${data.recipientName ? ` <strong style="color: ${COLORS.foreground};">${data.recipientName}</strong>` : ''},
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            ${data.recipientName ? `Hi <strong>${data.recipientName}</strong>,<br/><br/>` : ''}
+            An event manager has requested to delete the following event:
         </p>
         
-        <p style="margin: 0 0 24px; font-size: 14px; color: ${COLORS.muted}; line-height: 1.6;">
-            An event manager has requested to <strong>PERMANENTLY DELETE</strong> the following event.
-        </p>
+        <div style="margin-bottom: 24px; border-left: 3px solid #e5e7eb; padding-left: 16px;">
+            <p style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #111827;">${data.eventName}</p>
+            <p style="margin: 0 0 4px 0; font-size: 14px; color: #6b7280;">Requested by: ${data.requestedByName}</p>
+            <p style="margin: 0; font-size: 14px; color: #6b7280;">Time: ${data.requestTime}</p>
+        </div>
         
-        <!-- Event Details Card -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.mutedBg}; border: 1px solid ${COLORS.border}; border-radius: 8px;">
-            ${infoRow(ICONS.clock(COLORS.primary), COLORS.primaryLight, 'Event Name', data.eventName, false)}
-            ${data.eventCode ? infoRow(ICONS.server(COLORS.primary), COLORS.primaryLight, 'Event Code', data.eventCode, false) : ''}
-            ${infoRow(ICONS.user(COLORS.primary), COLORS.primaryLight, 'Requested By', data.requestedByName, false)}
-            ${infoRow(ICONS.clock(COLORS.error), COLORS.errorLight, 'Request Time', data.requestTime, true)}
-        </table>
-        
-        <!-- Warning Box -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: ${COLORS.errorLight}; border: 1px solid ${COLORS.errorBorder}; border-radius: 8px;">
-            <tr>
-                <td style="padding: 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                            ${iconBox('rgba(220, 38, 38, 0.15)', ICONS.alert(COLORS.error))}
-                            <td style="padding-left: 16px; vertical-align: middle;">
-                                <p style="margin: 0; font-size: 13px; font-weight: 500; color: #991b1b;">Irreversible Action</p>
-                                <p style="margin: 4px 0 0; font-size: 12px; color: #7f1d1d;">Deletion cannot be undone. Please ensure this is intended.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-        
-        <!-- CTA Button -->
-        <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
-            <tr>
-                <td>
-                    <a href="${data.eventUrl}" style="display: inline-block; padding: 14px 28px; background-color: ${COLORS.error}; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px;">
-                        Review Deletion Request
-                    </a>
-                </td>
-            </tr>
-        </table>
+        ${button('Review Event', data.eventUrl)}
     `;
 
-    return baseHtmlTemplate(content, data);
+    return baseTemplate(content, data);
 };
 
-export const generateEventDeleteRequestText = (data: EventDeleteRequestData): string => {
-    const companyName = data.companyName || config.templates.companyName;
+// 9. PASSWORD RESET (Clean)
+export const generatePasswordResetHtml = (data: PasswordResetData): string => {
+    const content = `
+        <h1 style="margin: 0 0 24px 0; font-size: 24px; font-weight: 600; color: #111827; letter-spacing: -0.025em;">Reset your password</h1>
+        
+        <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #374151;">
+            ${data.recipientName ? `Hi <strong>${data.recipientName}</strong>,<br/><br/>` : ''}
+            We received a request to reset your password. Click the button below to set a new one.
+        </p>
+        
+        ${button('Reset Password', data.resetUrl)}
+        
+        <p style="margin: 0; font-size: 15px; color: #6b7280;">
+            This link expires in ${data.expiryMinutes || 30} minutes. If you didn't request this, you can safely ignore this email.
+        </p>
+    `;
 
-    return `
-${companyName} - Event DELETE Request
-
-Hello${data.recipientName ? ` ${data.recipientName}` : ''},
-
-An event manager has requested to PERMANENTLY DELETE the following event:
-
-Event Name: ${data.eventName}
-${data.eventCode ? `Event Code: ${data.eventCode}` : ''}
-Requested By: ${data.requestedByName}
-Request Time: ${data.requestTime}
-
-WARNING: Deletion is irreversible.
-
-Please review and take action:
-${data.eventUrl}
-
----
-${new Date().getFullYear()} ${companyName}
-`.trim();
+    return baseTemplate(content, data);
 };
+
+// ============================================
+// TEXT VERSIONS (Unchanged - they are already simple)
+// ============================================
+
+export interface WelcomeEmailData extends BaseTemplateData { loginUrl?: string; organizationName?: string; }
+export const generateWelcomeText = (data: WelcomeEmailData) => generateSimpleText(data, 'Welcome', `Your account has been created. Login at: ${data.loginUrl || `${FRONTEND_URL}/login`}`);
+
+export interface WelcomeCredentialsData extends BaseTemplateData { userName: string; userEmail: string; tempPassword: string; loginUrl: string; isTemporaryPassword: boolean; }
+export const generateWelcomeCredentialsText = (data: WelcomeCredentialsData) => generateSimpleText(data, 'Welcome to the Team', `Your account has been created.\n\nEmail: ${data.userEmail}\nPassword: ${data.tempPassword}\n\nLogin at: ${data.loginUrl}`);
+
+export interface OtpTemplateData extends BaseTemplateData { code: string; expiryMinutes?: number; purpose: 'email_verification' | 'password_reset' | 'login_2fa' | 'phone_verification'; }
+const otpTitles = { email_verification: 'Verify Email', password_reset: 'Reset Password', login_2fa: 'Verification Code', phone_verification: 'Verify Phone' };
+export const generateOtpEmailText = (data: OtpTemplateData) => generateSimpleText(data, otpTitles[data.purpose], `Code: ${data.code}\nExpires in ${data.expiryMinutes || 10} minutes.`);
+
+export interface PasswordChangedData extends BaseTemplateData { changedAt?: Date; ipAddress?: string; userAgent?: string; }
+export const generatePasswordChangedText = (data: PasswordChangedData) => generateSimpleText(data, 'Password Changed', `Your password was changed on ${(data.changedAt || new Date()).toLocaleString()}.`);
+
+export interface TwoFactorStatusData extends BaseTemplateData { enabled: boolean; method?: string; }
+export const generateTwoFactorStatusText = (data: TwoFactorStatusData) => generateSimpleText(data, `2FA ${data.enabled ? 'Enabled' : 'Disabled'}`, `Two-factor authentication has been ${data.enabled ? 'enabled' : 'disabled'}.`);
+
+export interface AlertEmailData extends BaseTemplateData { alertType: 'critical' | 'warning' | 'info'; title: string; message: string; deviceName?: string; eventName?: string; timestamp?: Date; actionUrl?: string; }
+export const generateAlertText = (data: AlertEmailData) => generateSimpleText(data, data.title, `${data.message}\n\n${data.actionUrl ? `View: ${data.actionUrl}` : ''}`);
+
+export interface EventEndRequestData extends BaseTemplateData { eventName: string; eventCode?: string; requestedByName: string; requestTime: string; eventUrl: string; organizationName?: string; }
+export const generateEventEndRequestText = (data: EventEndRequestData) => generateSimpleText(data, 'Event End Request', `Event: ${data.eventName}\nRequested by: ${data.requestedByName}\nReview: ${data.eventUrl}`);
+
+export interface EventDeleteRequestData extends BaseTemplateData { eventName: string; eventCode?: string; requestedByName: string; requestTime: string; eventUrl: string; organizationName?: string; }
+export const generateEventDeleteRequestText = (data: EventDeleteRequestData) => generateSimpleText(data, 'Event Delete Request', `Event: ${data.eventName}\nRequested by: ${data.requestedByName}\nReview: ${data.eventUrl}`);
+
+export interface PasswordResetData extends BaseTemplateData { resetUrl: string; expiryMinutes?: number; }
+export const generatePasswordResetText = (data: PasswordResetData) => generateSimpleText(data, 'Reset Password', `Reset link: ${data.resetUrl}\nExpires in ${data.expiryMinutes || 30} minutes.`);
+
+// Text Helper
+function generateSimpleText(data: BaseTemplateData, title: string, body: string): string {
+    const settings = getSettingsSync();
+    return `${settings.companyName} - ${title}\n\n${data.recipientName ? `Hi ${data.recipientName},\n\n` : ''}${body}\n\nBest,\n~ ${settings.companyName} team`;
+}
