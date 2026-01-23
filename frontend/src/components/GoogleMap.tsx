@@ -25,7 +25,7 @@ interface GoogleMapProps {
     className?: string;
 }
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyBO4kwHCA7Iq0bGcC3pl7q7Go8MiFLIGKU'; // Provided by user
+const GOOGLE_MAPS_API_KEY = 'AIzaSyCk9z3k8cz8shoHoAt0MiHnuwnT_bGf4Ac'; // Provided by user
 
 declare global {
     interface Window {
