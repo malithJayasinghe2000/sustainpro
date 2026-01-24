@@ -112,12 +112,12 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             ]);
 
             setServiceInstance(instanceData);
-            
+
             // Debug: Log the dashboard layout to understand what's being returned
             console.log('🔍 DEBUG: Service Instance Data:', instanceData);
             console.log('🔍 DEBUG: main_dashboard_layout:', instanceData?.main_dashboard_layout);
             console.log('🔍 DEBUG: widgets:', instanceData?.main_dashboard_layout?.widgets);
-            
+
             setAssignedDevices(Array.isArray(devicesData) ? devicesData : (devicesData?.data || []));
             setAvailableDevices(Array.isArray(allDevicesData) ? allDevicesData : (allDevicesData?.data || []));
             console.log('Loaded service instance:', instanceData);
@@ -230,7 +230,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                             <LayoutDashboard className="w-5 h-5 text-primary" />
                             <h3 className="font-semibold">Service Dashboard</h3>
                         </div>
-                        <div 
+                        <div
                             className="grid gap-4"
                             style={{
                                 gridTemplateColumns: 'repeat(12, 1fr)',
@@ -258,24 +258,27 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                     /* Fallback: No Dashboard Configured */
                     <div className="space-y-6">
                         {/* Info Banner */}
-                        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-                            <div className="flex-1">
-                                <h4 className="font-medium text-amber-800 dark:text-amber-200">No Dashboard Configured</h4>
-                                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                                    This service template doesn&apos;t have a dashboard layout configured yet. 
-                                    A Super Admin can configure the dashboard in the Service Templates section.
-                                </p>
-                                {serviceInstance.service_template_id && (
-                                    <button
-                                        onClick={() => router.push(`/admin/services/${serviceInstance.service_template_id}/dashboard`)}
-                                        className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200 hover:underline"
-                                    >
-                                        <Settings className="w-4 h-4" />
-                                        Configure Dashboard Template
-                                    </button>
-                                )}
+                        <div className="bg-card border-2 border-dashed border-border rounded-xl p-4 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full bg-muted/40 flex items-center justify-center shrink-0">
+                                    <LayoutDashboard className="w-5 h-5 text-muted-foreground/70" />
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-sm">Service Dashboard Not Configured</h4>
+                                    <p className="text-muted-foreground text-xs">
+                                        The dashboard layout hasn't been configured yet.
+                                    </p>
+                                </div>
                             </div>
+                            {serviceInstance.service_template_id && (
+                                <button
+                                    onClick={() => router.push(`/admin/services/${serviceInstance.service_template_id}/dashboard`)}
+                                    className="px-3 py-1.5 bg-primary hover:bg-primary/80 text-white rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-2"
+                                >
+                                    <Settings className="w-4 h-4 text-white" />
+                                    Configure
+                                </button>
+                            )}
                         </div>
 
                         {/* Basic Stats Cards */}
@@ -441,7 +444,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                 )}
 
                 {/* Provisioning Modal */}
-               
+
                 {showProvisioningModal && (
                     <ProvisioningModal
                         visible={showProvisioningModal}

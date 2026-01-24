@@ -4,6 +4,7 @@ import { config } from './config';
 import { initSocket, getConnectedClientsCount } from './socket';
 import { createLogger, auditLogger } from '@sustainpro/shared-utils';
 import { initDatabase, closeDatabase, getPrismaClient } from '@sustainpro/shared-database';
+import { startIotSubscriber } from './iot';
 
 const logger = createLogger({ service: 'iot-service' });
 
@@ -23,6 +24,9 @@ const startServer = async () => {
 
         // Initialize Socket.IO
         const io = initSocket(server);
+
+        // Initialize AWS IoT Subscriber
+        startIotSubscriber();
 
         // Start server
         server.listen(config.port, () => {

@@ -109,11 +109,14 @@ async function handleEmailNotification(routingKey: string, payload: any): Promis
     try {
         // Determine notification type from routing key or payload
         const notificationType = payload.type || extractTypeFromRoutingKey(routingKey);
-        
+
+        // Ensure system settings (colors, logo) are up to date
+        await templates.getSystemSettings();
+
         // Determine notification category and urgency for settings check
         let notificationCategory: 'alert' | 'report' | 'update' | 'otp' | 'security' = 'update';
         let isUrgent = false;
-        
+
         // Categorize notification types
         if (['otp', 'email_verification', 'password_reset', 'login_2fa', 'phone_verification'].includes(notificationType)) {
             notificationCategory = 'otp';
