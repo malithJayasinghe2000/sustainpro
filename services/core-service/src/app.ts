@@ -110,6 +110,25 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Debug S3 status (development only - remove in production)
+if (config.nodeEnv === 'development') {
+    app.get('/debug/s3-status', async (req, res) => {
+        try {
+            const s3Status = await getS3Status();
+            res.json({
+                success: true,
+                data: s3Status,
+            });
+        } catch (error: any) {
+            res.status(500).json({
+                success: false,
+                error: error.message,
+                stack: error.stack,
+            });
+        }
+    });
+}
+
 // Static files for local uploads
 app.use('/api/v1/images/public', express.static(path.join(process.cwd(), 'uploads', 'public')));
 
