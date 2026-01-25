@@ -139,6 +139,12 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
         // Socket.IO: Listen for real-time telemetry updates
         const socket = getSocket();
 
+        socket.on('connect', () => {
+            console.log('✅ Socket connected:', socket.id);
+
+            socket.emit('subscribe:dashboard');
+        });
+
         const handleTelemetry = (payload: any) => {
             console.log('📡 Telemetry received:', payload);
 
@@ -167,7 +173,6 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                 last_seen: payload.timestamp || new Date().toISOString()
             }));
         };
-
         socket.on('dashboard:telemetry', handleTelemetry);
 
         // Offline detection: Check every 5 seconds if device is silent > 10s

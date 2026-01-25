@@ -119,7 +119,7 @@ export const emitTelemetry = (payload: TelemetryPayload): void => {
     }
 
     // Emit to dashboard
-    io.to('dashboard').emit('dashboard:telemetry', payload);
+    io.emit('dashboard:telemetry', payload);
 };
 
 /**
