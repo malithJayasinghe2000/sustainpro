@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import * as deptController from '../controllers/department.controller';
-import { requireMinRole } from '@sustainpro/shared-middleware';
+import { requirePermission, authenticateToken } from '@sustainpro/shared-middleware';
 
 const router = Router();
+
+// Get current user's assigned departments
+router.get('/my/departments', authenticateToken, deptController.getMyDepartments);
 
 /**
  * @swagger
@@ -22,7 +25,7 @@ const router = Router();
  *       200:
  *         description: Event departments
  */
-router.get('/by-event/:eventId', deptController.getByEvent);
+router.get('/by-event/:eventId', authenticateToken, requirePermission('departments.view'), deptController.getByEvent);
 
 /**
  * @swagger
@@ -42,7 +45,7 @@ router.get('/by-event/:eventId', deptController.getByEvent);
  *       200:
  *         description: Department details
  */
-router.get('/:id', deptController.getById);
+router.get('/:id', authenticateToken, deptController.getById);
 
 /**
  * @swagger
@@ -62,7 +65,7 @@ router.get('/:id', deptController.getById);
  *       200:
  *         description: Department services
  */
-router.get('/:id/services', deptController.getServices);
+router.get('/:id/services', authenticateToken, deptController.getServices);
 
 /**
  * @swagger
@@ -82,7 +85,7 @@ router.get('/:id/services', deptController.getServices);
  *       200:
  *         description: Full department with services
  */
-router.get('/:id/full', deptController.getWithServices);
+router.get('/:id/full', authenticateToken, deptController.getWithServices);
 
 /**
  * @swagger
@@ -96,7 +99,7 @@ router.get('/:id/full', deptController.getWithServices);
  *       201:
  *         description: Department created
  */
-router.post('/', requireMinRole('ORG_ADMIN'), deptController.create);
+router.post('/', requirePermission('departments.create'), deptController.create);
 
 /**
  * @swagger
@@ -116,7 +119,7 @@ router.post('/', requireMinRole('ORG_ADMIN'), deptController.create);
  *       200:
  *         description: Department updated
  */
-router.put('/:id', requireMinRole('ORG_ADMIN'), deptController.update);
+router.put('/:id', requirePermission('departments.update'), deptController.update);
 
 /**
  * @swagger
@@ -136,7 +139,7 @@ router.put('/:id', requireMinRole('ORG_ADMIN'), deptController.update);
  *       204:
  *         description: Department deleted
  */
-router.delete('/:id', requireMinRole('ORG_ADMIN'), deptController.remove);
+router.delete('/:id', requirePermission('departments.delete'), deptController.remove);
 
 /**
  * @swagger
@@ -156,7 +159,32 @@ router.delete('/:id', requireMinRole('ORG_ADMIN'), deptController.remove);
  *       200:
  *         description: Service added
  */
-router.post('/:id/services', requireMinRole('EVENT_MANAGER'), deptController.addService);
+router.post('/:id/services', requirePermission('services.assign'), deptController.addService);
+
+/**
+ * @swagger
+ * /departments/{id}/services/{serviceId}:
+ *   put:
+ *     tags: [Departments]
+ *     summary: Update service in department
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service updated
+ */
+router.put('/:id/services/:serviceId', requirePermission('services.update'), deptController.updateService);
 
 /**
  * @swagger
@@ -181,6 +209,6 @@ router.post('/:id/services', requireMinRole('EVENT_MANAGER'), deptController.add
  *       204:
  *         description: Service removed
  */
-router.delete('/:id/services/:serviceId', requireMinRole('EVENT_MANAGER'), deptController.removeService);
+router.delete('/:id/services/:serviceId', requirePermission('services.assign'), deptController.removeService);
 
 export default router;

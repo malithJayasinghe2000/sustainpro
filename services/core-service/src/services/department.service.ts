@@ -16,6 +16,13 @@ export class DepartmentService {
     }
 
     /**
+     * Get departments by user (my departments)
+     */
+    async getByUser(userId: string): Promise<Department[]> {
+        return this.repo.findByUser(userId);
+    }
+
+    /**
      * Get department by ID
      */
     async getById(id: string): Promise<Department> {

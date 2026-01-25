@@ -10,6 +10,50 @@ export interface DepartmentWithServices extends Department {
 }
 
 export class DepartmentRepository {
+    async findByUser(userId: string): Promise<DepartmentWithServices[]> {
+        const departments = await prisma.sps_departments.findMany({
+            where: {
+                OR: [
+                    { head_user_id: userId },
+                    {
+                        sps_role_assignments: {
+                            some: {
+                                user_id: userId,
+                                role: 'DEPT_HEAD'
+                            }
+                        }
+                    }
+                ]
+            },
+            include: {
+                sps_events: {
+                    select: { name: true, code: true, start_date: true, end_date: true, status: true }
+                },
+                sps_department_templates: {
+                    select: { name: true, description: true, icon: true, color: true }
+                },
+                _count: {
+                    select: {
+                        sps_department_services: true,
+                        sps_role_assignments: true
+                    }
+                }
+            },
+            orderBy: { created_at: 'desc' }
+        });
+
+        return departments.map(d => ({
+            ...d,
+            event_name: d.sps_events?.name,
+            event_start_date: d.sps_events?.start_date,
+            event_end_date: d.sps_events?.end_date,
+            event_status: d.sps_events?.status,
+            template: d.sps_department_templates,
+            services_count: d._count.sps_department_services,
+            staff_count: d._count.sps_role_assignments
+        })) as any as DepartmentWithServices[];
+    }
+
     /**
      * Get departments by event
      */
@@ -21,7 +65,10 @@ export class DepartmentRepository {
                     select: { name: true, description: true, icon: true, color: true }
                 },
                 _count: {
-                    select: { sps_department_services: true }
+                    select: {
+                        sps_department_services: true,
+                        sps_role_assignments: true
+                    }
                 }
             },
             orderBy: { created_at: 'desc' }
@@ -32,7 +79,8 @@ export class DepartmentRepository {
             // If template data exists, we can optionally use it or pass it along.
             // For now, let's keep the department's own fields primary, but you can override here if needed.
             template: d.sps_department_templates,
-            services_count: d._count.sps_department_services
+            services_count: d._count.sps_department_services,
+            staff_count: d._count.sps_role_assignments
         })) as any as DepartmentWithServices[];
     }
 
@@ -47,7 +95,10 @@ export class DepartmentRepository {
                     select: { name: true, description: true, icon: true, color: true }
                 },
                 _count: {
-                    select: { sps_department_services: true }
+                    select: {
+                        sps_department_services: true,
+                        sps_role_assignments: true
+                    }
                 }
             }
         });
@@ -57,7 +108,8 @@ export class DepartmentRepository {
         return {
             ...department,
             template: department.sps_department_templates,
-            services_count: department._count.sps_department_services
+            services_count: department._count.sps_department_services,
+            staff_count: department._count.sps_role_assignments
         } as any as DepartmentWithServices;
     }
 

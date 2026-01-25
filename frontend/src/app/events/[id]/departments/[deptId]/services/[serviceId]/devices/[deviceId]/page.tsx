@@ -88,17 +88,9 @@ export default function DeviceDashboardPage({ params }: DeviceDashboardPageProps
 
             // Parallel fetch
             const [deviceRes, serviceRes] = await Promise.all([
-                devicesApi.getById(deviceId), // We might need to implement getById or filter from getAll
+                devicesApi.getById(deviceId),
                 departmentServicesApi.getById(serviceId)
             ]);
-
-            // Load device model parameters for mapping
-            const deviceModels = await devicesApi.getAll(); // Wait, api.ts might not have getDeviceModels
-            // Actually, ServiceInstancePage doesn't have simple access to device models. 
-            // Better to use what's in serviceRes or fetch standard params.
-            // For now, let's keep it simple or fetch from serviceRes if available.
-            // But serviceRes DO HAVE device_models joined in backend services.ts but NOT in department-services.ts
-            // Let's assume we use the keys from the widget config itself or device metadata keys.
 
             setDevice(deviceRes);
             setServiceInstance(serviceRes);
@@ -112,21 +104,27 @@ export default function DeviceDashboardPage({ params }: DeviceDashboardPageProps
                 }
             }
 
-            // Load Dashboard Widgets
+            // Load Dashboard Widgets for Device Dashboard
             // Priority: 
-            // 1. Instance specific config (serviceRes.config?.dashboard?.widgets)
-            // 2. Service Template widgets (serviceRes.widgets)
-            // 3. Defaults
+            // 1. device_dashboard_layout from service template (via department service)
+            // 2. Instance specific config (serviceRes.config?.device_dashboard?.widgets)
+            // 3. Default fallback widgets
 
-            const instanceWidgets = serviceRes.config?.dashboard?.widgets;
-            const templateWidgets = serviceRes.widgets;
+            console.log('🔍 DEBUG: Service Response:', serviceRes);
+            console.log('🔍 DEBUG: device_dashboard_layout:', serviceRes?.device_dashboard_layout);
 
-            if (instanceWidgets && instanceWidgets.length > 0) {
-                setWidgets(instanceWidgets);
-            } else if (templateWidgets && templateWidgets.length > 0) {
-                setWidgets(templateWidgets);
+            const deviceDashboardWidgets = serviceRes?.device_dashboard_layout?.widgets;
+            const instanceDeviceWidgets = serviceRes?.config?.device_dashboard?.widgets;
+
+            if (deviceDashboardWidgets && deviceDashboardWidgets.length > 0) {
+                console.log('📊 Using device_dashboard_layout widgets:', deviceDashboardWidgets);
+                setWidgets(deviceDashboardWidgets);
+            } else if (instanceDeviceWidgets && instanceDeviceWidgets.length > 0) {
+                console.log('📊 Using instance device_dashboard widgets:', instanceDeviceWidgets);
+                setWidgets(instanceDeviceWidgets);
             } else {
-                // Default Widgets
+                console.log('📊 Using default device widgets');
+                // Default Widgets for device dashboard
                 setWidgets([
                     {
                         id: 'status_card',

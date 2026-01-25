@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as serviceController from '../controllers/service.controller';
-import { requireSuperAdmin, authenticateToken } from '@sustainpro/shared-middleware';
+import { requireSuperAdmin, authenticateToken, requirePermission } from '@sustainpro/shared-middleware';
 
 const router = Router();
 
@@ -10,14 +10,16 @@ const router = Router();
  *   get:
  *     tags: [Services]
  *     summary: Get service templates
- *     description: Get all service templates (Super Admin only)
+ *     description: Get all service templates
  *     security:
  *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Service templates
  */
-router.get('/', requireSuperAdmin, serviceController.getAll);
+// Requires services.view permission
+router.get('/my/services', authenticateToken, serviceController.getMyServices);
+router.get('/', requirePermission('services.view'), serviceController.getAll);
 
 /**
  * @swagger
@@ -25,7 +27,7 @@ router.get('/', requireSuperAdmin, serviceController.getAll);
  *   get:
  *     tags: [Services]
  *     summary: Get service template
- *     description: Get service template by ID (Super Admin only)
+ *     description: Get service template by ID
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -38,7 +40,7 @@ router.get('/', requireSuperAdmin, serviceController.getAll);
  *       200:
  *         description: Service template
  */
-router.get('/:id', requireSuperAdmin, serviceController.getById);
+router.get('/:id', requirePermission('services.view'), serviceController.getById);
 
 /**
  * @swagger
@@ -46,14 +48,14 @@ router.get('/:id', requireSuperAdmin, serviceController.getById);
  *   post:
  *     tags: [Services]
  *     summary: Create service template
- *     description: Create new service template (Super Admin only)
+ *     description: Create new service template
  *     security:
  *       - BearerAuth: []
  *     responses:
  *       201:
  *         description: Service created
  */
-router.post('/', requireSuperAdmin, serviceController.create);
+router.post('/', requirePermission('services.create'), serviceController.create);
 
 /**
  * @swagger
@@ -61,7 +63,7 @@ router.post('/', requireSuperAdmin, serviceController.create);
  *   put:
  *     tags: [Services]
  *     summary: Update service template
- *     description: Update service template (Super Admin only)
+ *     description: Update service template
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -74,7 +76,7 @@ router.post('/', requireSuperAdmin, serviceController.create);
  *       200:
  *         description: Service updated
  */
-router.put('/:id', requireSuperAdmin, serviceController.update);
+router.put('/:id', requirePermission('services.update'), serviceController.update);
 
 /**
  * @swagger
@@ -82,7 +84,7 @@ router.put('/:id', requireSuperAdmin, serviceController.update);
  *   delete:
  *     tags: [Services]
  *     summary: Delete service template
- *     description: Delete service template (Super Admin only)
+ *     description: Delete service template
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -95,7 +97,8 @@ router.put('/:id', requireSuperAdmin, serviceController.update);
  *       200:
  *         description: Service deleted
  */
-router.delete('/:id', requireSuperAdmin, serviceController.remove);
+router.delete('/:id', requirePermission('services.delete'), serviceController.remove);
+
 
 /**
  * @swagger

@@ -246,7 +246,7 @@ export class OrganizationRepository {
                     SELECT d.*, 
                         (SELECT COUNT(*) FROM sps_department_services ds WHERE ds.department_id = d.id)::int as services_count
                     FROM sps_departments d 
-                    WHERE d.event_id = ${event.id}
+                    WHERE d.event_id = ${event.id}::uuid
                 ` as any[];
 
                 return { ...event, departments };
@@ -303,12 +303,15 @@ export class OrganizationRepository {
 
         const services = allServices.map((s: any) => {
             const dept = allDepartments.find((d: any) => d.id === s.department_id);
+            const event = events.find((e: any) => e.id === dept?.event_id);
             return {
                 id: s.id,
-                name: s.name,
+                name: s.name || s.sps_service_templates?.name || 'Service',
                 department_id: s.department_id,
                 department_name: dept?.name,
-                definition_name: s.definition_name || s.template_name || 'Service'
+                event_id: dept?.event_id,
+                event_name: event?.name,
+                definition_name: s.sps_service_templates?.name || s.definition_name || s.template_name || 'Service'
             };
         });
 
@@ -316,7 +319,7 @@ export class OrganizationRepository {
             ...org,
             events: eventsWithDepts,
             departments: allDepartments,
-            services: servicesWithDetails,
+            services: services,
             user_count: userCount,
             device_count: deviceCount,
         };

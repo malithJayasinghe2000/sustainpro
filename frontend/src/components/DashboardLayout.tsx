@@ -111,6 +111,18 @@ export default function DashboardLayout({ children }: SidebarProps) {
     const standardItems: MenuItem[] = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', requiredPermission: 'dashboard.view' },
         {
+            name: 'Dept. Management',
+            icon: Building2,
+            path: '/departments',
+            requiredRole: ROLES.DEPT_HEAD
+        },
+        {
+            name: 'Service Management',
+            icon: Activity,
+            path: '/services',
+            requiredRole: ROLES.SERVICE_SUPERVISOR
+        },
+        {
             name: 'Event Management',
             icon: Calendar,
             path: '/events',
@@ -135,6 +147,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
             ]
         },
         { name: 'Audit Logs', icon: ScrollText, path: '/audit-logs', requiredPermission: 'audit.view' },
+
     ];
 
     let filteredMenuItems: MenuItem[] = [];

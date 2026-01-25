@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "description": "SustainPro IoT Service - Telemetry & Real-time Streaming",
     "main": "dist/server.js",
+    "type": "module",
     "scripts": {
         "dev": "nodemon src/server.ts",
         "build": "tsc",
@@ -10,25 +11,29 @@
         "clean": "rimraf dist"
     },
     "dependencies": {
+        "@sustainpro/shared-database": "*",
+        "@sustainpro/shared-middleware": "*",
+        "@sustainpro/shared-swagger": "*",
         "@sustainpro/shared-types": "*",
         "@sustainpro/shared-utils": "*",
-        "@sustainpro/shared-middleware": "*",
-        "@sustainpro/shared-database": "*",
-        "@sustainpro/shared-swagger": "*",
+        "amqplib": "^0.10.0",
+        "aws-iot-device-sdk": "^2.2.16",
+        "aws-iot-device-sdk-v2": "^1.25.0",
+        "cors": "^2.8.5",
+        "dotenv": "^17.2.0",
         "express": "^5.0.0",
         "pg": "^8.16.0",
-        "cors": "^2.8.5",
-        "socket.io": "^4.8.0",
-        "amqplib": "^0.10.0",
-        "dotenv": "^17.2.0"
+        "socket.io": "^4.8.0"
     },
     "devDependencies": {
-        "@types/express": "^5.0.0",
+        "@types/aws-iot-device-sdk": "^2.2.9",
         "@types/cors": "^2.8.0",
+        "@types/express": "^5.0.0",
         "@types/pg": "^8.15.0",
         "nodemon": "^3.1.0",
+        "rimraf": "^6.0.0",
         "ts-node": "^10.9.0",
-        "typescript": "^5.7.0",
-        "rimraf": "^6.0.0"
+        "tsx": "^4.21.0",
+        "typescript": "^5.7.0"
     }
 }

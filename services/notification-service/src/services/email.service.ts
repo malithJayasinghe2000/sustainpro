@@ -237,7 +237,7 @@ class EmailService {
         const mailOptions = {
             from: `"${this.fromName}" <${this.fromEmail}>`,
             to: Array.isArray(actualRecipient) ? actualRecipient.join(', ') : actualRecipient,
-            subject: this.testMode ? `[TEST] ${options.subject}` : options.subject,
+            subject: this.testMode ? `${options.subject}` : options.subject,
             text: options.text,
             html: options.html,
             attachments: options.attachments,

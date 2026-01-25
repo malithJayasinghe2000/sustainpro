@@ -39,6 +39,7 @@ export class EventService {
         limit?: number;
         search?: string;
         organizationId?: string;
+        allowedEventIds?: string[];
     }): Promise<{ events: Event[]; total: number; pages: number }> {
         return this.repo.findAllPaginated(params);
     }
