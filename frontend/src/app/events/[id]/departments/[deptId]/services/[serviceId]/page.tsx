@@ -10,7 +10,7 @@ import ProvisioningModal from '@/components/provisioning/ProvisioningModal';
 import WidgetRenderer from '@/components/dashboard/WidgetRenderer';
 import DeviceTable from '@/components/devices/DeviceTable';
 import { WidgetConfig } from '@/types/dashboard';
-import { hasRole, ROLES, ROLE_LABELS } from '@/lib/roles';
+import { hasRole, ROLES, ROLE_LABELS, isAdmin } from '@/lib/roles';
 import {
     ArrowLeft,
     Plus,
@@ -319,8 +319,19 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     };
 
     const handleCreateUser = () => {
-        closeUserModal(); // Reset first
-        setShowAddUserModal(true);
+        if (isAdmin(user) || user?.is_super_admin) {
+            const params = new URLSearchParams({
+                organization_id: serviceInstance?.organization_id || '',
+                event_id: eventId,
+                department_id: deptId,
+                service_id: serviceId,
+                return_url: window.location.pathname
+            });
+            router.push(`/users/new?${params.toString()}`);
+        } else {
+            closeUserModal(); // Reset first
+            setShowAddUserModal(true);
+        }
     };
 
     const handleAddExistingUser = async () => {
