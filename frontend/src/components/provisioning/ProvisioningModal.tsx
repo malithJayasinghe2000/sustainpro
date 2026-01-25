@@ -14,10 +14,12 @@ interface IProvisioningModalProps {
     currentServiceId?: string;
     currentOrganizationId?: string;
     currentServiceName?: string;
+    eventId?: string;
+    deptId?: string;
 }
 
 const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
-    visible, onClose, currentServiceType = 'waterwall', currentServiceId, currentOrganizationId, currentServiceName 
+    visible, onClose, currentServiceType = 'waterwall', currentServiceId, currentOrganizationId, currentServiceName, eventId, deptId
 }) => {
     const { isConnected, requestPort, sendCommand, logs, identity } = useWebSerial();
     const [currentStep, setCurrentStep] = useState(0);
@@ -28,6 +30,7 @@ const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
     const [wifiPass, setWifiPass] = useState('');
     const [deviceCode, setDeviceCode] = useState('');
     const [location, setLocation] = useState('');
+    const [host, setHost] = useState('a3a0yoo2557wbr-ats.iot.me-central-1.amazonaws.com');
 
     // Use Env Var for API URL
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -93,7 +96,10 @@ const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
                 device_code: deviceCode,
                 location: location,
                 service_id: currentServiceId,
-                organization_id: finalOrgId
+                organization_id: finalOrgId,
+                department_id: deptId,
+                event_id: eventId,
+                host: host
             });
 
             message.success('Device Registered in Cloud!');
@@ -116,7 +122,11 @@ const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
         const configCmd = JSON.stringify({
             ssid: wifiSSID,
             pass: wifiPass,
-            org: finalOrgId
+            org: finalOrgId,
+            host: host,
+            service_id: currentServiceId,
+            department_id: deptId,
+            event_id: eventId
         });
 
         await sendCommand(`admin:config ${configCmd}`);
@@ -134,7 +144,7 @@ const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
             open={visible}
             onCancel={onClose}
             footer={null}
-            width={600}
+            width={700}
         >
             <Steps current={currentStep} items={[
                 { title: 'Connect', icon: <UsbOutlined /> },
@@ -175,6 +185,25 @@ const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
                         style={{ marginBottom: 15 }}
                     />
 
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Organization ID</label>
+                            <Input value={finalOrgId} disabled className="bg-gray-50" />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Service ID</label>
+                            <Input value={currentServiceId} disabled className="bg-gray-50" />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Department ID</label>
+                            <Input value={deptId} disabled className="bg-gray-50" />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Event ID</label>
+                            <Input value={eventId} disabled className="bg-gray-50" />
+                        </div>
+                    </div>
+
                     <div style={{ marginBottom: 10 }}>
                         <label>Friendly Name / Device Code:</label>
                         <Input
@@ -191,6 +220,16 @@ const ProvisioningModal: React.FC<IProvisioningModalProps> = ({
                             onChange={e => setLocation(e.target.value)}
                         />
                     </div>
+
+                    <div style={{ marginBottom: 15 }}>
+                        <label>Host Endpoint:</label>
+                        <Input
+                            placeholder="IoT Endpoint"
+                            value={host}
+                            onChange={e => setHost(e.target.value)}
+                        />
+                    </div>
+
                     <Button type="primary" block onClick={handleRegister} loading={loading}>
                         Register Device
                     </Button>
