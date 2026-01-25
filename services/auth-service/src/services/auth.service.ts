@@ -66,14 +66,14 @@ export class AuthService {
      */
     async login(request: LoginRequest) {
         const { email, password, deviceInfo, ipAddress, userAgent } = request;
-        
+
         // Fetch dynamic settings from database
         const [loginPolicies, sessionPolicies, twoFactorConfig] = await Promise.all([
             getLoginPolicies(),
             getSessionPolicies(),
             getTwoFactorConfig(),
         ]);
-        
+
         const user = await this.userRepo.findByEmail(email);
 
         if (!user) {
@@ -104,7 +104,7 @@ export class AuthService {
             // Increment failed attempts using database settings
             const attempts = (user.failed_login_attempts || 0) + 1;
             let lockUntil: Date | undefined;
-            
+
             // Use database settings for max login attempts
             const maxAttempts = loginPolicies.max_login_attempts;
             let lockDuration = loginPolicies.lockout_duration_minutes;
@@ -128,11 +128,11 @@ export class AuthService {
                         maxLockoutDuration: loginPolicies.max_lockout_duration_minutes,
                     });
                 }
-                
+
                 lockUntil = new Date(Date.now() + lockDuration * 60000);
-                logger.warn('Account locked due to failed attempts', { 
-                    userId: user.id, 
-                    attempts, 
+                logger.warn('Account locked due to failed attempts', {
+                    userId: user.id,
+                    attempts,
                     maxAttempts,
                     lockDuration,
                     lockUntil: lockUntil.toISOString(),
@@ -148,10 +148,10 @@ export class AuthService {
         await this.userRepo.resetFailedAttempts(user.id);
 
         // Check if 2FA is required (use database settings)
-        const requires2FA = (user as any).two_factor_enabled || 
-                           twoFactorConfig.enforce_globally || 
-                           (twoFactorConfig.enforce_for_admins && user.is_super_admin);
-                           
+        const requires2FA = (user as any).two_factor_enabled ||
+            twoFactorConfig.enforce_globally ||
+            (twoFactorConfig.enforce_for_admins && user.is_super_admin);
+
         if (requires2FA && twoFactorConfig.enabled) {
             // Generate and send OTP for 2FA using database settings
             const otpResult = await this.otpRepo.create({
@@ -199,16 +199,23 @@ export class AuthService {
     private async completeLogin(user: any, context: { deviceInfo?: string; ipAddress?: string; userAgent?: string }) {
         // Fetch session settings from database
         const sessionPolicies = await getSessionPolicies();
-        
+
         // Get roles and permissions
         const roles = await this.userRepo.getUserRoles(user.id);
         const permissions = await this.userRepo.getUserPermissions(user.id);
 
         // Extract unique event IDs from role assignments
-        const eventIds = [...new Set(
-            roles
-                .filter(r => r.event_id)
-                .map(r => r.event_id as string)
+        // Extract context IDs from role assignments
+        const assignedEventIds = roles.filter(r => r.event_id).map(r => r.event_id as string);
+        const assignedDeptIds = roles.filter(r => r.dept_id).map(r => r.dept_id as string);
+
+        // Also fetch event IDs from assigned departments (implicit access)
+        const deptAssociatedEventIds = await this.userRepo.getEventIdsForDepartments(assignedDeptIds);
+
+        const eventIds = [...new Set([...assignedEventIds, ...deptAssociatedEventIds])];
+        const deptIds = [...new Set(assignedDeptIds)];
+        const serviceIds = [...new Set(
+            roles.filter(r => r.service_id).map(r => r.service_id as string)
         )];
 
         // Generate tokens using database settings
@@ -220,6 +227,8 @@ export class AuthService {
             roles: roles.map(r => r.role),
             permissions: permissions, // Include permissions in JWT
             eventIds, // Include assigned event IDs
+            deptIds,  // Include assigned department IDs
+            serviceIds, // Include assigned service IDs
         };
 
         // Use database settings for token expiration
@@ -273,6 +282,9 @@ export class AuthService {
                 timezone: user.timezone,
                 roles,
                 permissions,
+                eventIds,
+                deptIds,
+                serviceIds,
                 two_factor_enabled: (user as any).two_factor_enabled || false,
                 force_password_change: (user as any).force_password_change || false,
             },
@@ -318,7 +330,7 @@ export class AuthService {
     async refreshToken(refreshTokenValue: string, context?: { deviceInfo?: string; ipAddress?: string; userAgent?: string }) {
         // Fetch session settings from database
         const sessionPolicies = await getSessionPolicies();
-        
+
         // Find the token in database
         const tokenRecord = await this.refreshTokenRepo.findValidToken(refreshTokenValue);
 
@@ -347,7 +359,7 @@ export class AuthService {
                 const normalizeUA = (ua: string) => ua.replace(/\d+\.\d+\.\d+/g, 'X.X.X');
                 const storedUA = normalizeUA(tokenRecord.device_info);
                 const currentUA = normalizeUA(context.userAgent);
-                
+
                 if (storedUA !== currentUA) {
                     logger.warn('Session User Agent mismatch during token refresh', {
                         userId: tokenRecord.user_id,
@@ -376,11 +388,13 @@ export class AuthService {
         const permissions = await this.userRepo.getUserPermissions(user.id);
 
         // Extract unique event IDs from role assignments
-        const eventIds = [...new Set(
-            roles
-                .filter(r => r.event_id)
-                .map(r => r.event_id as string)
-        )];
+        const assignedEventIds = roles.filter(r => r.event_id).map(r => r.event_id as string);
+        const assignedDeptIds = roles.filter(r => r.dept_id).map(r => r.dept_id as string);
+
+        // Also fetch event IDs from assigned departments (implicit access)
+        const deptAssociatedEventIds = await this.userRepo.getEventIdsForDepartments(assignedDeptIds);
+
+        const eventIds = [...new Set([...assignedEventIds, ...deptAssociatedEventIds])];
 
         const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
             id: user.id,
@@ -454,10 +468,26 @@ export class AuthService {
         const roles = await this.userRepo.getUserRoles(userId);
         const permissions = await this.userRepo.getUserPermissions(userId);
 
+        // Extract context IDs from role assignments
+        const assignedEventIds = roles.filter(r => r.event_id).map(r => r.event_id as string);
+        const assignedDeptIds = roles.filter(r => r.dept_id).map(r => r.dept_id as string);
+
+        // Also fetch event IDs from assigned departments (implicit access)
+        const deptAssociatedEventIds = await this.userRepo.getEventIdsForDepartments(assignedDeptIds);
+
+        const eventIds = [...new Set([...assignedEventIds, ...deptAssociatedEventIds])];
+        const deptIds = [...new Set(assignedDeptIds)];
+        const serviceIds = [...new Set(
+            roles.filter(r => r.service_id).map(r => r.service_id as string)
+        )];
+
         return {
             ...user,
             roles,
             permissions,
+            eventIds,
+            deptIds,
+            serviceIds,
         };
     }
 
@@ -721,7 +751,7 @@ export class AuthService {
     async validateSession(sessionId: string, ipAddress?: string, userAgent?: string): Promise<boolean> {
         // Fetch session settings from database
         const sessionPolicies = await getSessionPolicies();
-        
+
         // Check session binding (IP and User Agent)
         if (sessionPolicies.bind_session_to_ip || sessionPolicies.bind_session_to_user_agent) {
             const bindingResult = await this.sessionRepo.validateSessionBinding(
@@ -743,7 +773,7 @@ export class AuthService {
                 return false;
             }
         }
-        
+
         if (!sessionPolicies.session_timeout_enabled) {
             return true;
         }

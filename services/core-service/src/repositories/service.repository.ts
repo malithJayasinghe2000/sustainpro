@@ -417,6 +417,29 @@ export class ServiceRepository {
     }
 
     /**
+     * Update department service
+     */
+    async updateDepartmentService(id: string, data: {
+        assigned_supervisor_id?: string;
+        config?: Record<string, any>;
+        name?: string;
+    }): Promise<DepartmentService | null> {
+        try {
+            const result = await prisma.sps_department_services.update({
+                where: { id },
+                data: {
+                    assigned_supervisor_id: data.assigned_supervisor_id,
+                    config: data.config,
+                    name: data.name,
+                },
+            });
+            return result as any as DepartmentService;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
      * Get department service by ID
      */
     async findDepartmentServiceById(id: string): Promise<any | null> {

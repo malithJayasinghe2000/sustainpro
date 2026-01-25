@@ -981,12 +981,15 @@ async function main() {
             'departments.view', 'departments.create', 'departments.update', 'departments.delete'
         ],
         'DEPT_HEAD': [
-            'dashboard.view', 'events.view', 'devices.view', 'reports.view', 'telemetry.view',
-            'services.view', 'departments.view'
+            'dashboard.view', 'events.view', 'devices.view', 'devices.manage', 'reports.view', 'telemetry.view',
+            'services.view', 'departments.view', 'departments.update',
+            'services.create', 'services.update', 'services.delete', 'services.assign',
+            'users.view', 'users.manage'
         ],
         'SERVICE_SUPERVISOR': [
             'dashboard.view', 'events.view', 'devices.view', 'devices.manage', 'telemetry.view', 'alerts.manage',
-            'services.view'
+            'services.view', 'services.update', 'departments.view',
+            'users.view', 'users.manage', 'reports.view'
         ],
         'TECHNICIAN': [
             'dashboard.view', 'events.view', 'devices.view', 'telemetry.view',

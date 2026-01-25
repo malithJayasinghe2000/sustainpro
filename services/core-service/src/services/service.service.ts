@@ -197,6 +197,31 @@ export class ServiceService {
     }
 
     /**
+     * Update department service
+     */
+    async updateDepartmentService(id: string, data: {
+        assigned_supervisor_id?: string;
+        config?: Record<string, any>;
+        name?: string;
+    }): Promise<DeptServiceEntity> {
+        logger.info('Updating department service', { serviceId: id, fields: Object.keys(data) });
+        
+        const service = await this.repo.updateDepartmentService(id, data);
+        if (!service) {
+            throw new NotFoundError('Department service', id);
+        }
+
+        logger.info('Department service updated', { serviceId: id });
+
+        await publishEvent('service.updated', {
+            service_id: id,
+            updated_fields: Object.keys(data),
+        });
+
+        return service;
+    }
+
+    /**
      * Get department service by ID
      */
     async getDepartmentServiceById(id: string): Promise<any> {

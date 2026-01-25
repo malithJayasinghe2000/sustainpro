@@ -181,6 +181,29 @@ export const addService = async (req: Request, res: Response, next: NextFunction
 };
 
 /**
+ * PUT /api/v1/departments/:id/services/:serviceId
+ */
+export const updateService = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const service = await serviceService.updateDepartmentService(req.params.serviceId, req.body);
+
+        res.json({
+            success: true,
+            data: service,
+        });
+    } catch (error) {
+        if (error instanceof AppError) {
+            res.status(error.statusCode).json({
+                success: false,
+                error: error.message,
+            });
+            return;
+        }
+        next(error);
+    }
+};
+
+/**
  * DELETE /api/v1/departments/:id/services/:serviceId
  */
 export const removeService = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

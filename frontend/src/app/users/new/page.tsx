@@ -7,6 +7,7 @@ import PasswordRequirements, { usePasswordValidation } from '@/components/Passwo
 import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight, Info, Eye, Truck, ShieldAlert, LucideIcon } from 'lucide-react';
 import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi, rolesApi, Role } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { hasRole } from '@/lib/roles';
 import { RichSelect } from '@/components/ui/RichSelect';
 import SetupWizard from '@/components/SetupWizard';
 import { toast } from 'sonner';
@@ -180,7 +181,7 @@ function NewUserPageContent() {
 
         // Dept Head
         if (hasRole(currentUser, 'DEPT_HEAD')) {
-            const allowed = ['SERVICE_SUPERVISOR', 'TECHNICIAN'];
+            const allowed = ['SERVICE_SUPERVISOR', 'TECHNICIAN', 'VIEWER'];
             return allowed.includes(roleToCheck);
         }
 

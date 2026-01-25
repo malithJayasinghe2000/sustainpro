@@ -69,49 +69,38 @@ export default function EventsPage() {
                     organization_id: selectedOrg || undefined
                 });
 
-                // Handle paginated response
-                if (response && typeof response === 'object' && 'data' in response) {
-                    data = response.data || [];
-                    setTotalPages(response.totalPages || 1);
-                    setTotalCount(response.total || data.length);
-                } else {
-                    // Fallback for non-paginated response
-                    data = Array.isArray(response) ? response : [];
+                // Handle paginated response (standardize backend response format)
+                const responseData = response.data || response;
+                if (Array.isArray(responseData)) {
+                    // Fallback for non-paginated or list
+                    data = responseData;
                     setTotalPages(1);
                     setTotalCount(data.length);
+                } else if (response.data) {
+                    data = response.data;
+                    setTotalPages(response.pages || Math.ceil(response.total / ITEMS_PER_PAGE) || 1);
+                    setTotalCount(response.total || response.data.length);
                 }
             } else if (user?.organization_id) {
-                // Get user's assigned event IDs from their roles
-                const assignedEventIds = user.roles
-                    ?.filter(r => r.event_id)
-                    .map(r => r.event_id) || [];
+                // For regular users (Org Admin/Managers/Dept Head), the API now handles permission filtering!
+                // We just need to call getAll (which now supports non-super-admins)
+                const response = await eventsApi.getAll({
+                    page,
+                    limit: ITEMS_PER_PAGE,
+                    search: searchQuery,
+                    organization_id: user.organization_id // Explicitly pass org id
+                });
 
-                // Fetch org events
-                let orgEvents = await eventsApi.getByOrg(user.organization_id);
-                orgEvents = Array.isArray(orgEvents) ? orgEvents : [];
-
-                // Users with 'events.view_all' permission can see all org events
-                // Others only see events they are assigned to
-                const canViewAllEvents = user.permissions?.includes('events.view_all');
-
-                if (!canViewAllEvents && assignedEventIds.length > 0) {
-                    // Filter to only show events the user is assigned to
-                    data = orgEvents.filter((e: any) => assignedEventIds.includes(e.id));
-                } else {
-                    data = orgEvents;
+                const responseData = response.data || response;
+                if (Array.isArray(responseData)) {
+                    data = responseData;
+                    setTotalPages(1);
+                    setTotalCount(data.length);
+                } else if (response.data) {
+                    data = response.data;
+                    setTotalPages(response.pages || 1);
+                    setTotalCount(response.total || response.data.length);
                 }
-
-                // Client-side search filter
-                if (searchQuery) {
-                    const q = searchQuery.toLowerCase();
-                    data = data.filter((e: any) =>
-                        e.name.toLowerCase().includes(q) ||
-                        e.location?.toLowerCase().includes(q) ||
-                        e.status?.toLowerCase().includes(q)
-                    );
-                }
-                setTotalPages(1);
-                setTotalCount(data.length);
             }
 
             // Ensure data is array
