@@ -4,6 +4,9 @@ import { requirePermission, authenticateToken } from '@sustainpro/shared-middlew
 
 const router = Router();
 
+// Get current user's assigned departments
+router.get('/my/departments', authenticateToken, deptController.getMyDepartments);
+
 /**
  * @swagger
  * /departments/by-event/{eventId}:
@@ -22,7 +25,7 @@ const router = Router();
  *       200:
  *         description: Event departments
  */
-router.get('/by-event/:eventId', authenticateToken, deptController.getByEvent);
+router.get('/by-event/:eventId', authenticateToken, requirePermission('departments.view'), deptController.getByEvent);
 
 /**
  * @swagger
@@ -157,6 +160,31 @@ router.delete('/:id', requirePermission('departments.delete'), deptController.re
  *         description: Service added
  */
 router.post('/:id/services', requirePermission('services.assign'), deptController.addService);
+
+/**
+ * @swagger
+ * /departments/{id}/services/{serviceId}:
+ *   put:
+ *     tags: [Departments]
+ *     summary: Update service in department
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service updated
+ */
+router.put('/:id/services/:serviceId', requirePermission('services.update'), deptController.updateService);
 
 /**
  * @swagger

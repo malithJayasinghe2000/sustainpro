@@ -3,12 +3,14 @@
 import { useState, useEffect, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { departmentServicesApi, devicesApi } from '@/lib/api';
+import { departmentServicesApi, devicesApi, usersApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
+import { useAuth } from '@/contexts/AuthContext';
 import ProvisioningModal from '@/components/provisioning/ProvisioningModal';
 import WidgetRenderer from '@/components/dashboard/WidgetRenderer';
 import DeviceTable from '@/components/devices/DeviceTable';
 import { WidgetConfig } from '@/types/dashboard';
+import { hasRole, ROLES, ROLE_LABELS, isAdmin } from '@/lib/roles';
 import {
     ArrowLeft,
     Plus,
@@ -22,9 +24,16 @@ import {
     Usb,
     LayoutDashboard,
     Settings,
-    AlertCircle
+    AlertCircle,
+    Users,
+    UserPlus,
+    Search,
+    X,
+    Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { systemNotificationsApi } from '@/lib/api';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
 
 interface ServiceInstancePageProps {
     params: Promise<{ id: string; deptId: string; serviceId: string }>;
@@ -33,25 +42,108 @@ interface ServiceInstancePageProps {
 export default function ServiceInstancePage({ params }: ServiceInstancePageProps) {
     const { id: eventId, deptId, serviceId } = use(params);
     const router = useRouter();
+    const { user } = useAuth();
 
     const [serviceInstance, setServiceInstance] = useState<any>(null);
     const [assignedDevices, setAssignedDevices] = useState<any[]>([]);
     const [availableDevices, setAvailableDevices] = useState<any[]>([]);
+    const [serviceUsers, setServiceUsers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [aggregatedData, setAggregatedData] = useState<Record<string, any>>({});
 
+    // View State
+    const [currentView, setCurrentView] = useState<'dashboard' | 'devices' | 'users'>('dashboard');
+
     // Modals
     const [showAddDeviceModal, setShowAddDeviceModal] = useState(false);
+    const [showAddUserModal, setShowAddUserModal] = useState(false);
     const [showProvisioningModal, setShowProvisioningModal] = useState(false);
 
     // Modal State
+    // Modal State
     const [activeTab, setActiveTab] = useState<'existing' | 'create'>('create');
+
+    // User Modal State (aligned with DepartmentUsers)
+    const [addUserTab, setAddUserTab] = useState<'existing' | 'create'>('existing');
+    const [userSearchQuery, setUserSearchQuery] = useState('');
+    const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
+    const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+    const [selectedExistingUser, setSelectedExistingUser] = useState<any | null>(null);
+    const [roleFilter, setRoleFilter] = useState('');
+
+    const [newUserForm, setNewUserForm] = useState({
+        full_name: '',
+        email: '',
+        password: '',
+        // role is handled by selectedRole state now logic-wise, or we keep it here.
+        // DepartmentUsers separates it. Let's separate it for consistency.
+    });
+    const [selectedRole, setSelectedRole] = useState('');
+    const [isSubmittingUser, setIsSubmittingUser] = useState(false);
+
+    const { isValid: isPasswordValid } = usePasswordValidation(newUserForm.password);
+
+    // Filter logic same as DepartmentUsers
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (userSearchQuery.length >= 2 && addUserTab === 'existing') {
+                performUserLookup();
+            } else if (addUserTab === 'existing' && !userSearchQuery && !roleFilter) {
+                setUserSearchResults([]);
+            } else if (addUserTab === 'existing' && roleFilter) {
+                performUserLookup();
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [userSearchQuery, addUserTab, roleFilter]);
+
+    const performUserLookup = async () => {
+        if (!serviceInstance?.organization_id) return;
+
+        setIsSearchingUsers(true);
+        try {
+            const params: any = {
+                organization_id: serviceInstance.organization_id,
+                limit: 50
+            };
+
+            if (userSearchQuery) params.search = userSearchQuery;
+            if (roleFilter) params.role = roleFilter;
+
+            if (!userSearchQuery && !roleFilter) {
+                setIsSearchingUsers(false);
+                setUserSearchResults([]);
+                return;
+            }
+
+            const response = await usersApi.getAll(params);
+            const results = Array.isArray(response) ? response : (response.data || []);
+
+            // Filter out users already in this service
+            // serviceUsers contains users in this service
+            const existingIds = serviceUsers.map(u => u.id);
+            const filtered = results.filter((u: any) => !existingIds.includes(u.id));
+
+            setUserSearchResults(filtered);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSearchingUsers(false);
+        }
+    };
+
 
     useEffect(() => {
         loadData();
 
         // Socket.IO: Listen for real-time telemetry updates
         const socket = getSocket();
+
+        socket.on('connect', () => {
+            console.log('✅ Socket connected:', socket.id);
+
+            socket.emit('subscribe:dashboard');
+        });
 
         const handleTelemetry = (payload: any) => {
             console.log('📡 Telemetry received:', payload);
@@ -65,6 +157,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                         last_seen: payload.timestamp || new Date().toISOString(),
                         metadata: {
                             ...device.metadata,
+                            ...device.metadata, // Correcting potential typo in original logical doubling, assuming standard merging
                             ...payload.data
                         }
                     };
@@ -80,7 +173,6 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                 last_seen: payload.timestamp || new Date().toISOString()
             }));
         };
-
         socket.on('dashboard:telemetry', handleTelemetry);
 
         // Offline detection: Check every 5 seconds if device is silent > 10s
@@ -102,13 +194,29 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
         };
     }, [serviceId]);
 
+    const canConfigure = useMemo(() => {
+        if (!user) return false;
+        if (user.is_super_admin) return true;
+
+        // Check high-level roles using standard helper
+        if (hasRole(user, ['ORG_ADMIN', 'EVENT_MANAGER', 'DEPT_HEAD'])) {
+            return true;
+        }
+
+        // Service Supervisor for THIS specific service
+        return user.roles?.some((r: any) =>
+            r.role === 'SERVICE_SUPERVISOR' && r.service_id === serviceId
+        );
+    }, [user, serviceId]);
+
     const loadData = async () => {
         try {
             setIsLoading(true);
-            const [instanceData, devicesData, allDevicesData] = await Promise.all([
+            const [instanceData, devicesData, allDevicesData, usersResponse] = await Promise.all([
                 departmentServicesApi.getById(serviceId),
                 departmentServicesApi.getDevices(serviceId),
-                devicesApi.getAll()
+                devicesApi.getAll(),
+                usersApi.getAll({ service_id: serviceId } as any)
             ]);
 
             setServiceInstance(instanceData);
@@ -120,6 +228,14 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
 
             setAssignedDevices(Array.isArray(devicesData) ? devicesData : (devicesData?.data || []));
             setAvailableDevices(Array.isArray(allDevicesData) ? allDevicesData : (allDevicesData?.data || []));
+
+            // Filter users to only show those with roles in this service
+            const allUsers = usersResponse?.data || (Array.isArray(usersResponse) ? usersResponse : []);
+            const filteredUsers = allUsers.filter((u: any) =>
+                u.roles?.some((r: any) => r.service_id === serviceId || (typeof r === 'object' && r.service_id === serviceId))
+            );
+            setServiceUsers(filteredUsers);
+
             console.log('Loaded service instance:', instanceData);
         } catch (error) {
             console.error('Failed to load service instance:', error);
@@ -194,6 +310,138 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     const assignedDeviceIds = assignedDevices.map(d => d.device_id);
     const unassignedDevices = availableDevices.filter(d => !assignedDeviceIds.includes(d.id));
 
+
+
+    const closeUserModal = () => {
+        setShowAddUserModal(false);
+        setNewUserForm({ full_name: '', email: '', password: '' });
+        setSelectedRole('');
+        setUserSearchQuery('');
+        setUserSearchResults([]);
+        setSelectedExistingUser(null);
+        setAddUserTab('existing');
+        setRoleFilter('');
+    };
+
+    const handleCreateUser = () => {
+        if (isAdmin(user) || user?.is_super_admin) {
+            const params = new URLSearchParams({
+                organization_id: serviceInstance?.organization_id || '',
+                event_id: eventId,
+                department_id: deptId,
+                service_id: serviceId,
+                return_url: window.location.pathname
+            });
+            router.push(`/users/new?${params.toString()}`);
+        } else {
+            closeUserModal(); // Reset first
+            setShowAddUserModal(true);
+        }
+    };
+
+    const handleAddExistingUser = async () => {
+        if (!selectedExistingUser || !selectedRole) return;
+
+        try {
+            setIsSubmittingUser(true);
+
+            // 1. Get current user roles to ensure we don't overwrite
+            const userData = await usersApi.getById(selectedExistingUser.id);
+            const currentRoles = userData.roles || [];
+
+            // 2. Add new role
+            const newRole = {
+                role: selectedRole,
+                service_id: serviceId,
+                department_id: deptId,
+                event_id: eventId,
+                organization_id: serviceInstance.organization_id
+            };
+
+            // Check if already has this role for this service
+            const exists = currentRoles.some((r: any) =>
+                r.service_id === serviceId && r.role === selectedRole
+            );
+
+            if (exists) {
+                toast.error('User already has this role in this service');
+                return;
+            }
+
+            const updatedRoles = [...currentRoles, newRole];
+
+            // 3. Update user
+            await usersApi.update(selectedExistingUser.id, { roles: updatedRoles });
+
+            // 4. Send Notification
+            await systemNotificationsApi.create({
+                type: 'info',
+                title: 'New Service Assignment',
+                message: `You have been assigned the role of ${ROLE_LABELS[selectedRole] || selectedRole} in service ${serviceInstance.service_name}`,
+                source: 'service_instance',
+                source_id: serviceId
+            });
+
+            toast.success(`User ${selectedExistingUser.full_name} added successfully`);
+
+            closeUserModal();
+            loadData();
+        } catch (error: any) {
+            console.error('Failed to add user:', error);
+            toast.error(error.response?.data?.error || 'Failed to add user');
+        } finally {
+            setIsSubmittingUser(false);
+        }
+    };
+
+    const handleCreateNewUser = async () => {
+        try {
+            if (!newUserForm.email || !newUserForm.password || !newUserForm.full_name) {
+                toast.error('Please fill in all required fields');
+                return;
+            }
+
+            if (!selectedRole) {
+                toast.error('Please select a role');
+                return;
+            }
+
+            if (!isPasswordValid) {
+                toast.error('Password does not meet requirements');
+                return;
+            }
+
+            setIsSubmittingUser(true);
+
+            const payload = {
+                ...newUserForm,
+                organization_id: serviceInstance.organization_id,
+                roles: [{
+                    role: selectedRole,
+                    service_id: serviceId,
+                    department_id: deptId,
+                    event_id: eventId,
+                    organization_id: serviceInstance.organization_id
+                }]
+            };
+
+            await usersApi.create(payload);
+
+            toast.success('User created and notified via email');
+            closeUserModal();
+            loadData();
+        } catch (error: any) {
+            console.error('Failed to create user:', error);
+            toast.error(error.response?.data?.error || 'Failed to create user');
+        } finally {
+            setIsSubmittingUser(false);
+        }
+    };
+
+
+
+
+
     return (
         <DashboardLayout>
             <div className="p-8 max-w-[1600px] mx-auto space-y-8">
@@ -223,125 +471,199 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                     </div>
                 </div>
 
-                {/* Service Dashboard - Dynamic Widgets */}
-                {serviceInstance.main_dashboard_layout?.widgets?.length > 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <div className="flex items-center gap-2 mb-4">
-                            <LayoutDashboard className="w-5 h-5 text-primary" />
-                            <h3 className="font-semibold">Service Dashboard</h3>
-                        </div>
-                        <div
-                            className="grid gap-4"
-                            style={{
-                                gridTemplateColumns: 'repeat(12, 1fr)',
-                                gridAutoRows: '80px'
-                            }}
-                        >
-                            {serviceInstance.main_dashboard_layout.widgets.map((widget: WidgetConfig) => (
+                {/* Tabs */}
+                <div className="border-b border-border">
+                    <div className="flex gap-6">
+                        {['dashboard', 'devices', 'users'].map((view) => (
+                            <button
+                                key={view}
+                                onClick={() => setCurrentView(view as any)}
+                                className={`pb-3 px-1 border-b-2 transition-colors text-sm font-medium capitalize ${currentView === view
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                {view}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Content: Dashboard */}
+                {currentView === 'dashboard' && (
+                    <div className="space-y-6">
+
+                        {/* Service Dashboard - Dynamic Widgets */}
+                        {serviceInstance.main_dashboard_layout?.widgets?.length > 0 ? (
+                            <div className="bg-card border border-border rounded-xl p-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <LayoutDashboard className="w-5 h-5 text-primary" />
+                                    <h3 className="font-semibold">Service Dashboard</h3>
+                                </div>
                                 <div
-                                    key={widget.id}
+                                    className="grid gap-4"
                                     style={{
-                                        gridColumn: `span ${widget.position?.w || 3}`,
-                                        gridRow: `span ${widget.position?.h || 2}`
+                                        gridTemplateColumns: 'repeat(12, 1fr)',
+                                        gridAutoRows: '80px'
                                     }}
                                 >
-                                    <WidgetRenderer
-                                        widget={widget}
-                                        isPreview={false}
-                                        data={aggregatedData}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ) : (
-                    /* Fallback: No Dashboard Configured */
-                    <div className="space-y-6">
-                        {/* Info Banner */}
-                        <div className="bg-card border-2 border-dashed border-border rounded-xl p-4 flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-muted/40 flex items-center justify-center shrink-0">
-                                    <LayoutDashboard className="w-5 h-5 text-muted-foreground/70" />
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-sm">Service Dashboard Not Configured</h4>
-                                    <p className="text-muted-foreground text-xs">
-                                        The dashboard layout hasn't been configured yet.
-                                    </p>
+                                    {serviceInstance.main_dashboard_layout.widgets.map((widget: WidgetConfig) => (
+                                        <div
+                                            key={widget.id}
+                                            style={{
+                                                gridColumn: `span ${widget.position?.w || 3}`,
+                                                gridRow: `span ${widget.position?.h || 2}`
+                                            }}
+                                        >
+                                            <WidgetRenderer
+                                                widget={widget}
+                                                isPreview={false}
+                                                data={aggregatedData}
+                                            />
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                            {serviceInstance.service_template_id && (
-                                <button
-                                    onClick={() => router.push(`/admin/services/${serviceInstance.service_template_id}/dashboard`)}
-                                    className="px-3 py-1.5 bg-primary hover:bg-primary/80 text-white rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-2"
-                                >
-                                    <Settings className="w-4 h-4 text-white" />
-                                    Configure
-                                </button>
-                            )}
-                        </div>
+                        ) : (
+                            /* Fallback: No Dashboard Configured */
 
-                        {/* Basic Stats Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                            <div className="bg-card border border-border rounded-xl p-6">
-                                <p className="text-sm text-muted-foreground mb-2">Total Devices</p>
-                                <h3 className="text-2xl font-bold">
-                                    {serviceInstance.active_devices || 0}
-                                    <span className="text-muted-foreground text-sm font-normal ml-2">
-                                        / {serviceInstance.total_devices || 0} Online
-                                    </span>
-                                </h3>
-                            </div>
+                            <div className="space-y-6">
+                                {/* Info Banner */}
+                                <div className="bg-card border-2 border-dashed border-border rounded-xl p-4 flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-muted/40 flex items-center justify-center shrink-0">
+                                            <LayoutDashboard className="w-5 h-5 text-muted-foreground/70" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold text-sm">Service Dashboard Not Configured</h4>
+                                            <p className="text-muted-foreground text-xs">
+                                                The dashboard layout hasn't been configured yet.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {serviceInstance.service_template_id && canConfigure && (
+                                        <button
+                                            onClick={() => router.push(`/admin/services/${serviceInstance.service_template_id}/dashboard`)}
+                                            className="px-3 py-1.5 bg-primary hover:bg-primary/80 text-white rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-2"
+                                        >
+                                            <Settings className="w-4 h-4 text-white" />
+                                            Configure
+                                        </button>
+                                    )}
+                                </div>
 
-                            <div className="bg-card border border-border rounded-xl p-6">
-                                <p className="text-sm text-muted-foreground mb-2">Active Devices</p>
-                                <h3 className="text-2xl font-bold">
-                                    {serviceInstance.active_devices || 0}
-                                </h3>
-                            </div>
+                                {/* Basic Stats Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                    <div className="bg-card border border-border rounded-xl p-6">
+                                        <p className="text-sm text-muted-foreground mb-2">Total Devices</p>
+                                        <h3 className="text-2xl font-bold">
+                                            {serviceInstance.active_devices || 0}
+                                            <span className="text-muted-foreground text-sm font-normal ml-2">
+                                                / {serviceInstance.total_devices || 0} Online
+                                            </span>
+                                        </h3>
+                                    </div>
 
-                            <div className="bg-card border border-border rounded-xl p-6">
-                                <p className="text-sm text-muted-foreground mb-2">Status</p>
-                                <h3 className="text-2xl font-bold text-green-600">
-                                    {serviceInstance.active_devices > 0 ? 'Active' : 'Inactive'}
-                                </h3>
-                            </div>
+                                    <div className="bg-card border border-border rounded-xl p-6">
+                                        <p className="text-sm text-muted-foreground mb-2">Active Devices</p>
+                                        <h3 className="text-2xl font-bold">
+                                            {serviceInstance.active_devices || 0}
+                                        </h3>
+                                    </div>
 
-                            <div className="bg-card border border-border rounded-xl p-6">
-                                <p className="text-sm text-muted-foreground mb-2">Service Type</p>
-                                <h3 className="text-lg font-bold">
-                                    {serviceInstance.service_type || 'N/A'}
-                                </h3>
+                                    <div className="bg-card border border-border rounded-xl p-6">
+                                        <p className="text-sm text-muted-foreground mb-2">Status</p>
+                                        <h3 className="text-2xl font-bold text-green-600">
+                                            {serviceInstance.active_devices > 0 ? 'Active' : 'Inactive'}
+                                        </h3>
+                                    </div>
+
+                                    <div className="bg-card border border-border rounded-xl p-6">
+                                        <p className="text-sm text-muted-foreground mb-2">Service Type</p>
+                                        <h3 className="text-lg font-bold">
+                                            {serviceInstance.service_type || 'N/A'}
+                                        </h3>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )}
 
                 {/* Devices Section */}
-                <div>
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h3 className="font-semibold text-lg">Devices</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Manage devices for this service
-                            </p>
+                {currentView === 'devices' && (
+                    <div>
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 className="font-semibold text-lg">Devices</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Manage devices for this service
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowAddDeviceModal(true)}
+                                className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add Device
+                            </button>
                         </div>
-                        <button
-                            onClick={() => setShowAddDeviceModal(true)}
-                            className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Add Device
-                        </button>
-                    </div>
 
-                    <DeviceTable
-                        serviceId={serviceId}
-                        eventId={eventId}
-                        deptId={deptId}
-                        onRefresh={loadData}
-                    />
-                </div>
+                        <DeviceTable
+                            serviceId={serviceId}
+                            eventId={eventId}
+                            deptId={deptId}
+                            onRefresh={loadData}
+                        />
+                    </div>
+                )}
+
+                {/* Users Section */}
+                {currentView === 'users' && (
+                    <div className="bg-card border border-border rounded-xl shadow-sm">
+                        <div className="p-6 border-b border-border flex items-center justify-between">
+                            <h3 className="font-semibold text-lg flex items-center gap-2">
+                                <Users className="w-5 h-5 text-primary" />
+                                Service Users
+                            </h3>
+                            {canConfigure && (
+                                <button
+                                    onClick={handleCreateUser}
+                                    className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                >
+                                    <UserPlus className="w-4 h-4" />
+                                    Add User
+                                </button>
+                            )}
+                        </div>
+                        <div className="p-6">
+                            {serviceUsers.length === 0 ? (
+                                <div className="text-center py-12 text-muted-foreground">No users found for this service.</div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {serviceUsers.map((user: any) => (
+                                        <div key={user.id} className="flex items-center gap-3 p-3 rounded-lg border border-border/50 bg-background/50">
+                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium shrink-0">
+                                                {(user.full_name || user.email || '?').charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-medium text-sm truncate">{user.full_name || 'Unnamed User'}</p>
+                                                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {user.roles?.filter((r: any) => !r.service_id || r.service_id === serviceId).map((r: any) => (
+                                                        <span key={r.role || r} className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                                                            {(r.role || r).replace('_', ' ')}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Add Device Modal - Selection Type */}
                 {showAddDeviceModal && (
@@ -457,6 +779,253 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                         currentServiceType={serviceInstance?.service_type || 'waterwall'}
                         currentServiceName={serviceInstance?.service_name || 'Waterwall'}
                     />
+                )}
+
+                {/* Add User Modal */}
+                {showAddUserModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                        <div className="bg-card w-full max-w-2xl rounded-xl border border-border shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                            <div className="p-6 border-b border-border flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold text-lg">Add User to Service</h3>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Grant access to this service
+                                    </p>
+                                </div>
+                                <button onClick={closeUserModal} className="p-2 hover:bg-muted rounded-full">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="p-6">
+                                <div className="space-y-6">
+                                    {/* Tabs */}
+                                    <div className="flex bg-muted rounded-lg p-1">
+                                        <button
+                                            onClick={() => setAddUserTab('existing')}
+                                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all ${addUserTab === 'existing'
+                                                ? 'bg-background text-foreground shadow-sm'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                                }`}
+                                        >
+                                            Add Existing User
+                                        </button>
+                                        <button
+                                            onClick={() => setAddUserTab('create')}
+                                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all ${addUserTab === 'create'
+                                                ? 'bg-background text-foreground shadow-sm'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                                }`}
+                                        >
+                                            Create New User
+                                        </button>
+                                    </div>
+
+                                    {addUserTab === 'existing' ? (
+                                        <div className="space-y-4">
+                                            {!selectedExistingUser ? (
+                                                <div>
+                                                    <div className="mb-4">
+                                                        <label className="block text-sm font-medium mb-1">Select Role to Filter</label>
+                                                        <select
+                                                            value={roleFilter}
+                                                            onChange={(e) => setRoleFilter(e.target.value)}
+                                                            className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                        >
+                                                            <option value="" disabled>-- Select Role --</option>
+                                                            {[ROLES.SERVICE_SUPERVISOR, ROLES.TECHNICIAN, ROLES.SERVICE_SUPPLIER, ROLES.VIEWER].map(role => (
+                                                                <option key={role} value={role}>
+                                                                    {ROLE_LABELS[role] || role}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+
+                                                    {roleFilter && (
+                                                        <>
+                                                            <label className="block text-sm font-medium mb-1">Search User (Optional)</label>
+                                                            <div className="relative mb-4">
+                                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                                                <input
+                                                                    type="text"
+                                                                    value={userSearchQuery}
+                                                                    onChange={(e) => setUserSearchQuery(e.target.value)}
+                                                                    className="w-full pl-9 pr-4 py-2 border border-border rounded-lg bg-background"
+                                                                    placeholder="Search by name or email..."
+                                                                />
+                                                            </div>
+
+                                                            <div className="mt-2 border border-border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+                                                                {isSearchingUsers ? (
+                                                                    <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
+                                                                ) : userSearchResults.length > 0 ? (
+                                                                    <div className="divide-y divide-border">
+                                                                        {userSearchResults.map(u => (
+                                                                            <button
+                                                                                key={u.id}
+                                                                                onClick={() => {
+                                                                                    setSelectedExistingUser(u);
+                                                                                    setSelectedRole(roleFilter); // Auto-select the filtered role
+                                                                                }}
+                                                                                className="w-full flex items-center px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+                                                                            >
+                                                                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                                                                    <span className="text-xs font-semibold text-primary">
+                                                                                        {u.full_name?.charAt(0) || u.email.charAt(0)}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <div className="text-sm font-medium">{u.full_name}</div>
+                                                                                    <div className="text-xs text-muted-foreground">{u.email}</div>
+                                                                                </div>
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="p-4 text-center text-sm text-muted-foreground">
+                                                                        No users found with role {ROLE_LABELS[roleFilter] || roleFilter}.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                    {!roleFilter && (
+                                                        <div className="p-6 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">
+                                                            Please select a role above to see available users.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="bg-muted/30 border border-border rounded-lg p-4 flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                                            <Check className="w-5 h-5 text-primary" />
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-medium">{selectedExistingUser.full_name}</div>
+                                                            <div className="text-sm text-muted-foreground">{selectedExistingUser.email}</div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setSelectedExistingUser(null)}
+                                                        className="p-2 hover:bg-muted rounded-full transition-colors"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {selectedExistingUser && (
+                                                <div>
+                                                    <label className="block text-sm font-medium mb-1">Assign Role</label>
+                                                    <select
+                                                        required
+                                                        value={selectedRole}
+                                                        onChange={e => setSelectedRole(e.target.value)}
+                                                        className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                    >
+                                                        <option value="">Select Role</option>
+                                                        {[ROLES.SERVICE_SUPERVISOR, ROLES.TECHNICIAN, ROLES.SERVICE_SUPPLIER, ROLES.VIEWER].map(role => (
+                                                            <option key={role} value={role}>
+                                                                {ROLE_LABELS[role] || role}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
+                                                <button
+                                                    onClick={closeUserModal}
+                                                    className="px-4 py-2 text-sm font-medium hover:bg-muted rounded-lg transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleAddExistingUser}
+                                                    disabled={!selectedExistingUser || !selectedRole || isSubmittingUser}
+                                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {isSubmittingUser ? 'Adding...' : 'Add User'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Full Name</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    value={newUserForm.full_name}
+                                                    onChange={e => setNewUserForm({ ...newUserForm, full_name: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                    placeholder="John Doe"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Email</label>
+                                                <input
+                                                    type="email"
+                                                    required
+                                                    value={newUserForm.email}
+                                                    onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                    placeholder="john@example.com"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Password</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="password"
+                                                        required
+                                                        value={newUserForm.password}
+                                                        onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                                                        className="w-full px-3 py-2 border border-border rounded-lg bg-background mb-2"
+                                                        placeholder="Note: Must meet security requirements"
+                                                    />
+                                                    <PasswordRequirements password={newUserForm.password} />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Role</label>
+                                                <select
+                                                    required
+                                                    value={selectedRole}
+                                                    onChange={e => setSelectedRole(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                >
+                                                    <option value="">Select Role</option>
+                                                    {[ROLES.SERVICE_SUPERVISOR, ROLES.TECHNICIAN, ROLES.SERVICE_SUPPLIER, ROLES.VIEWER].map(role => (
+                                                        <option key={role} value={role}>
+                                                            {ROLE_LABELS[role] || role}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
+                                                <button
+                                                    onClick={closeUserModal}
+                                                    className="px-4 py-2 text-sm font-medium hover:bg-muted rounded-lg transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleCreateNewUser}
+                                                    disabled={isSubmittingUser || !isPasswordValid}
+                                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                                >
+                                                    {isSubmittingUser ? 'Creating...' : 'Create & Add'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         </DashboardLayout>

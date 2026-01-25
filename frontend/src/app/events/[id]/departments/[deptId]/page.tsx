@@ -4,6 +4,8 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { departmentsApi, servicesApi, eventsApi } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { hasRole, ROLES } from '@/lib/roles';
 import {
     ArrowLeft,
     Plus,
@@ -14,10 +16,10 @@ import {
     Zap,
     Users,
     Settings,
-    CheckCircle,
     MapPin
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import AddServiceWizard from '@/components/AddServiceWizard';
 
 // Helper for dynamic icons
 const ICON_MAP: Record<string, any> = {
@@ -26,6 +28,8 @@ const ICON_MAP: Record<string, any> = {
 
 import GoogleMap from '@/components/GoogleMap';
 
+import DepartmentUsers from '@/components/DepartmentUsers';
+
 interface DepartmentDetailPageProps {
     params: Promise<{ id: string; deptId: string }>;
 }
@@ -33,18 +37,45 @@ interface DepartmentDetailPageProps {
 export default function DepartmentDetailPage({ params }: DepartmentDetailPageProps) {
     const { id: eventId, deptId } = use(params);
     const router = useRouter();
+    const { user } = useAuth();
 
     const [event, setEvent] = useState<any>(null);
     const [department, setDepartment] = useState<any>(null);
     const [departmentServices, setDepartmentServices] = useState<any[]>([]);
     const [availableServices, setAvailableServices] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [showAddServiceModal, setShowAddServiceModal] = useState(false);
-    const [selectedServices, setSelectedServices] = useState<string[]>([]);
+    const [showAddServiceWizard, setShowAddServiceWizard] = useState(false);
+    const [activeTab, setActiveTab] = useState<'services' | 'users'>('services');
 
     useEffect(() => {
         loadData();
     }, [deptId]);
+
+    // Filter services for SERVICE_SUPERVISOR users
+    const getFilteredServices = (services: any[]) => {
+        // Super Admins see all services
+        if (user?.is_super_admin) {
+            return services;
+        }
+
+        if (!user || !hasRole(user, ROLES.SERVICE_SUPERVISOR)) {
+            return services;
+        }
+
+        // Get the service IDs that the user is assigned to supervise
+        const assignedServiceIds = user.roles
+            .filter((role: any) =>
+                role.role === ROLES.SERVICE_SUPERVISOR &&
+                role.event_id === eventId &&
+                role.service_id
+            )
+            .map((role: any) => role.service_id);
+
+        // Filter services to only show those assigned to this supervisor
+        return services.filter(service =>
+            assignedServiceIds.includes(service.service_id || service.id)
+        );
+    };
 
     const loadData = async () => {
         try {
@@ -68,37 +99,9 @@ export default function DepartmentDetailPage({ params }: DepartmentDetailPagePro
         }
     };
 
-    const handleSaveServices = async () => {
-        try {
-            setIsLoading(true);
-            let successCount = 0;
-            let failCount = 0;
-
-            for (const serviceId of selectedServices) {
-                try {
-                    await departmentsApi.addService(deptId, serviceId);
-                    successCount++;
-                } catch (error) {
-                    console.error(`Failed to add service ${serviceId}:`, error);
-                    failCount++;
-                }
-            }
-
-            if (successCount > 0) {
-                toast.success(`Successfully added ${successCount} service${successCount > 1 ? 's' : ''}`);
-            }
-            if (failCount > 0) {
-                toast.error(`Failed to add ${failCount} service${failCount > 1 ? 's' : ''}`);
-            }
-
-            setShowAddServiceModal(false);
-            setSelectedServices([]);
-            loadData();
-        } catch (error) {
-            console.error('Error saving services:', error);
-            toast.error('An unexpected error occurred');
-            setIsLoading(false);
-        }
+    const handleServiceAdded = (newService: any) => {
+        // Refresh data after service is added via wizard
+        loadData();
     };
 
     const handleRemoveService = async (serviceId: string) => {
@@ -141,8 +144,10 @@ export default function DepartmentDetailPage({ params }: DepartmentDetailPagePro
     }
 
     const Icon = ICON_MAP[department.icon] || Layers;
-    const assignedServiceIds = departmentServices.map(s => s.service_id || s.id);
-    const unassignedServices = availableServices.filter(s => !assignedServiceIds.includes(s.id));
+
+    // Apply service filtering
+    const filteredServices = getFilteredServices(departmentServices);
+    const canAddServices = !hasRole(user, ROLES.SERVICE_SUPERVISOR) || user?.is_super_admin;
 
     return (
         <DashboardLayout>
@@ -223,170 +228,134 @@ export default function DepartmentDetailPage({ params }: DepartmentDetailPagePro
                     </div>
                 </div>
 
-                {/* Services Section */}
-                <div>
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h3 className="font-semibold text-lg">Services</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Manage services for this department
-                            </p>
-                        </div>
-                    </div>
-
-                    {departmentServices.length === 0 ? (
-                        <div className="text-center py-16 bg-card border border-border rounded-xl">
-                            <Zap className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                            <p className="text-muted-foreground mb-6">No services assigned yet.</p>
-                            <button
-                                onClick={() => setShowAddServiceModal(true)}
-                                className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Add First Service
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {/* Service Cards */}
-                            {departmentServices.map((service) => (
-                                <div
-                                    key={service.id}
-                                    onClick={() => router.push(`/events/${eventId}/departments/${deptId}/services/${service.id}`)}
-                                    className="bg-card border border-border rounded-xl p-6 hover:shadow-lg transition-all group relative cursor-pointer"
-                                >
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                                            <Layers className="w-6 h-6 text-primary" />
-                                        </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleRemoveService(service.service_id || service.id);
-                                            }}
-                                            className="opacity-0 group-hover:opacity-100 p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-all"
-                                            title="Remove Service"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-
-                                    <h4 className="font-bold text-lg mb-2">{service.sps_service_templates?.name || service.service_name}</h4>
-                                    <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-                                        {service.sps_service_templates?.description || 'No description'}
-                                    </p>
-
-                                    <div className="pt-4 border-t border-border flex items-center justify-between text-xs">
-                                        <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600 border border-green-500/20">
-                                            Active
-                                        </span>
-                                        <span className="text-muted-foreground">{service.scope || 'GLOBAL'}</span>
-                                    </div>
-                                </div>
-                            ))}
-
-                            {/* Add Service Card */}
-                            <button
-                                onClick={() => setShowAddServiceModal(true)}
-                                className="border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/30 rounded-xl p-6 flex flex-col items-center justify-center text-center min-h-[240px] transition-all group"
-                            >
-                                <div className="w-12 h-12 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center mb-4 transition-colors">
-                                    <Plus className="w-6 h-6 text-muted-foreground group-hover:text-primary" />
-                                </div>
-                                <h4 className="font-medium mb-1">Add Service</h4>
-                                <p className="text-xs text-muted-foreground">From template</p>
-                            </button>
-                        </div>
-                    )}
+                {/* Tabs */}
+                <div className="flex items-center gap-6 border-b border-border mb-6">
+                    <button
+                        onClick={() => setActiveTab('services')}
+                        className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'services'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                    >
+                        Services
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('users')}
+                        className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'users'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                    >
+                        Users
+                    </button>
                 </div>
 
-                {/* Add Service Modal */}
-                {showAddServiceModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                        <div className="bg-card w-full max-w-2xl rounded-xl border border-border shadow-2xl max-h-[80vh] overflow-hidden flex flex-col">
-                            <div className="p-6 border-b border-border">
-                                <h3 className="font-bold text-lg">Add Service to Department</h3>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    Select services to assign to {department.name}
+                {/* Content */}
+                {activeTab === 'services' ? (
+                    <div>
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 className="font-semibold text-lg">Services</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Manage services for this department
                                 </p>
                             </div>
+                        </div>
 
-                            <div className="flex-1 overflow-y-auto p-6">
-                                {unassignedServices.length > 0 ? (
-                                    <div className="grid grid-cols-1 gap-3">
-                                        {unassignedServices.map((service) => {
-                                            const isSelected = selectedServices.includes(service.id);
-                                            return (
-                                                <div
-                                                    key={service.id}
-                                                    onClick={() => {
-                                                        if (isSelected) {
-                                                            setSelectedServices(prev => prev.filter(id => id !== service.id));
-                                                        } else {
-                                                            setSelectedServices(prev => [...prev, service.id]);
-                                                        }
-                                                    }}
-                                                    className={`p-4 border rounded-lg cursor-pointer transition-all ${isSelected
-                                                        ? 'border-primary bg-primary/5'
-                                                        : 'border-border hover:border-primary/50'
-                                                        }`}
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected
-                                                                ? 'bg-primary border-primary'
-                                                                : 'border-muted-foreground'
-                                                                }`}>
-                                                                {isSelected && <CheckCircle className="w-3.5 h-3.5 text-primary-foreground" />}
-                                                            </div>
-                                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${isSelected ? 'bg-primary/20' : 'bg-primary/10'
-                                                                }`}>
-                                                                <Layers className="w-5 h-5 text-primary" />
-                                                            </div>
-                                                            <div>
-                                                                <h4 className="font-semibold">
-                                                                    {service.name}
-                                                                </h4>
-                                                                <p className="text-sm text-muted-foreground line-clamp-1">
-                                                                    {service.description || 'No description'}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-12 text-muted-foreground">
-                                        <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                                        <p>All available services have been assigned!</p>
-                                    </div>
+                        {filteredServices.length === 0 ? (
+                            <div className="text-center py-16 bg-card border border-border rounded-xl">
+                                <Zap className="w-16 h-16 mx-auto mb-4 opacity-20" />
+                                <p className="text-muted-foreground mb-6">
+                                    {hasRole(user, ROLES.SERVICE_SUPERVISOR)
+                                        ? 'No services assigned to you.'
+                                        : 'No services assigned yet.'}
+                                </p>
+                                {canAddServices && (
+                                    <button
+                                        onClick={() => setShowAddServiceWizard(true)}
+                                        className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Add First Service
+                                    </button>
                                 )}
                             </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {/* Service Cards */}
+                                {filteredServices.map((service) => (
+                                    <div
+                                        key={service.id}
+                                        onClick={() => router.push(`/events/${eventId}/departments/${deptId}/services/${service.id}`)}
+                                        className="bg-card border border-border rounded-xl p-6 hover:shadow-lg transition-all group relative cursor-pointer"
+                                    >
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                                                <Layers className="w-6 h-6 text-primary" />
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRemoveService(service.service_id || service.id);
+                                                }}
+                                                className="opacity-0 group-hover:opacity-100 p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-all"
+                                                title="Remove Service"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
 
-                            <div className="p-6 border-t border-border flex justify-end gap-3">
-                                <button
-                                    onClick={() => {
-                                        setShowAddServiceModal(false);
-                                        setSelectedServices([]);
-                                    }}
-                                    className="px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg font-medium transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleSaveServices}
-                                    disabled={selectedServices.length === 0}
-                                    className={`px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium transition-colors flex items-center gap-2 ${selectedServices.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-primary/90'
-                                        }`}
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Add Selected ({selectedServices.length})
-                                </button>
+                                        <h4 className="font-bold text-lg mb-2">{service.sps_service_templates?.name || service.service_name}</h4>
+                                        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                                            {service.sps_service_templates?.description || 'No description'}
+                                        </p>
+
+                                        <div className="pt-4 border-t border-border flex items-center justify-between text-xs">
+                                            <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600 border border-green-500/20">
+                                                Active
+                                            </span>
+                                            <span className="text-muted-foreground">{service.scope || 'GLOBAL'}</span>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* Add Service Card */}
+                                {canAddServices && (
+                                    <button
+                                        onClick={() => setShowAddServiceWizard(true)}
+                                        className="border-2 border-dashed border-border hover:border-primary/50 hover:bg-muted/30 rounded-xl p-6 flex flex-col items-center justify-center text-center min-h-[240px] transition-all group"
+                                    >
+                                        <div className="w-12 h-12 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center mb-4 transition-colors">
+                                            <Plus className="w-6 h-6 text-muted-foreground group-hover:text-primary" />
+                                        </div>
+                                        <h4 className="font-medium mb-1">Add Service</h4>
+                                        <p className="text-xs text-muted-foreground">From template</p>
+                                    </button>
+                                )}
                             </div>
-                        </div>
+                        )}
                     </div>
+                ) : (
+                    <DepartmentUsers
+                        deptId={deptId}
+                        eventId={eventId}
+                        user={user}
+                        organizationId={event?.organization_id}
+                    />
+                )}
+
+                {/* Add Service Wizard */}
+                {(canAddServices && showAddServiceWizard) && (
+                    <AddServiceWizard
+                        isOpen={showAddServiceWizard}
+                        onClose={() => setShowAddServiceWizard(false)}
+                        departmentId={deptId}
+                        departmentName={department?.name || ''}
+                        organizationId={event?.organization_id || ''}
+                        eventId={eventId}
+                        onSuccess={handleServiceAdded}
+                        existingServices={departmentServices}
+                    />
                 )}
             </div>
         </DashboardLayout>

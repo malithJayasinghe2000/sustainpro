@@ -26,6 +26,7 @@ export class EventRepository {
         limit?: number;
         search?: string;
         organizationId?: string;
+        allowedEventIds?: string[];
     }): Promise<{ events: Event[]; total: number; pages: number }> {
         const page = params?.page || 1;
         const limit = params?.limit || 20;
@@ -36,6 +37,10 @@ export class EventRepository {
 
         if (params?.organizationId) {
             whereConditions.organization_id = params.organizationId;
+        }
+
+        if (params?.allowedEventIds) {
+            whereConditions.id = { in: params.allowedEventIds };
         }
 
         if (params?.search) {

@@ -3,6 +3,7 @@
 
 import awsIot from 'aws-iot-device-sdk';
 import path from 'path';
+import { emitTelemetry, emitDashboardStats } from './socket'
 
 // ============================================================
 // TYPES
@@ -128,6 +129,19 @@ export function startIotSubscriber() {
         console.log(`   Bottles Avoided: ${message.data.bottles_avoided}`);
         console.log(`   CO₂ Saved: ${message.data.co2_saved.toFixed(3)} kg`);
         console.log(`   WiFi Strength: ${message.data.wifi_strength} dBm`);
+        let data: TelemetryData = message.data;
+        
+        emitTelemetry({
+            device_code: message.device_code,
+            device_id: String(1),
+            organization_id: message.organization_id,
+            timestamp: new Date(),
+            data,
+            status: 'online',
+        });
+
+        console.log('\n📨 Emitted telemetry data to Socket.IO clients.');
+
       }
 
       console.log(`\n⏰ Device Timestamp: ${message.timestamp}`);

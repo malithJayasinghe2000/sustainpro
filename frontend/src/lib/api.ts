@@ -150,7 +150,7 @@ export const authApi = {
 
 // Users API functions
 export const usersApi = {
-    getAll: async (params?: { page?: number; limit?: number; search?: string; role?: string; organization_id?: string; event_id?: string }) => {
+    getAll: async (params?: { page?: number; limit?: number; search?: string; role?: string; organization_id?: string; event_id?: string; department_id?: string }) => {
         const response = await apiClient.get('/users', { params });
         return response.data;
     },
@@ -611,11 +611,22 @@ export const departmentsApi = {
         return response.data.data;
     },
 
-    addService: async (departmentId: string, serviceId: string, config?: any) => {
+    addService: async (departmentId: string, serviceId: string, options?: { config?: any; assigned_supervisor_id?: string }) => {
         const response = await apiClient.post(`/departments/${departmentId}/services`, {
             service_template_id: serviceId,
-            config: config || {}
+            config: options?.config || {},
+            assigned_supervisor_id: options?.assigned_supervisor_id || undefined
         });
+        return response.data;
+    },
+
+    updateService: async (departmentId: string, serviceId: string, data: { assigned_supervisor_id?: string; config?: any }) => {
+        const response = await apiClient.put(`/departments/${departmentId}/services/${serviceId}`, data);
+        return response.data;
+    },
+
+    update: async (id: string, data: any) => {
+        const response = await apiClient.put(`/departments/${id}`, data);
         return response.data;
     },
 
@@ -627,6 +638,11 @@ export const departmentsApi = {
     getServices: async (departmentId: string) => {
         const response = await apiClient.get(`/departments/${departmentId}/services`);
         return response.data;
+    },
+
+    getMyDepartments: async () => {
+        const response = await apiClient.get('/departments/my/departments');
+        return response.data.data;
     }
 };
 
@@ -772,6 +788,10 @@ export const eventsApi = {
 
 
 export const servicesApi = {
+    getMyServices: async () => {
+        const response = await apiClient.get('/services/my/services');
+        return response.data.data;
+    },
     getAll: async (scope?: string) => {
         const response = await apiClient.get('/services', { params: { scope } });
         return response.data.data;

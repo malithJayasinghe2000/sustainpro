@@ -53,12 +53,14 @@ export class UserService {
         limit: number = 20,
         search?: string,
         role?: string,
-        eventId?: string
+        eventId?: string,
+        departmentId?: string
     ): Promise<{ users: User[], total: number, pages: number }> {
         const skip = (page - 1) * limit;
         const { users, total } = await this.userRepo.findAll({
             organizationId: organizationId || undefined,
             eventId: eventId || undefined,
+            departmentId: departmentId || undefined,
             skip,
             take: limit,
             search,
@@ -196,7 +198,7 @@ export class UserService {
     async assignRole(
         userId: string,
         role: string,
-        context: { org_id?: string; event_id?: string }
+        context: { org_id?: string; event_id?: string; dept_id?: string; service_id?: string }
     ) {
         const user = await this.userRepo.findById(userId);
         if (!user) {
@@ -204,13 +206,13 @@ export class UserService {
         }
 
         const assignment = await this.userRepo.assignRole(userId, role, context);
-        
+
         // Clear local cache
         clearPermissionCache(userId);
-        
+
         // Publish distributed cache invalidation
         await publishPermissionCacheInvalidation('user_role_changed', { userId, roleCode: role });
-        
+
         logger.info('Role assigned', { userId, role });
         return assignment;
     }

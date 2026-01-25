@@ -417,6 +417,29 @@ export class ServiceRepository {
     }
 
     /**
+     * Update department service
+     */
+    async updateDepartmentService(id: string, data: {
+        assigned_supervisor_id?: string;
+        config?: Record<string, any>;
+        name?: string;
+    }): Promise<DepartmentService | null> {
+        try {
+            const result = await prisma.sps_department_services.update({
+                where: { id },
+                data: {
+                    assigned_supervisor_id: data.assigned_supervisor_id,
+                    config: data.config,
+                    name: data.name,
+                },
+            });
+            return result as any as DepartmentService;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
      * Get department service by ID
      */
     async findDepartmentServiceById(id: string): Promise<any | null> {
@@ -455,5 +478,56 @@ export class ServiceRepository {
             }
         });
         return !!assignment;
+    }
+
+    /**
+     * Get services assigned to user (as supervisor)
+     */
+    async findByUser(userId: string): Promise<any[]> {
+        const result = await prisma.sps_department_services.findMany({
+            where: {
+                OR: [
+                    { assigned_supervisor_id: userId },
+                    {
+                        sps_role_assignments: {
+                            some: {
+                                user_id: userId,
+                                role: 'SERVICE_SUPERVISOR'
+                            }
+                        }
+                    }
+                ]
+            },
+            include: {
+                sps_service_templates: true,
+                sps_departments: {
+                    include: {
+                        sps_events: {
+                            select: { name: true, start_date: true, end_date: true, status: true }
+                        }
+                    }
+                },
+                _count: {
+                    select: {
+                        sps_devices: true
+                    }
+                }
+            },
+            orderBy: { created_at: 'desc' }
+        });
+
+        return result.map(ds => ({
+            ...ds,
+            service_name: ds.name || ds.sps_service_templates?.name,
+            template_name: ds.sps_service_templates?.name,
+            template_description: ds.sps_service_templates?.description,
+            service_type: ds.sps_service_templates?.category,
+            department_name: ds.sps_departments?.name,
+            event_name: ds.sps_departments?.sps_events?.name,
+            event_start_date: ds.sps_departments?.sps_events?.start_date,
+            event_end_date: ds.sps_departments?.sps_events?.end_date,
+            event_status: ds.sps_departments?.sps_events?.status,
+            device_count: ds._count.sps_devices
+        }));
     }
 }
