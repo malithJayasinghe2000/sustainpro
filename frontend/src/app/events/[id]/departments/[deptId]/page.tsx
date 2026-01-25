@@ -246,7 +246,7 @@ export default function DepartmentDetailPage({ params }: DepartmentDetailPagePro
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                             }`}
                     >
-                        Users / Team
+                        Users
                     </button>
                 </div>
 

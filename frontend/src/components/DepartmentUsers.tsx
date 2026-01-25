@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { usersApi } from '@/lib/api';
-import { hasRole, ROLES, ROLE_LABELS } from '@/lib/roles';
+import { hasRole, ROLES, ROLE_LABELS, isAdmin } from '@/lib/roles';
 import { Plus, Trash2, User as UserIcon, Search, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from './Modal';
 import { useRouter } from 'next/navigation';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
 
 interface User {
     id: string;
@@ -58,7 +59,7 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
     useEffect(() => {
         const timer = setTimeout(() => {
             if (searchQuery.length >= 2 && addMode === 'existing') {
-                performSearch();
+                performLookup();
             } else {
                 setSearchResults([]);
             }
@@ -83,28 +84,7 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
         }
     };
 
-    const performSearch = async () => {
-        try {
-            setIsSearching(true);
-            // Search globally (or within org) to find users to add
-            const response = await usersApi.getAll({
-                organization_id: organizationId,
-                search: searchQuery,
-                limit: 5
-            });
 
-            const results = Array.isArray(response) ? response : (response.data || []);
-            // Filter out users already in this department
-            const filtered = results.filter((u: User) =>
-                !users.some(existing => existing.id === u.id)
-            );
-            setSearchResults(filtered);
-        } catch (error) {
-            console.error('Search failed:', error);
-        } finally {
-            setIsSearching(false);
-        }
-    };
 
     // Permission Logic
     const canAddUser = () => {
@@ -130,10 +110,18 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
         return [];
     };
 
+    // Validating password for new user
+    const { isValid: isPasswordValid, checks } = usePasswordValidation(newUser.password);
+
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedRole) {
             toast.error('Please select a role');
+            return;
+        }
+
+        if (!isPasswordValid) {
+            toast.error('Password does not meet requirements');
             return;
         }
 
@@ -196,6 +184,62 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
         setSearchResults([]);
         setSelectedExistingUser(null);
         setAddMode('existing');
+        setFilterRole(''); // Reset filter role
+    };
+
+    // State for Existing User Filter
+    const [filterRole, setFilterRole] = useState('');
+
+    useEffect(() => {
+        if (addMode === 'existing' && filterRole) {
+            performLookup();
+        } else if (addMode === 'existing' && !filterRole) {
+            setSearchResults([]);
+        }
+    }, [filterRole, addMode]); // Re-run when filter role changes
+
+    // Update performLookup to use filterRole
+    const performLookup = async () => {
+        try {
+            setIsSearching(true);
+
+            // Build params
+            const params: any = {
+                organization_id: organizationId,
+                limit: 50 // Fetch more if we are filtering by role
+            };
+
+            if (searchQuery) {
+                params.search = searchQuery;
+            }
+
+            if (filterRole) {
+                params.role = filterRole;
+            } else if (!searchQuery) {
+                // If no search query AND no role filter, usually don't search. 
+                // But user wants to see "all system exist user that role" when role selected.
+                // So if filterRole is set, we search even without query.
+                // If neither, return empty.
+                setIsSearching(false);
+                setSearchResults([]);
+                return;
+            }
+
+            const response = await usersApi.getAll(params);
+
+            const results = Array.isArray(response) ? response : (response.data || []);
+
+            // Filter out users already in this department
+            let filtered = results.filter((u: User) =>
+                !users.some(existing => existing.id === u.id)
+            );
+
+            setSearchResults(filtered);
+        } catch (error) {
+            console.error('Search failed:', error);
+        } finally {
+            setIsSearching(false);
+        }
     };
 
     const allowedRoles = getAllowedRoles();
@@ -215,7 +259,19 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
                 </div>
                 {canAddUser() && (
                     <button
-                        onClick={() => setShowAddModal(true)}
+                        onClick={() => {
+                            if (isAdmin(user) || user.is_super_admin) {
+                                const params = new URLSearchParams({
+                                    organization_id: organizationId || '',
+                                    event_id: eventId,
+                                    department_id: deptId,
+                                    return_url: window.location.pathname
+                                });
+                                router.push(`/users/new?${params.toString()}`);
+                            } else {
+                                setShowAddModal(true);
+                            }
+                        }}
                         className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2"
                     >
                         <Plus className="w-4 h-4" />
@@ -295,47 +351,73 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
                         <div className="space-y-4">
                             {!selectedExistingUser ? (
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">Search User</label>
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                        <input
-                                            type="text"
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full pl-9 pr-4 py-2 border border-border rounded-lg bg-background"
-                                            placeholder="Search by name or email..."
-                                            autoFocus
-                                        />
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium mb-1">Select Role to Filter</label>
+                                        <select
+                                            value={filterRole}
+                                            onChange={(e) => setFilterRole(e.target.value)}
+                                            className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                        >
+                                            <option value="" disabled>-- Select Role --</option>
+                                            {allowedRoles.map(role => (
+                                                <option key={role} value={role}>
+                                                    {ROLE_LABELS[role] || role}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
 
-                                    {/* Search Results */}
-                                    {searchQuery.length >= 2 && (
-                                        <div className="mt-2 border border-border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
-                                            {isSearching ? (
-                                                <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
-                                            ) : searchResults.length > 0 ? (
-                                                <div className="divide-y divide-border">
-                                                    {searchResults.map(u => (
-                                                        <button
-                                                            key={u.id}
-                                                            onClick={() => setSelectedExistingUser(u)}
-                                                            className="w-full flex items-center px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-                                                        >
-                                                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
-                                                                <span className="text-xs font-semibold text-primary">
-                                                                    {u.full_name?.charAt(0) || u.email.charAt(0)}
-                                                                </span>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-sm font-medium">{u.full_name}</div>
-                                                                <div className="text-xs text-muted-foreground">{u.email}</div>
-                                                            </div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <div className="p-4 text-center text-sm text-muted-foreground">No users found.</div>
-                                            )}
+                                    {filterRole && (
+                                        <>
+                                            <label className="block text-sm font-medium mb-1">Search User (Optional)</label>
+                                            <div className="relative mb-4">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                                <input
+                                                    type="text"
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    className="w-full pl-9 pr-4 py-2 border border-border rounded-lg bg-background"
+                                                    placeholder="Search by name or email..."
+                                                />
+                                            </div>
+
+                                            <div className="mt-2 border border-border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+                                                {isSearching ? (
+                                                    <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
+                                                ) : searchResults.length > 0 ? (
+                                                    <div className="divide-y divide-border">
+                                                        {searchResults.map(u => (
+                                                            <button
+                                                                key={u.id}
+                                                                onClick={() => {
+                                                                    setSelectedExistingUser(u);
+                                                                    setSelectedRole(filterRole); // Auto-select the filtered role
+                                                                }}
+                                                                className="w-full flex items-center px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+                                                            >
+                                                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                                                    <span className="text-xs font-semibold text-primary">
+                                                                        {u.full_name?.charAt(0) || u.email.charAt(0)}
+                                                                    </span>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-sm font-medium">{u.full_name}</div>
+                                                                    <div className="text-xs text-muted-foreground">{u.email}</div>
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-4 text-center text-sm text-muted-foreground">
+                                                        No users found with role {ROLE_LABELS[filterRole] || filterRole}.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                    {!filterRole && (
+                                        <div className="p-6 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">
+                                            Please select a role above to see available users.
                                         </div>
                                     )}
                                 </div>
@@ -420,16 +502,17 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1">Password</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={newUser.password}
-                                    onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                                    className="w-full px-3 py-2 border border-border rounded-lg bg-background"
-                                    placeholder="Initial password"
-                                    minLength={6}
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">User will be forced to change this on login.</p>
+                                <div className="relative">
+                                    <input
+                                        type="password"
+                                        required
+                                        value={newUser.password}
+                                        onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                                        className="w-full px-3 py-2 border border-border rounded-lg bg-background mb-2"
+                                        placeholder="Note: Must meet security requirements"
+                                    />
+                                    <PasswordRequirements password={newUser.password} />
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1">Role</label>
@@ -458,7 +541,7 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || !isPasswordValid}
                                     className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                                 >
                                     {isSubmitting ? 'Creating...' : 'Create & Add'}

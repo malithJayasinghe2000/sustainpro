@@ -71,6 +71,28 @@ export const getByEvent = async (req: Request, res: Response, next: NextFunction
 };
 
 /**
+ * GET /api/v1/departments/my
+ * Get departments assigned to current user
+ */
+export const getMyDepartments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new AppError(401, 'User authentication required');
+        }
+
+        const departments = await deptService.getByUser(userId);
+
+        res.json({
+            success: true,
+            data: departments,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * GET /api/v1/departments/:id
  */
 export const getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

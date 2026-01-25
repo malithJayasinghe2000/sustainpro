@@ -10,6 +10,7 @@ import ProvisioningModal from '@/components/provisioning/ProvisioningModal';
 import WidgetRenderer from '@/components/dashboard/WidgetRenderer';
 import DeviceTable from '@/components/devices/DeviceTable';
 import { WidgetConfig } from '@/types/dashboard';
+import { hasRole, ROLES, ROLE_LABELS } from '@/lib/roles';
 import {
     ArrowLeft,
     Plus,
@@ -26,10 +27,13 @@ import {
     AlertCircle,
     Users,
     UserPlus,
-    Search
+    Search,
+    X,
+    Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { systemNotificationsApi } from '@/lib/api';
+import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
 
 interface ServiceInstancePageProps {
     params: Promise<{ id: string; deptId: string; serviceId: string }>;
@@ -56,39 +60,78 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     const [showProvisioningModal, setShowProvisioningModal] = useState(false);
 
     // Modal State
+    // Modal State
     const [activeTab, setActiveTab] = useState<'existing' | 'create'>('create');
-    const [addUserTab, setAddUserTab] = useState<'existing' | 'create'>('create'); // Default to create
+
+    // User Modal State (aligned with DepartmentUsers)
+    const [addUserTab, setAddUserTab] = useState<'existing' | 'create'>('existing');
     const [userSearchQuery, setUserSearchQuery] = useState('');
+    const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
+    const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+    const [selectedExistingUser, setSelectedExistingUser] = useState<any | null>(null);
     const [roleFilter, setRoleFilter] = useState('');
+
     const [newUserForm, setNewUserForm] = useState({
         full_name: '',
         email: '',
         password: '',
-        role: 'TECHNICIAN'
+        // role is handled by selectedRole state now logic-wise, or we keep it here.
+        // DepartmentUsers separates it. Let's separate it for consistency.
     });
+    const [selectedRole, setSelectedRole] = useState('');
     const [isSubmittingUser, setIsSubmittingUser] = useState(false);
 
-    // Filter available users for "Add Existing"
-    const [orgUsers, setOrgUsers] = useState<any[]>([]);
+    const { isValid: isPasswordValid } = usePasswordValidation(newUserForm.password);
 
+    // Filter logic same as DepartmentUsers
     useEffect(() => {
-        if (showAddUserModal && addUserTab === 'existing' && serviceInstance?.organization_id) {
+        const timer = setTimeout(() => {
+            if (userSearchQuery.length >= 2 && addUserTab === 'existing') {
+                performUserLookup();
+            } else if (addUserTab === 'existing' && !userSearchQuery && !roleFilter) {
+                setUserSearchResults([]);
+            } else if (addUserTab === 'existing' && roleFilter) {
+                performUserLookup();
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [userSearchQuery, addUserTab, roleFilter]);
+
+    const performUserLookup = async () => {
+        if (!serviceInstance?.organization_id) return;
+
+        setIsSearchingUsers(true);
+        try {
             const params: any = {
                 organization_id: serviceInstance.organization_id,
-                limit: 100
+                limit: 50
             };
+
+            if (userSearchQuery) params.search = userSearchQuery;
             if (roleFilter) params.role = roleFilter;
 
-            usersApi.getAll(params)
-                .then(res => {
-                    const users = res.data || (Array.isArray(res) ? res : []);
-                    // Filter out users already in this service
-                    const existingIds = serviceUsers.map(u => u.id);
-                    setOrgUsers(users.filter((u: any) => !existingIds.includes(u.id)));
-                })
-                .catch(console.error);
+            if (!userSearchQuery && !roleFilter) {
+                setIsSearchingUsers(false);
+                setUserSearchResults([]);
+                return;
+            }
+
+            const response = await usersApi.getAll(params);
+            const results = Array.isArray(response) ? response : (response.data || []);
+
+            // Filter out users already in this service
+            // serviceUsers contains users in this service
+            const existingIds = serviceUsers.map(u => u.id);
+            const filtered = results.filter((u: any) => !existingIds.includes(u.id));
+
+            setUserSearchResults(filtered);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSearchingUsers(false);
         }
-    }, [showAddUserModal, addUserTab, serviceInstance, serviceUsers, roleFilter]);
+    };
+
 
     useEffect(() => {
         loadData();
@@ -148,21 +191,17 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
 
     const canConfigure = useMemo(() => {
         if (!user) return false;
-        if (user?.is_super_admin) return true;
+        if (user.is_super_admin) return true;
 
-        // ORG_ADMIN, EVENT_MANAGER, DEPARTMENT_HEAD have access
-        const hasHighLevelRole = user?.roles?.some((r: any) => {
-            const role = typeof r === 'string' ? r : r.role;
-            return ['ORG_ADMIN', 'EVENT_MANAGER', 'DEPARTMENT_HEAD'].includes(role);
-        });
-        if (hasHighLevelRole) return true;
+        // Check high-level roles using standard helper
+        if (hasRole(user, ['ORG_ADMIN', 'EVENT_MANAGER', 'DEPT_HEAD'])) {
+            return true;
+        }
 
-        // Service Supervisor for THIS service
-        // Check if user has SERVICE_SUPERVISOR role for this service_id
-        return user?.roles?.some((r: any) => {
-            if (typeof r === 'string') return false;
-            return r.role === 'SERVICE_SUPERVISOR' && r.service_id === serviceId;
-        });
+        // Service Supervisor for THIS specific service
+        return user.roles?.some((r: any) =>
+            r.role === 'SERVICE_SUPERVISOR' && r.service_id === serviceId
+        );
     }, [user, serviceId]);
 
     const loadData = async () => {
@@ -268,22 +307,35 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
 
 
 
+    const closeUserModal = () => {
+        setShowAddUserModal(false);
+        setNewUserForm({ full_name: '', email: '', password: '' });
+        setSelectedRole('');
+        setUserSearchQuery('');
+        setUserSearchResults([]);
+        setSelectedExistingUser(null);
+        setAddUserTab('existing');
+        setRoleFilter('');
+    };
+
     const handleCreateUser = () => {
-        setAddUserTab('create');
+        closeUserModal(); // Reset first
         setShowAddUserModal(true);
     };
 
-    const handleAddExistingUser = async (userToAdd: any) => {
+    const handleAddExistingUser = async () => {
+        if (!selectedExistingUser || !selectedRole) return;
+
         try {
             setIsSubmittingUser(true);
 
             // 1. Get current user roles to ensure we don't overwrite
-            const userData = await usersApi.getById(userToAdd.id);
+            const userData = await usersApi.getById(selectedExistingUser.id);
             const currentRoles = userData.roles || [];
 
             // 2. Add new role
             const newRole = {
-                role: newUserForm.role, // Default to selected role or VIEWER
+                role: selectedRole,
                 service_id: serviceId,
                 department_id: deptId,
                 event_id: eventId,
@@ -292,7 +344,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
 
             // Check if already has this role for this service
             const exists = currentRoles.some((r: any) =>
-                r.service_id === serviceId && r.role === newUserForm.role
+                r.service_id === serviceId && r.role === selectedRole
             );
 
             if (exists) {
@@ -303,21 +355,20 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             const updatedRoles = [...currentRoles, newRole];
 
             // 3. Update user
-            await usersApi.update(userToAdd.id, { roles: updatedRoles });
+            await usersApi.update(selectedExistingUser.id, { roles: updatedRoles });
 
             // 4. Send Notification
             await systemNotificationsApi.create({
                 type: 'info',
                 title: 'New Service Assignment',
-                message: `You have been assigned the role of ${newUserForm.role} in service ${serviceInstance.service_name}`,
+                message: `You have been assigned the role of ${ROLE_LABELS[selectedRole] || selectedRole} in service ${serviceInstance.service_name}`,
                 source: 'service_instance',
                 source_id: serviceId
             });
 
-            // Email would be handled by backend or manually here if API existed
-            toast.success(`User ${userToAdd.full_name} added successfully`);
+            toast.success(`User ${selectedExistingUser.full_name} added successfully`);
 
-            setShowAddUserModal(false);
+            closeUserModal();
             loadData();
         } catch (error: any) {
             console.error('Failed to add user:', error);
@@ -334,13 +385,23 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                 return;
             }
 
+            if (!selectedRole) {
+                toast.error('Please select a role');
+                return;
+            }
+
+            if (!isPasswordValid) {
+                toast.error('Password does not meet requirements');
+                return;
+            }
+
             setIsSubmittingUser(true);
 
             const payload = {
                 ...newUserForm,
                 organization_id: serviceInstance.organization_id,
                 roles: [{
-                    role: newUserForm.role,
+                    role: selectedRole,
                     service_id: serviceId,
                     department_id: deptId,
                     event_id: eventId,
@@ -351,8 +412,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             await usersApi.create(payload);
 
             toast.success('User created and notified via email');
-            setShowAddUserModal(false);
-            setNewUserForm({ full_name: '', email: '', password: '', role: 'TECHNICIAN' });
+            closeUserModal();
             loadData();
         } catch (error: any) {
             console.error('Failed to create user:', error);
@@ -364,10 +424,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
 
 
 
-    const filteredOrgUsers = orgUsers.filter(u =>
-    (u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-        u.email?.toLowerCase().includes(userSearchQuery.toLowerCase()))
-    );
+
 
     return (
         <DashboardLayout>
@@ -719,163 +776,237 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                                         Grant access to this service
                                     </p>
                                 </div>
-                                <button onClick={() => setShowAddUserModal(false)} className="p-2 hover:bg-muted rounded-full">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                <button onClick={closeUserModal} className="p-2 hover:bg-muted rounded-full">
+                                    <X className="w-5 h-5" />
                                 </button>
                             </div>
 
-                            <div className="flex border-b border-border px-6">
-                                <button
-                                    onClick={() => setAddUserTab('create')}
-                                    className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${addUserTab === 'create' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
-                                >
-                                    Create New User
-                                </button>
-                                <button
-                                    onClick={() => setAddUserTab('existing')}
-                                    className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${addUserTab === 'existing' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
-                                >
-                                    Select Existing User
-                                </button>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-6">
-                                {addUserTab === 'existing' ? (
-                                    <div className="space-y-4">
-                                        <div className="flex gap-2">
-                                            <div className="w-1/3">
-                                                <select
-                                                    className="w-full h-10 px-2 bg-background border border-border rounded-lg text-sm"
-                                                    value={roleFilter}
-                                                    onChange={(e) => setRoleFilter(e.target.value)}
-                                                >
-                                                    <option value="TECHNICIAN" selected>Technician</option>
-                                                    <option value="VIEWER">Viewer</option>
-                                                    <option value="SERVICE_SUPPLIER">Service Supplier</option>
-                                                </select>
-                                            </div>
-                                            <div className="relative flex-1">
-                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                                <input
-                                                    type="text"
-                                                    placeholder="Search by name or email..."
-                                                    className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                                                    value={userSearchQuery}
-                                                    onChange={(e) => setUserSearchQuery(e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="text-xs font-semibold uppercase text-muted-foreground mb-2 block">Role to Assign</label>
-                                                <select
-                                                    className="w-full p-2 bg-background border border-border rounded-lg text-sm"
-                                                    value={newUserForm.role}
-                                                    onChange={(e) => setNewUserForm(prev => ({ ...prev, role: e.target.value }))}
-                                                >
-                                                    <option value="VIEWER">Viewer (Read Only)</option>
-                                                    <option value="TECHNICIAN">Technician (Operate Devices)</option>
-                                                    <option value="SERVICE_SUPPLIER">Service Supplier</option>
-                                                </select>
-                                            </div>
-
-                                            <div className="h-[300px] overflow-y-auto space-y-2 border border-border rounded-lg p-2">
-                                                {filteredOrgUsers.length === 0 ? (
-                                                    <div className="text-center py-8 text-muted-foreground">
-                                                        <Users className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                                                        <p>No matching users found.</p>
-                                                    </div>
-                                                ) : (
-                                                    filteredOrgUsers.map(user => (
-                                                        <div key={user.id} className="flex items-center justify-between p-3 hover:bg-muted/50 rounded-lg border border-transparent hover:border-border transition-all">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-medium">
-                                                                    {(user.full_name || user.email).charAt(0).toUpperCase()}
-                                                                </div>
-                                                                <div>
-                                                                    <p className="font-medium text-sm">{user.full_name}</p>
-                                                                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                                                                </div>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => handleAddExistingUser(user)}
-                                                                disabled={isSubmittingUser}
-                                                                className="px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground rounded text-xs font-medium transition-colors"
-                                                            >
-                                                                {isSubmittingUser ? 'Adding...' : 'Add'}
-                                                            </button>
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4 max-w-md mx-auto py-4">
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium">Full Name</label>
-                                            <input
-                                                type="text"
-                                                className="w-full p-2 bg-background border border-border rounded-lg"
-                                                placeholder="John Doe"
-                                                value={newUserForm.full_name}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, full_name: e.target.value }))}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium">Email Address</label>
-                                            <input
-                                                type="email"
-                                                className="w-full p-2 bg-background border border-border rounded-lg"
-                                                placeholder="john@example.com"
-                                                value={newUserForm.email}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium">Password</label>
-                                            <input
-                                                type="password"
-                                                className="w-full p-2 bg-background border border-border rounded-lg"
-                                                placeholder="••••••••"
-                                                value={newUserForm.password}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, password: e.target.value }))}
-                                            />
-                                            <p className="text-xs text-muted-foreground">User will receive these credentials via email.</p>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium">Role</label>
-                                            <select
-                                                className="w-full p-2 bg-background border border-border rounded-lg"
-                                                value={newUserForm.role}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, role: e.target.value }))}
-                                            >
-                                                <option value="VIEWER">Viewer</option>
-                                                <option value="TECHNICIAN">Technician</option>
-                                                <option value="SERVICE_SUPERVISOR">Service Supervisor</option>
-                                            </select>
-                                        </div>
-
+                            <div className="p-6">
+                                <div className="space-y-6">
+                                    {/* Tabs */}
+                                    <div className="flex bg-muted rounded-lg p-1">
                                         <button
-                                            onClick={handleCreateNewUser}
-                                            disabled={isSubmittingUser}
-                                            className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors mt-6 flex items-center justify-center gap-2"
+                                            onClick={() => setAddUserTab('existing')}
+                                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all ${addUserTab === 'existing'
+                                                ? 'bg-background text-foreground shadow-sm'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                                }`}
                                         >
-                                            {isSubmittingUser ? (
-                                                <>
-                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                                    Creating...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <UserPlus className="w-4 h-4" />
-                                                    Create User
-                                                </>
-                                            )}
+                                            Add Existing User
+                                        </button>
+                                        <button
+                                            onClick={() => setAddUserTab('create')}
+                                            className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all ${addUserTab === 'create'
+                                                ? 'bg-background text-foreground shadow-sm'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                                }`}
+                                        >
+                                            Create New User
                                         </button>
                                     </div>
-                                )}
+
+                                    {addUserTab === 'existing' ? (
+                                        <div className="space-y-4">
+                                            {!selectedExistingUser ? (
+                                                <div>
+                                                    <div className="mb-4">
+                                                        <label className="block text-sm font-medium mb-1">Select Role to Filter</label>
+                                                        <select
+                                                            value={roleFilter}
+                                                            onChange={(e) => setRoleFilter(e.target.value)}
+                                                            className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                        >
+                                                            <option value="" disabled>-- Select Role --</option>
+                                                            {[ROLES.SERVICE_SUPERVISOR, ROLES.TECHNICIAN, ROLES.SERVICE_SUPPLIER, ROLES.VIEWER].map(role => (
+                                                                <option key={role} value={role}>
+                                                                    {ROLE_LABELS[role] || role}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+
+                                                    {roleFilter && (
+                                                        <>
+                                                            <label className="block text-sm font-medium mb-1">Search User (Optional)</label>
+                                                            <div className="relative mb-4">
+                                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                                                <input
+                                                                    type="text"
+                                                                    value={userSearchQuery}
+                                                                    onChange={(e) => setUserSearchQuery(e.target.value)}
+                                                                    className="w-full pl-9 pr-4 py-2 border border-border rounded-lg bg-background"
+                                                                    placeholder="Search by name or email..."
+                                                                />
+                                                            </div>
+
+                                                            <div className="mt-2 border border-border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+                                                                {isSearchingUsers ? (
+                                                                    <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
+                                                                ) : userSearchResults.length > 0 ? (
+                                                                    <div className="divide-y divide-border">
+                                                                        {userSearchResults.map(u => (
+                                                                            <button
+                                                                                key={u.id}
+                                                                                onClick={() => {
+                                                                                    setSelectedExistingUser(u);
+                                                                                    setSelectedRole(roleFilter); // Auto-select the filtered role
+                                                                                }}
+                                                                                className="w-full flex items-center px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+                                                                            >
+                                                                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                                                                    <span className="text-xs font-semibold text-primary">
+                                                                                        {u.full_name?.charAt(0) || u.email.charAt(0)}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <div className="text-sm font-medium">{u.full_name}</div>
+                                                                                    <div className="text-xs text-muted-foreground">{u.email}</div>
+                                                                                </div>
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="p-4 text-center text-sm text-muted-foreground">
+                                                                        No users found with role {ROLE_LABELS[roleFilter] || roleFilter}.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                    {!roleFilter && (
+                                                        <div className="p-6 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">
+                                                            Please select a role above to see available users.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="bg-muted/30 border border-border rounded-lg p-4 flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                                            <Check className="w-5 h-5 text-primary" />
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-medium">{selectedExistingUser.full_name}</div>
+                                                            <div className="text-sm text-muted-foreground">{selectedExistingUser.email}</div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setSelectedExistingUser(null)}
+                                                        className="p-2 hover:bg-muted rounded-full transition-colors"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {selectedExistingUser && (
+                                                <div>
+                                                    <label className="block text-sm font-medium mb-1">Assign Role</label>
+                                                    <select
+                                                        required
+                                                        value={selectedRole}
+                                                        onChange={e => setSelectedRole(e.target.value)}
+                                                        className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                    >
+                                                        <option value="">Select Role</option>
+                                                        {[ROLES.SERVICE_SUPERVISOR, ROLES.TECHNICIAN, ROLES.SERVICE_SUPPLIER, ROLES.VIEWER].map(role => (
+                                                            <option key={role} value={role}>
+                                                                {ROLE_LABELS[role] || role}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
+                                                <button
+                                                    onClick={closeUserModal}
+                                                    className="px-4 py-2 text-sm font-medium hover:bg-muted rounded-lg transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleAddExistingUser}
+                                                    disabled={!selectedExistingUser || !selectedRole || isSubmittingUser}
+                                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {isSubmittingUser ? 'Adding...' : 'Add User'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Full Name</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    value={newUserForm.full_name}
+                                                    onChange={e => setNewUserForm({ ...newUserForm, full_name: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                    placeholder="John Doe"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Email</label>
+                                                <input
+                                                    type="email"
+                                                    required
+                                                    value={newUserForm.email}
+                                                    onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                    placeholder="john@example.com"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Password</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="password"
+                                                        required
+                                                        value={newUserForm.password}
+                                                        onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                                                        className="w-full px-3 py-2 border border-border rounded-lg bg-background mb-2"
+                                                        placeholder="Note: Must meet security requirements"
+                                                    />
+                                                    <PasswordRequirements password={newUserForm.password} />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Role</label>
+                                                <select
+                                                    required
+                                                    value={selectedRole}
+                                                    onChange={e => setSelectedRole(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                                                >
+                                                    <option value="">Select Role</option>
+                                                    {[ROLES.SERVICE_SUPERVISOR, ROLES.TECHNICIAN, ROLES.SERVICE_SUPPLIER, ROLES.VIEWER].map(role => (
+                                                        <option key={role} value={role}>
+                                                            {ROLE_LABELS[role] || role}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
+                                                <button
+                                                    onClick={closeUserModal}
+                                                    className="px-4 py-2 text-sm font-medium hover:bg-muted rounded-lg transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleCreateNewUser}
+                                                    disabled={isSubmittingUser || !isPasswordValid}
+                                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                                >
+                                                    {isSubmittingUser ? 'Creating...' : 'Create & Add'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

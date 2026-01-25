@@ -23,6 +23,28 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
 };
 
 /**
+ * GET /api/v1/services/my
+ * Get services assigned to current user
+ */
+export const getMyServices = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const userId = (req as any).user?.id;
+        if (!userId) {
+            throw new AppError(401, 'User authentication required');
+        }
+
+        const services = await serviceService.getByUser(userId);
+
+        res.json({
+            success: true,
+            data: services,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * GET /api/v1/services/:id
  * Get a single service template by ID
  */
@@ -52,9 +74,9 @@ export const getById = async (req: Request, res: Response, next: NextFunction): 
  */
 export const create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { 
-            name, 
-            description, 
+        const {
+            name,
+            description,
             category,
             image_url,
             service_type,

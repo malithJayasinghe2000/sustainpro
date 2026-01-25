@@ -4,6 +4,9 @@ import { requirePermission, authenticateToken } from '@sustainpro/shared-middlew
 
 const router = Router();
 
+// Get current user's assigned departments
+router.get('/my/departments', authenticateToken, deptController.getMyDepartments);
+
 /**
  * @swagger
  * /departments/by-event/{eventId}:

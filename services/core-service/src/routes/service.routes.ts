@@ -18,6 +18,7 @@ const router = Router();
  *         description: Service templates
  */
 // Requires services.view permission
+router.get('/my/services', authenticateToken, serviceController.getMyServices);
 router.get('/', requirePermission('services.view'), serviceController.getAll);
 
 /**
