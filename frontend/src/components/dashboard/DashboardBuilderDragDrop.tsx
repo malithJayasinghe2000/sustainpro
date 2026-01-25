@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import GridLayout from 'react-grid-layout';
-import { Plus, Settings, Trash2, Eye, Save, X } from 'lucide-react';
-import { WidgetConfig, WidgetType, WIDGET_TYPES, DashboardTemplate } from '@/types/dashboard';
+import { Plus, Settings, Trash2, Eye, Save, X, Loader2 } from 'lucide-react';
+import { WidgetConfig, WidgetType, DashboardTemplate } from '@/types/dashboard';
 import WidgetRenderer from './WidgetRenderer';
 import { Input } from '../ui/Input';
+import useDynamicWidgets from '@/hooks/useDynamicWidgets';
 import 'react-grid-layout/css/styles.css';
 
 interface DashboardBuilderDragDropProps {
@@ -31,6 +32,12 @@ export default function DashboardBuilderDragDrop({
     const [previewMode, setPreviewMode] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [canvasPadding, setCanvasPadding] = useState(24);
+
+    // Fetch widgets from database (with fallback to static)
+    const { widgetTypes, loading: widgetsLoading, groupedByCategory, getWidgetMeta } = useDynamicWidgets({
+        useDatabaseWidgets: true,
+        fallbackToStatic: true
+    });
 
     // --- Helpers for Deep Search/Update ---
 
@@ -63,7 +70,7 @@ export default function DashboardBuilderDragDrop({
     // --- Actions ---
 
     const addWidget = (type: WidgetType) => {
-        const widgetType = WIDGET_TYPES.find(w => w.type === type);
+        const widgetType = getWidgetMeta(type);
         if (!widgetType) return;
 
         const newWidget: WidgetConfig = {
@@ -269,31 +276,169 @@ export default function DashboardBuilderDragDrop({
                         <div className="p-4 border-b border-border">
                             <h4 className="text-sm font-semibold">Widget Library</h4>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                            <div className="space-y-2">
-                                {WIDGET_TYPES.map((widgetType) => (
-                                    <button
-                                        key={widgetType.type + widgetType.label}
-                                        onClick={() => addWidget(widgetType.type)}
-                                        className="w-full p-3 bg-muted/30 hover:bg-primary/10 hover:border-primary/20 border border-transparent rounded-lg text-left transition-all group"
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <div className={`p-2 rounded-lg ${widgetType.category === 'layout' ? 'bg-primary/10 text-primary' :
-                                                widgetType.category === 'data' ? 'bg-emerald-500/10 text-emerald-600' :
-                                                    'bg-blue-500/10 text-blue-600'
-                                                }`}>
-                                                <Plus className="w-4 h-4" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="text-sm font-medium">{widgetType.label}</div>
-                                                <div className="text-xs text-muted-foreground mt-0.5">
-                                                    {widgetType.description}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {/* Loading State */}
+                            {widgetsLoading && (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                                </div>
+                            )}
+
+                            {/* Layout Widgets */}
+                            {groupedByCategory.layout.length > 0 && (
+                                <div>
+                                    <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Layout</h5>
+                                    <div className="space-y-2">
+                                        {groupedByCategory.layout.map((widgetType) => (
+                                            <button
+                                                key={widgetType.id}
+                                                onClick={() => addWidget(widgetType.type)}
+                                                className="w-full p-3 bg-muted/30 hover:bg-primary/10 hover:border-primary/20 border border-transparent rounded-lg text-left transition-all group"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                                        <Plus className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="text-sm font-medium">{widgetType.label}</div>
+                                                        <div className="text-xs text-muted-foreground mt-0.5">{widgetType.description}</div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Data Widgets */}
+                            {groupedByCategory.data.length > 0 && (
+                                <div>
+                                    <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Data Display</h5>
+                                    <div className="space-y-2">
+                                        {groupedByCategory.data.map((widgetType) => (
+                                            <button
+                                                key={widgetType.id}
+                                                onClick={() => addWidget(widgetType.type)}
+                                                className="w-full p-3 bg-muted/30 hover:bg-primary/10 hover:border-primary/20 border border-transparent rounded-lg text-left transition-all group"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                                                        <Plus className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="text-sm font-medium">{widgetType.label}</div>
+                                                        <div className="text-xs text-muted-foreground mt-0.5">{widgetType.description}</div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Visualization Widgets */}
+                            {groupedByCategory.visualization.length > 0 && (
+                                <div>
+                                    <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Visualizations</h5>
+                                    <div className="space-y-2">
+                                        {groupedByCategory.visualization.map((widgetType) => (
+                                            <button
+                                                key={widgetType.id}
+                                                onClick={() => addWidget(widgetType.type)}
+                                                className="w-full p-3 bg-muted/30 hover:bg-primary/10 hover:border-primary/20 border border-transparent rounded-lg text-left transition-all group"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600">
+                                                        <Plus className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="text-sm font-medium">{widgetType.label}</div>
+                                                        <div className="text-xs text-muted-foreground mt-0.5">{widgetType.description}</div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Control Widgets */}
+                            {groupedByCategory.control.length > 0 && (
+                                <div>
+                                    <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Control</h5>
+                                    <div className="space-y-2">
+                                        {groupedByCategory.control.map((widgetType) => (
+                                            <button
+                                                key={widgetType.id}
+                                                onClick={() => addWidget(widgetType.type)}
+                                                className="w-full p-3 bg-muted/30 hover:bg-primary/10 hover:border-primary/20 border border-transparent rounded-lg text-left transition-all group"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="p-2 rounded-lg bg-orange-500/10 text-orange-600">
+                                                        <Plus className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="text-sm font-medium">{widgetType.label}</div>
+                                                        <div className="text-xs text-muted-foreground mt-0.5">{widgetType.description}</div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Monitoring Widgets */}
+                            {groupedByCategory.monitoring.length > 0 && (
+                                <div>
+                                    <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Monitoring</h5>
+                                    <div className="space-y-2">
+                                        {groupedByCategory.monitoring.map((widgetType) => (
+                                            <button
+                                                key={widgetType.id}
+                                                onClick={() => addWidget(widgetType.type)}
+                                                className="w-full p-3 bg-muted/30 hover:bg-primary/10 hover:border-primary/20 border border-transparent rounded-lg text-left transition-all group"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600">
+                                                        <Plus className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="text-sm font-medium">{widgetType.label}</div>
+                                                        <div className="text-xs text-muted-foreground mt-0.5">{widgetType.description}</div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Decorative Widgets */}
+                            {groupedByCategory.decorative.length > 0 && (
+                                <div>
+                                    <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Decorative</h5>
+                                    <div className="space-y-2">
+                                        {groupedByCategory.decorative.map((widgetType) => (
+                                            <button
+                                                key={widgetType.id}
+                                                onClick={() => addWidget(widgetType.type)}
+                                                className="w-full p-3 bg-muted/30 hover:bg-primary/10 hover:border-primary/20 border border-transparent rounded-lg text-left transition-all group"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="p-2 rounded-lg bg-pink-500/10 text-pink-600">
+                                                        <Plus className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="text-sm font-medium">{widgetType.label}</div>
+                                                        <div className="text-xs text-muted-foreground mt-0.5">{widgetType.description}</div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

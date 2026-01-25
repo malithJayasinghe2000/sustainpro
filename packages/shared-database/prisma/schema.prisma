@@ -212,6 +212,7 @@ model sps_device_models {
   created_at                DateTime?                   @default(now()) @db.Timestamptz(6)
   updated_at                DateTime?                   @default(now()) @db.Timestamptz(6)
   sps_service_device_models sps_service_device_models[]
+  sps_widget_presets        sps_widget_presets[]
 }
 
 model sps_devices {
@@ -307,6 +308,9 @@ model sps_organizations {
   sps_tasks                 sps_tasks[]
   sps_users                 sps_users[]
   sps_api_keys              sps_api_keys[]
+  sps_widget_categories     sps_widget_categories[]
+  sps_widget_definitions    sps_widget_definitions[]
+  sps_widget_presets        sps_widget_presets[]
 }
 
 model sps_permissions {
@@ -1033,6 +1037,8 @@ model sps_users {
   sps_otp_codes          sps_otp_codes[]
   // sps_user_sessions    sps_user_sessions[]
   spsSystemNotifications sps_system_notifications[]
+  sps_widget_definitions sps_widget_definitions[]
+  sps_widget_presets     sps_widget_presets[]
 
   @@index([email], map: "idx_users_email")
   @@index([organization_id], map: "idx_users_org")
@@ -1146,3 +1152,165 @@ model sps_system_notifications {
   @@index([organization_id], map: "idx_sys_notif_org")
   @@index([source, source_id], map: "idx_sys_notif_source")
 }
+
+// =============================================
+// DYNAMIC WIDGET SYSTEM
+// =============================================
+// Fully configurable widget definitions for dashboard building
+// Super Admins can create custom widgets that work with any device model
+
+// Widget Categories - for organizing widgets in the library
+model sps_widget_categories {
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String  @db.VarChar(100)
+  description String?
+  icon        String? @db.VarChar(50) // Lucide icon name
+  color       String? @db.VarChar(20) // Category color
+  sort_order  Int     @default(0) // Display order
+
+  // Scope
+  organization_id String? @db.Uuid // null = system-wide (Super Admin only)
+
+  // Status
+  is_active Boolean @default(true)
+
+  // Timestamps
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  // Relations
+  sps_organizations      sps_organizations?       @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  sps_widget_definitions sps_widget_definitions[]
+
+  @@index([organization_id], map: "idx_widget_cat_org")
+  @@index([sort_order], map: "idx_widget_cat_sort")
+}
+
+// Widget Definitions - the core widget templates
+model sps_widget_definitions {
+  id   String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code String @unique @db.VarChar(50) // Unique code for reference (e.g., 'tank_gauge_v1')
+
+  // Basic Info
+  name        String  @db.VarChar(100) // Display name
+  description String? // Description of what this widget does
+  version     String  @default("1.0.0") @db.VarChar(20)
+
+  // Categorization
+  category_id String @db.Uuid
+
+  // Rendering Configuration
+  render_type String @db.VarChar(50) // Base renderer: value_display, gauge_circular, tank_visual, chart_line, etc.
+
+  // Default Size (can be overridden per instance)
+  default_width  Int @default(3) // Grid units (1-12)
+  default_height Int @default(2) // Grid units
+
+  // Size Constraints
+  min_width  Int @default(1)
+  max_width  Int @default(12)
+  min_height Int @default(1)
+  max_height Int @default(10)
+
+  // Icon and Styling
+  icon             String? @db.VarChar(50) // Default icon
+  icon_color       String? @db.VarChar(20)
+  background_color String? @db.VarChar(20)
+  border_radius    Int?    @default(8) // pixels
+  has_shadow       Boolean @default(true)
+
+  // Parameter Slots - defines what data this widget can display
+  // Array of slot definitions with key, label, required, data_types[], description
+  parameter_slots Json @default("[]")
+
+  // Default Settings Schema - JSON Schema for widget settings
+  // Defines all configurable options with defaults
+  settings_schema Json @default("{}")
+
+  // Default Settings Values
+  default_settings Json @default("{}")
+
+  // Conditional Styling Rules
+  // Array of conditions that change styles based on values
+  style_conditions Json @default("[]")
+
+  // Custom CSS (advanced users)
+  custom_css String?
+
+  // Preview Image URL
+  preview_image String?
+
+  // Scope
+  organization_id String? @db.Uuid // null = system-wide (available to all)
+
+  // Status
+  is_active     Boolean @default(true)
+  is_system     Boolean @default(false) // System widgets can't be deleted
+  is_deprecated Boolean @default(false) // Mark for removal
+
+  // Audit
+  created_by String?   @db.Uuid
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime  @default(now()) @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6) // Soft delete
+
+  // Relations
+  sps_widget_categories sps_widget_categories @relation(fields: [category_id], references: [id])
+  sps_organizations     sps_organizations?    @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  sps_users             sps_users?            @relation(fields: [created_by], references: [id])
+  sps_widget_presets    sps_widget_presets[]
+
+  @@index([category_id], map: "idx_widget_def_cat")
+  @@index([organization_id], map: "idx_widget_def_org")
+  @@index([render_type], map: "idx_widget_def_render")
+  @@index([is_active, is_deprecated], map: "idx_widget_def_status")
+}
+
+// Widget Presets - pre-configured instances for quick use
+// e.g., "Water Tank 500L", "Diesel Tank Orange", "Temperature Card Red"
+model sps_widget_presets {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Reference to definition
+  widget_definition_id String @db.Uuid
+
+  // Preset Info
+  name        String  @db.VarChar(100)
+  description String?
+
+  // Pre-configured Settings (overrides definition defaults)
+  settings Json @default("{}")
+
+  // Pre-configured Size
+  width  Int?
+  height Int?
+
+  // Pre-mapped Parameters (for specific device models)
+  device_model_id    String? @db.VarChar(50) // If linked to a specific device model
+  parameter_mappings Json    @default("{}") // Maps slots to device parameters
+
+  // Tags for searchability
+  tags String[] @default([])
+
+  // Scope
+  organization_id String? @db.Uuid
+
+  // Status
+  is_active Boolean @default(true)
+
+  // Audit
+  created_by String?  @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  // Relations
+  sps_widget_definitions sps_widget_definitions @relation(fields: [widget_definition_id], references: [id], onDelete: Cascade)
+  sps_organizations      sps_organizations?     @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  sps_users              sps_users?             @relation(fields: [created_by], references: [id])
+  sps_device_models      sps_device_models?     @relation(fields: [device_model_id], references: [id])
+
+  @@index([widget_definition_id], map: "idx_widget_preset_def")
+  @@index([organization_id], map: "idx_widget_preset_org")
+  @@index([device_model_id], map: "idx_widget_preset_model")
+}
+

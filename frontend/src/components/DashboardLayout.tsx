@@ -7,7 +7,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import Navbar from '@/components/Navbar';
 import MaintenancePage from '@/components/MaintenancePage';
 import { getRoleLabel, hasRole, isAdmin, ROLES } from '@/lib/roles';
-import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User, ScrollText } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User, ScrollText, LayoutGrid } from 'lucide-react';
 import { applyOrganizationTheme } from '@/lib/theme-utils';
 import { getPrimaryColor } from '@/lib/theme-parser';
 
@@ -99,6 +99,7 @@ export default function DashboardLayout({ children }: SidebarProps) {
         { name: 'Device Inventory', icon: Smartphone, path: '/admin/devices' },
         { name: 'Department Templates', icon: Layers, path: '/admin/department-templates' },
         { name: 'Services', icon: Layers, path: '/admin/services' }, // Added Services menu item
+        { name: 'Widget Library', icon: LayoutGrid, path: '/admin/widgets' },
         { name: 'Device Models', icon: Component, path: '/admin/device-models' },
         { name: 'Global Reports', icon: FileText, path: '/admin/reports' },
         { name: 'Direct Profile', icon: User, path: '/profile' },

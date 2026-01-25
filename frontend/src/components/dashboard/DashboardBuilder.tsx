@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Settings, Trash2, Eye, Code, Save, X } from 'lucide-react';
-import { WidgetConfig, WidgetType, WIDGET_TYPES, DashboardTemplate } from '@/types/dashboard';
+import { Plus, Settings, Trash2, Eye, Code, Save, X, Loader2 } from 'lucide-react';
+import { WidgetConfig, WidgetType, DashboardTemplate } from '@/types/dashboard';
 import WidgetRenderer from './WidgetRenderer';
 import { RichSelect } from '../ui/RichSelect';
 import { Input } from '../ui/Input';
+import useDynamicWidgets from '@/hooks/useDynamicWidgets';
 
 interface DashboardBuilderProps {
     availableParameters: { key: string; name: string; unit?: string; data_type: string }[];
@@ -24,8 +25,14 @@ export default function DashboardBuilder({
     const [selectedWidget, setSelectedWidget] = useState<string | null>(null);
     const [previewMode, setPreviewMode] = useState(false);
 
+    // Fetch widgets from database (with fallback to static)
+    const { widgetTypes, loading: widgetsLoading, groupedByCategory, getWidgetMeta } = useDynamicWidgets({
+        useDatabaseWidgets: true,
+        fallbackToStatic: true
+    });
+
     const addWidget = (type: WidgetType) => {
-        const widgetType = WIDGET_TYPES.find(w => w.type === type);
+        const widgetType = getWidgetMeta(type);
         if (!widgetType) return;
 
         const newWidget: WidgetConfig = {
@@ -59,7 +66,7 @@ export default function DashboardBuilder({
 
     // Sub-widget management for containers
     const addSubWidget = (containerId: string, type: WidgetType) => {
-        const widgetType = WIDGET_TYPES.find(w => w.type === type);
+        const widgetType = getWidgetMeta(type);
         if (!widgetType) return;
 
         const newSubWidget: WidgetConfig = {
@@ -161,83 +168,180 @@ export default function DashboardBuilder({
                     <div className="w-64 border-r border-border bg-card p-4 overflow-y-auto">
                         <h4 className="text-sm font-semibold mb-3">Widget Library</h4>
 
+                        {/* Loading State */}
+                        {widgetsLoading && (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                            </div>
+                        )}
+
                         {/* Layout Widgets */}
-                        <div className="mb-4">
-                            <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Layout</h5>
-                            <div className="space-y-2">
-                                {WIDGET_TYPES.filter(w => w.category === 'layout').map((widgetType) => (
-                                    <button
-                                        key={widgetType.type}
-                                        onClick={() => addWidget(widgetType.type)}
-                                        className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <div className="p-2 bg-primary/10 rounded-lg text-primary group-hover:scale-110 transition-transform">
-                                                <Plus className="w-4 h-4" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="text-sm font-medium">{widgetType.label}</div>
-                                                <div className="text-xs text-muted-foreground mt-0.5">
-                                                    {widgetType.description}
+                        {groupedByCategory.layout.length > 0 && (
+                            <div className="mb-4">
+                                <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Layout</h5>
+                                <div className="space-y-2">
+                                    {groupedByCategory.layout.map((widgetType) => (
+                                        <button
+                                            key={widgetType.id}
+                                            onClick={() => addWidget(widgetType.type)}
+                                            className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 bg-primary/10 rounded-lg text-primary group-hover:scale-110 transition-transform">
+                                                    <Plus className="w-4 h-4" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="text-sm font-medium">{widgetType.label}</div>
+                                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                                        {widgetType.description}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </button>
-                                ))}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Data Widgets */}
-                        <div className="mb-4">
-                            <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Data Display</h5>
-                            <div className="space-y-2">
-                                {WIDGET_TYPES.filter(w => w.category === 'data').map((widgetType) => (
-                                    <button
-                                        key={widgetType.type}
-                                        onClick={() => addWidget(widgetType.type)}
-                                        className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-600 group-hover:scale-110 transition-transform">
-                                                <Plus className="w-4 h-4" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="text-sm font-medium">{widgetType.label}</div>
-                                                <div className="text-xs text-muted-foreground mt-0.5">
-                                                    {widgetType.description}
+                        {groupedByCategory.data.length > 0 && (
+                            <div className="mb-4">
+                                <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Data Display</h5>
+                                <div className="space-y-2">
+                                    {groupedByCategory.data.map((widgetType) => (
+                                        <button
+                                            key={widgetType.id}
+                                            onClick={() => addWidget(widgetType.type)}
+                                            className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-600 group-hover:scale-110 transition-transform">
+                                                    <Plus className="w-4 h-4" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="text-sm font-medium">{widgetType.label}</div>
+                                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                                        {widgetType.description}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </button>
-                                ))}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Visualization Widgets */}
-                        <div>
-                            <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Visualizations</h5>
-                            <div className="space-y-2">
-                                {WIDGET_TYPES.filter(w => w.category === 'visualization').map((widgetType) => (
-                                    <button
-                                        key={widgetType.type}
-                                        onClick={() => addWidget(widgetType.type)}
-                                        className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-600 group-hover:scale-110 transition-transform">
-                                                <Plus className="w-4 h-4" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="text-sm font-medium">{widgetType.label}</div>
-                                                <div className="text-xs text-muted-foreground mt-0.5">
-                                                    {widgetType.description}
+                        {groupedByCategory.visualization.length > 0 && (
+                            <div className="mb-4">
+                                <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Visualizations</h5>
+                                <div className="space-y-2">
+                                    {groupedByCategory.visualization.map((widgetType) => (
+                                        <button
+                                            key={widgetType.id}
+                                            onClick={() => addWidget(widgetType.type)}
+                                            className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 bg-blue-500/10 rounded-lg text-blue-600 group-hover:scale-110 transition-transform">
+                                                    <Plus className="w-4 h-4" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="text-sm font-medium">{widgetType.label}</div>
+                                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                                        {widgetType.description}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </button>
-                                ))}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* Control Widgets */}
+                        {groupedByCategory.control.length > 0 && (
+                            <div className="mb-4">
+                                <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Control</h5>
+                                <div className="space-y-2">
+                                    {groupedByCategory.control.map((widgetType) => (
+                                        <button
+                                            key={widgetType.id}
+                                            onClick={() => addWidget(widgetType.type)}
+                                            className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 bg-orange-500/10 rounded-lg text-orange-600 group-hover:scale-110 transition-transform">
+                                                    <Plus className="w-4 h-4" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="text-sm font-medium">{widgetType.label}</div>
+                                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                                        {widgetType.description}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Monitoring Widgets */}
+                        {groupedByCategory.monitoring.length > 0 && (
+                            <div className="mb-4">
+                                <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Monitoring</h5>
+                                <div className="space-y-2">
+                                    {groupedByCategory.monitoring.map((widgetType) => (
+                                        <button
+                                            key={widgetType.id}
+                                            onClick={() => addWidget(widgetType.type)}
+                                            className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 bg-purple-500/10 rounded-lg text-purple-600 group-hover:scale-110 transition-transform">
+                                                    <Plus className="w-4 h-4" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="text-sm font-medium">{widgetType.label}</div>
+                                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                                        {widgetType.description}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Decorative Widgets */}
+                        {groupedByCategory.decorative.length > 0 && (
+                            <div>
+                                <h5 className="text-xs font-medium text-muted-foreground uppercase mb-2">Decorative</h5>
+                                <div className="space-y-2">
+                                    {groupedByCategory.decorative.map((widgetType) => (
+                                        <button
+                                            key={widgetType.id}
+                                            onClick={() => addWidget(widgetType.type)}
+                                            className="w-full p-3 bg-muted/30 hover:bg-muted rounded-lg text-left transition-colors group"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 bg-pink-500/10 rounded-lg text-pink-600 group-hover:scale-110 transition-transform">
+                                                    <Plus className="w-4 h-4" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="text-sm font-medium">{widgetType.label}</div>
+                                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                                        {widgetType.description}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -379,13 +483,13 @@ export default function DashboardBuilder({
                                             >
                                                 <option value="">Select widget type...</option>
                                                 <optgroup label="Data">
-                                                    {WIDGET_TYPES.filter(w => w.category === 'data').map(w => (
-                                                        <option key={w.type} value={w.type}>{w.label}</option>
+                                                    {groupedByCategory.data.map(w => (
+                                                        <option key={w.id} value={w.type}>{w.label}</option>
                                                     ))}
                                                 </optgroup>
                                                 <optgroup label="Visualizations">
-                                                    {WIDGET_TYPES.filter(w => w.category === 'visualization').map(w => (
-                                                        <option key={w.type} value={w.type}>{w.label}</option>
+                                                    {groupedByCategory.visualization.map(w => (
+                                                        <option key={w.id} value={w.type}>{w.label}</option>
                                                     ))}
                                                 </optgroup>
                                             </select>
@@ -411,7 +515,7 @@ export default function DashboardBuilder({
                                                                 className="w-full px-2 py-1 text-sm font-medium bg-background border border-border rounded"
                                                             />
                                                             <div className="text-xs text-muted-foreground mt-1">
-                                                                {WIDGET_TYPES.find(w => w.type === child.type)?.label}
+                                                                {getWidgetMeta(child.type)?.label}
                                                             </div>
                                                         </div>
                                                         <button

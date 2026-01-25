@@ -1027,6 +1027,632 @@ async function main() {
         }
     }
 
+    // ==================================================================================
+    // 8. WIDGET CATEGORIES (For Dynamic Widget System)
+    // ==================================================================================
+    console.log('🎨 Seeding widget categories...');
+
+    // Clear existing categories
+    await prisma.sps_widget_presets.deleteMany({});
+    await prisma.sps_widget_definitions.deleteMany({});
+    await prisma.sps_widget_categories.deleteMany({});
+
+    const widgetCategories = await Promise.all([
+        prisma.sps_widget_categories.create({
+            data: {
+                name: 'Layout',
+                description: 'Container and layout widgets for organizing dashboards',
+                icon: 'LayoutGrid',
+                color: '#6366F1',
+                sort_order: 1,
+                organization_id: null, // System category
+            }
+        }),
+        prisma.sps_widget_categories.create({
+            data: {
+                name: 'Data Display',
+                description: 'Widgets for displaying device parameters and status',
+                icon: 'BarChart3',
+                color: '#3B82F6',
+                sort_order: 2,
+                organization_id: null,
+            }
+        }),
+        prisma.sps_widget_categories.create({
+            data: {
+                name: 'Visualization',
+                description: 'Charts, gauges, and visual data representations',
+                icon: 'PieChart',
+                color: '#10B981',
+                sort_order: 3,
+                organization_id: null,
+            }
+        }),
+        prisma.sps_widget_categories.create({
+            data: {
+                name: 'Control',
+                description: 'Interactive widgets for device control and configuration',
+                icon: 'Sliders',
+                color: '#F59E0B',
+                sort_order: 4,
+                organization_id: null,
+            }
+        }),
+        prisma.sps_widget_categories.create({
+            data: {
+                name: 'Monitoring',
+                description: 'Alerts, logs, and device monitoring widgets',
+                icon: 'Activity',
+                color: '#EF4444',
+                sort_order: 5,
+                organization_id: null,
+            }
+        }),
+        prisma.sps_widget_categories.create({
+            data: {
+                name: 'Decorative',
+                description: 'Text, images, and branding widgets',
+                icon: 'Palette',
+                color: '#8B5CF6',
+                sort_order: 6,
+                organization_id: null,
+            }
+        }),
+    ]);
+
+    const categoryMap = new Map(widgetCategories.map(c => [c.name, c.id]));
+    console.log(`   Created ${widgetCategories.length} widget categories`);
+
+    // ==================================================================================
+    // 9. WIDGET DEFINITIONS (Migrated from hardcoded WIDGET_TYPES)
+    // ==================================================================================
+    console.log('📦 Seeding widget definitions...');
+
+    const widgetDefinitions = [
+        // === Layout Widgets ===
+        {
+            code: 'container',
+            name: 'Card Container',
+            description: 'Group widgets in columns/rows',
+            category_id: categoryMap.get('Layout')!,
+            render_type: 'container',
+            icon: 'LayoutGrid',
+            default_width: 12,
+            default_height: 4,
+            min_width: 2,
+            max_width: 12,
+            min_height: 2,
+            max_height: 10,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'columns', label: 'Columns', type: 'number', default_value: 2, min: 1, max: 6 },
+                    { key: 'gap', label: 'Gap', type: 'number', default_value: 16, min: 0, max: 48 },
+                    { key: 'padding', label: 'Padding', type: 'number', default_value: 16, min: 0, max: 48 },
+                ]
+            },
+            default_settings: { columns: 2, gap: 16, padding: 16 },
+        },
+        {
+            code: 'section',
+            name: 'Section',
+            description: 'Labeled section divider',
+            category_id: categoryMap.get('Layout')!,
+            render_type: 'section',
+            icon: 'LayoutTemplate',
+            default_width: 12,
+            default_height: 1,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'text', label: 'Section Title', type: 'string', default_value: 'Section Title' },
+                    { key: 'fontSize', label: 'Font Size', type: 'number', default_value: 18 },
+                    { key: 'fontWeight', label: 'Font Weight', type: 'select', default_value: 'semibold', options: [
+                        { value: 'normal', label: 'Normal' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'semibold', label: 'Semi Bold' },
+                        { value: 'bold', label: 'Bold' },
+                    ]},
+                ]
+            },
+            default_settings: { text: 'Section Title', fontSize: 18, fontWeight: 'semibold' },
+        },
+
+        // === Data Display Widgets ===
+        {
+            code: 'device_status',
+            name: 'Device Status',
+            description: 'Online/offline status, signal strength, battery',
+            category_id: categoryMap.get('Data Display')!,
+            render_type: 'device_status',
+            icon: 'Server',
+            default_width: 6,
+            default_height: 2,
+            is_system: true,
+            parameter_slots: [
+                { key: 'status', label: 'Device Status', required: true, data_types: ['boolean', 'string'] },
+                { key: 'signal', label: 'Signal Strength', required: false, data_types: ['number'] },
+                { key: 'battery', label: 'Battery Level', required: false, data_types: ['number'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'showLastSeen', label: 'Show Last Seen', type: 'boolean', default_value: true },
+                    { key: 'showSignalStrength', label: 'Show Signal', type: 'boolean', default_value: true },
+                    { key: 'showBattery', label: 'Show Battery', type: 'boolean', default_value: true },
+                ]
+            },
+            default_settings: { showLastSeen: true, showSignalStrength: true, showBattery: true },
+        },
+        {
+            code: 'parameter_card',
+            name: 'Parameter Card',
+            description: 'Display a single parameter value with icon',
+            category_id: categoryMap.get('Data Display')!,
+            render_type: 'parameter_card',
+            icon: 'Square',
+            default_width: 3,
+            default_height: 2,
+            is_system: true,
+            parameter_slots: [
+                { key: 'value', label: 'Value', required: true, data_types: ['number', 'string'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'showIcon', label: 'Show Icon', type: 'boolean', default_value: true },
+                    { key: 'showUnit', label: 'Show Unit', type: 'boolean', default_value: true },
+                    { key: 'iconName', label: 'Icon', type: 'icon', default_value: 'Activity' },
+                    { key: 'iconColor', label: 'Icon Color', type: 'color', default_value: '#3B82F6' },
+                    { key: 'valueSize', label: 'Value Size', type: 'select', default_value: 'lg', options: [
+                        { value: 'sm', label: 'Small' },
+                        { value: 'md', label: 'Medium' },
+                        { value: 'lg', label: 'Large' },
+                        { value: 'xl', label: 'Extra Large' },
+                    ]},
+                    { key: 'decimals', label: 'Decimal Places', type: 'number', default_value: 2, min: 0, max: 6 },
+                ]
+            },
+            default_settings: { showIcon: true, showUnit: true, iconName: 'Activity', valueSize: 'lg', decimals: 2 },
+        },
+        {
+            code: 'counter',
+            name: 'Big Number',
+            description: 'Large numeric display with animation',
+            category_id: categoryMap.get('Data Display')!,
+            render_type: 'counter',
+            icon: 'Hash',
+            default_width: 3,
+            default_height: 2,
+            is_system: true,
+            parameter_slots: [
+                { key: 'value', label: 'Value', required: true, data_types: ['number'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'prefix', label: 'Prefix', type: 'string', default_value: '' },
+                    { key: 'suffix', label: 'Suffix', type: 'string', default_value: '' },
+                    { key: 'decimals', label: 'Decimals', type: 'number', default_value: 0 },
+                    { key: 'animateValue', label: 'Animate', type: 'boolean', default_value: true },
+                ]
+            },
+            default_settings: { prefix: '', suffix: '', decimals: 0, animateValue: true },
+        },
+        {
+            code: 'status_indicator',
+            name: 'Status Badge',
+            description: 'Status indicator badge',
+            category_id: categoryMap.get('Data Display')!,
+            render_type: 'status_indicator',
+            icon: 'Activity',
+            default_width: 3,
+            default_height: 1,
+            is_system: true,
+            parameter_slots: [
+                { key: 'status', label: 'Status', required: true, data_types: ['boolean', 'string'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'onlineText', label: 'Online Text', type: 'string', default_value: 'Online' },
+                    { key: 'offlineText', label: 'Offline Text', type: 'string', default_value: 'Offline' },
+                    { key: 'onlineColor', label: 'Online Color', type: 'color', default_value: '#22C55E' },
+                    { key: 'offlineColor', label: 'Offline Color', type: 'color', default_value: '#EF4444' },
+                ]
+            },
+            default_settings: { onlineText: 'Online', offlineText: 'Offline', onlineColor: '#22C55E', offlineColor: '#EF4444' },
+        },
+        {
+            code: 'transparent_parameter',
+            name: 'Transparent Parameter',
+            description: 'Minimalist parameter display',
+            category_id: categoryMap.get('Data Display')!,
+            render_type: 'transparent_parameter',
+            icon: 'Eye',
+            default_width: 2,
+            default_height: 2,
+            is_system: true,
+            parameter_slots: [
+                { key: 'value', label: 'Value', required: true, data_types: ['number', 'string'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'showIcon', label: 'Show Icon', type: 'boolean', default_value: false },
+                    { key: 'backgroundColor', label: 'Background', type: 'color', default_value: 'transparent' },
+                ]
+            },
+            default_settings: { showIcon: false, backgroundColor: 'transparent' },
+        },
+
+        // === Visualization Widgets ===
+        {
+            code: 'tank_gauge',
+            name: 'Tank Gauge',
+            description: 'Visual liquid level indicator (water, waste, diesel)',
+            category_id: categoryMap.get('Visualization')!,
+            render_type: 'tank_gauge',
+            icon: 'Container',
+            default_width: 4,
+            default_height: 4,
+            is_system: true,
+            parameter_slots: [
+                { key: 'level', label: 'Level (%)', required: true, data_types: ['number'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'tankType', label: 'Tank Type', type: 'select', default_value: 'water', options: [
+                        { value: 'water', label: 'Water (Blue)' },
+                        { value: 'wastewater', label: 'Wastewater (Green)' },
+                        { value: 'diesel', label: 'Diesel (Amber)' },
+                        { value: 'fuel', label: 'Fuel (Red)' },
+                        { value: 'chemical', label: 'Chemical (Purple)' },
+                    ]},
+                    { key: 'showBubbles', label: 'Show Bubbles', type: 'boolean', default_value: true },
+                    { key: 'showPercentage', label: 'Show Percentage', type: 'boolean', default_value: true },
+                    { key: 'minValue', label: 'Min Value', type: 'number', default_value: 0 },
+                    { key: 'maxValue', label: 'Max Value', type: 'number', default_value: 100 },
+                ]
+            },
+            default_settings: { tankType: 'water', showBubbles: true, showPercentage: true, minValue: 0, maxValue: 100 },
+            style_conditions: [
+                { slot: 'level', operator: 'lt', value: 20, styles: { color: '#EF4444' }, priority: 1 },
+                { slot: 'level', operator: 'gt', value: 80, styles: { color: '#22C55E' }, priority: 1 },
+            ],
+        },
+        {
+            code: 'gauge',
+            name: 'Circular Gauge',
+            description: 'Analog-style circular meter',
+            category_id: categoryMap.get('Visualization')!,
+            render_type: 'gauge',
+            icon: 'Gauge',
+            default_width: 4,
+            default_height: 3,
+            is_system: true,
+            parameter_slots: [
+                { key: 'value', label: 'Value', required: true, data_types: ['number'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'minValue', label: 'Min Value', type: 'number', default_value: 0 },
+                    { key: 'maxValue', label: 'Max Value', type: 'number', default_value: 100 },
+                    { key: 'showValue', label: 'Show Value', type: 'boolean', default_value: true },
+                    { key: 'showNeedle', label: 'Show Needle', type: 'boolean', default_value: true },
+                    { key: 'colorLow', label: 'Low Color', type: 'color', default_value: '#22C55E' },
+                    { key: 'colorMid', label: 'Mid Color', type: 'color', default_value: '#F59E0B' },
+                    { key: 'colorHigh', label: 'High Color', type: 'color', default_value: '#EF4444' },
+                ]
+            },
+            default_settings: { minValue: 0, maxValue: 100, showValue: true, showNeedle: true },
+        },
+        {
+            code: 'line_chart',
+            name: 'Time Series Chart',
+            description: 'Historical data visualization',
+            category_id: categoryMap.get('Visualization')!,
+            render_type: 'line_chart',
+            icon: 'LineChart',
+            default_width: 6,
+            default_height: 3,
+            is_system: true,
+            parameter_slots: [
+                { key: 'primary', label: 'Primary Series', required: true, data_types: ['number'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'timeRange', label: 'Time Range', type: 'select', default_value: '24h', options: [
+                        { value: '1h', label: '1 Hour' },
+                        { value: '6h', label: '6 Hours' },
+                        { value: '24h', label: '24 Hours' },
+                        { value: '7d', label: '7 Days' },
+                    ]},
+                    { key: 'showLegend', label: 'Show Legend', type: 'boolean', default_value: true },
+                    { key: 'showGrid', label: 'Show Grid', type: 'boolean', default_value: true },
+                    { key: 'lineColor', label: 'Line Color', type: 'color', default_value: '#3B82F6' },
+                ]
+            },
+            default_settings: { timeRange: '24h', showLegend: true, showGrid: true, lineColor: '#3B82F6' },
+        },
+        {
+            code: 'table_view',
+            name: 'Data Table',
+            description: 'Tabular data display',
+            category_id: categoryMap.get('Visualization')!,
+            render_type: 'table_view',
+            icon: 'Table',
+            default_width: 6,
+            default_height: 4,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'sortable', label: 'Sortable', type: 'boolean', default_value: true },
+                    { key: 'paginated', label: 'Paginated', type: 'boolean', default_value: true },
+                    { key: 'pageSize', label: 'Page Size', type: 'number', default_value: 10 },
+                ]
+            },
+            default_settings: { sortable: true, paginated: true, pageSize: 10 },
+        },
+
+        // === Control Widgets ===
+        {
+            code: 'threshold_editor',
+            name: 'Threshold Editor',
+            description: 'Set operational limits for parameters',
+            category_id: categoryMap.get('Control')!,
+            render_type: 'threshold_editor',
+            icon: 'Sliders',
+            default_width: 4,
+            default_height: 3,
+            is_system: true,
+            parameter_slots: [
+                { key: 'threshold', label: 'Threshold Value', required: true, data_types: ['number'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'allowUserEdit', label: 'Allow User Edit', type: 'boolean', default_value: true },
+                    { key: 'minValue', label: 'Min Value', type: 'number', default_value: 0 },
+                    { key: 'maxValue', label: 'Max Value', type: 'number', default_value: 100 },
+                ]
+            },
+            default_settings: { allowUserEdit: true, minValue: 0, maxValue: 100 },
+        },
+        {
+            code: 'recording_control',
+            name: 'Recording Control',
+            description: 'Start/stop data recording',
+            category_id: categoryMap.get('Control')!,
+            render_type: 'recording_control',
+            icon: 'Circle',
+            default_width: 3,
+            default_height: 2,
+            is_system: true,
+            parameter_slots: [
+                { key: 'recording', label: 'Recording State', required: true, data_types: ['boolean'] },
+            ],
+            settings_schema: {
+                settings: [
+                    { key: 'showDuration', label: 'Show Duration', type: 'boolean', default_value: true },
+                ]
+            },
+            default_settings: { showDuration: true },
+        },
+        {
+            code: 'device_config',
+            name: 'Device Configuration',
+            description: 'View/modify device settings',
+            category_id: categoryMap.get('Control')!,
+            render_type: 'device_config',
+            icon: 'Settings',
+            default_width: 4,
+            default_height: 3,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'readOnly', label: 'Read Only', type: 'boolean', default_value: false },
+                    { key: 'collapsible', label: 'Collapsible', type: 'boolean', default_value: true },
+                ]
+            },
+            default_settings: { readOnly: false, collapsible: true },
+        },
+
+        // === Monitoring Widgets ===
+        {
+            code: 'alert_widget',
+            name: 'Alerts Panel',
+            description: 'Current and historical alerts',
+            category_id: categoryMap.get('Monitoring')!,
+            render_type: 'alert_widget',
+            icon: 'AlertTriangle',
+            default_width: 6,
+            default_height: 3,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'maxAlerts', label: 'Max Alerts', type: 'number', default_value: 10 },
+                    { key: 'showAcknowledged', label: 'Show Acknowledged', type: 'boolean', default_value: false },
+                ]
+            },
+            default_settings: { maxAlerts: 10, showAcknowledged: false },
+        },
+        {
+            code: 'audit_log',
+            name: 'Audit Log',
+            description: 'Device event history',
+            category_id: categoryMap.get('Monitoring')!,
+            render_type: 'audit_log',
+            icon: 'FileText',
+            default_width: 6,
+            default_height: 4,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'maxEntries', label: 'Max Entries', type: 'number', default_value: 20 },
+                    { key: 'showTimestamp', label: 'Show Timestamp', type: 'boolean', default_value: true },
+                    { key: 'showUser', label: 'Show User', type: 'boolean', default_value: true },
+                ]
+            },
+            default_settings: { maxEntries: 20, showTimestamp: true, showUser: true },
+        },
+        {
+            code: 'available_devices',
+            name: 'Available Devices',
+            description: 'List of devices with add option',
+            category_id: categoryMap.get('Monitoring')!,
+            render_type: 'available_devices',
+            icon: 'Cpu',
+            default_width: 4,
+            default_height: 4,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'showAddButton', label: 'Show Add Button', type: 'boolean', default_value: true },
+                    { key: 'groupByStatus', label: 'Group By Status', type: 'boolean', default_value: false },
+                    { key: 'maxDevices', label: 'Max Devices', type: 'number', default_value: 10 },
+                ]
+            },
+            default_settings: { showAddButton: true, groupByStatus: false, maxDevices: 10 },
+        },
+
+        // === Decorative Widgets ===
+        {
+            code: 'text_widget',
+            name: 'Text Block',
+            description: 'Custom text with styling',
+            category_id: categoryMap.get('Decorative')!,
+            render_type: 'text_widget',
+            icon: 'Type',
+            default_width: 4,
+            default_height: 1,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'text', label: 'Text', type: 'string', default_value: 'Enter text here...' },
+                    { key: 'fontSize', label: 'Font Size', type: 'number', default_value: 16, min: 10, max: 72 },
+                    { key: 'fontWeight', label: 'Font Weight', type: 'select', default_value: 'normal', options: [
+                        { value: 'normal', label: 'Normal' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'bold', label: 'Bold' },
+                    ]},
+                    { key: 'textAlign', label: 'Alignment', type: 'select', default_value: 'left', options: [
+                        { value: 'left', label: 'Left' },
+                        { value: 'center', label: 'Center' },
+                        { value: 'right', label: 'Right' },
+                    ]},
+                    { key: 'fontColor', label: 'Text Color', type: 'color', default_value: '#1F2937' },
+                ]
+            },
+            default_settings: { text: 'Enter text here...', fontSize: 16, fontWeight: 'normal', textAlign: 'left' },
+        },
+        {
+            code: 'logo_widget',
+            name: 'Logo',
+            description: 'Display a logo image',
+            category_id: categoryMap.get('Decorative')!,
+            render_type: 'logo_widget',
+            icon: 'Image',
+            default_width: 2,
+            default_height: 2,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'logoUrl', label: 'Logo URL', type: 'string', default_value: '' },
+                    { key: 'logoSize', label: 'Size', type: 'number', default_value: 100 },
+                    { key: 'logoFit', label: 'Fit', type: 'select', default_value: 'contain', options: [
+                        { value: 'contain', label: 'Contain' },
+                        { value: 'cover', label: 'Cover' },
+                        { value: 'fill', label: 'Fill' },
+                    ]},
+                ]
+            },
+            default_settings: { logoUrl: '', logoSize: 100, logoFit: 'contain' },
+        },
+        {
+            code: 'icon_widget',
+            name: 'Icon Display',
+            description: 'Display a decorative icon',
+            category_id: categoryMap.get('Decorative')!,
+            render_type: 'icon_widget',
+            icon: 'Smile',
+            default_width: 1,
+            default_height: 1,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'icon', label: 'Icon', type: 'icon', default_value: 'Star' },
+                    { key: 'iconSize', label: 'Size', type: 'select', default_value: 'md', options: [
+                        { value: 'sm', label: 'Small' },
+                        { value: 'md', label: 'Medium' },
+                        { value: 'lg', label: 'Large' },
+                    ]},
+                    { key: 'iconColor', label: 'Color', type: 'color', default_value: '#3B82F6' },
+                    { key: 'showLabel', label: 'Show Label', type: 'boolean', default_value: false },
+                    { key: 'label', label: 'Label Text', type: 'string', default_value: '' },
+                ]
+            },
+            default_settings: { icon: 'Star', iconSize: 'md', iconColor: '#3B82F6', showLabel: false },
+        },
+        {
+            code: 'background_image',
+            name: 'Background Image',
+            description: 'Background image with overlay',
+            category_id: categoryMap.get('Decorative')!,
+            render_type: 'background_image',
+            icon: 'Image',
+            default_width: 12,
+            default_height: 4,
+            is_system: true,
+            parameter_slots: [],
+            settings_schema: {
+                settings: [
+                    { key: 'imageUrl', label: 'Image URL', type: 'string', default_value: '' },
+                    { key: 'opacity', label: 'Opacity', type: 'number', default_value: 100, min: 0, max: 100 },
+                    { key: 'blur', label: 'Blur', type: 'number', default_value: 0, min: 0, max: 20 },
+                    { key: 'objectFit', label: 'Fit', type: 'select', default_value: 'cover', options: [
+                        { value: 'cover', label: 'Cover' },
+                        { value: 'contain', label: 'Contain' },
+                        { value: 'fill', label: 'Fill' },
+                    ]},
+                    { key: 'overlayOpacity', label: 'Overlay Opacity', type: 'number', default_value: 0, min: 0, max: 100 },
+                ]
+            },
+            default_settings: { imageUrl: '', opacity: 100, blur: 0, objectFit: 'cover', overlayOpacity: 0 },
+        },
+    ];
+
+    for (const def of widgetDefinitions) {
+        await prisma.sps_widget_definitions.create({
+            data: {
+                code: def.code,
+                name: def.name,
+                description: def.description,
+                category_id: def.category_id,
+                render_type: def.render_type,
+                icon: def.icon,
+                default_width: def.default_width,
+                default_height: def.default_height,
+                min_width: def.min_width || 1,
+                max_width: def.max_width || 12,
+                min_height: def.min_height || 1,
+                max_height: def.max_height || 10,
+                is_system: def.is_system,
+                parameter_slots: def.parameter_slots,
+                settings_schema: def.settings_schema,
+                default_settings: def.default_settings,
+                style_conditions: (def as any).style_conditions || [],
+                organization_id: null,
+            }
+        });
+    }
+
+    console.log(`   Created ${widgetDefinitions.length} widget definitions`);
+
     console.log('\n✅ Seeding completed successfully!');
     console.log('\n📋 Test Credentials:');
     console.log('   superadmin@sustainpro.io / Admin@123 (Super Admin)');

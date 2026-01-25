@@ -249,6 +249,7 @@ export type WidgetCategory = 'layout' | 'data' | 'visualization' | 'control' | '
 
 // Widget type metadata for the toolbox
 export interface WidgetTypeMeta {
+    id: string;  // Unique identifier for React keys (combines type + source)
     type: WidgetType;
     label: string;
     icon: string;
@@ -258,211 +259,20 @@ export interface WidgetTypeMeta {
     requiresParameter?: boolean;
 }
 
-// All available widget types with metadata
-export const WIDGET_TYPES: WidgetTypeMeta[] = [
-    // === Layout Widgets ===
-    {
-        type: 'container',
-        label: 'Card Container',
-        icon: 'LayoutGrid',
-        description: 'Group widgets in columns/rows',
-        defaultSize: { w: 12, h: 4 },
-        category: 'layout'
-    },
-    {
-        type: 'section',
-        label: 'Section',
-        icon: 'LayoutTemplate',
-        description: 'Labeled section divider',
-        defaultSize: { w: 12, h: 1 },
-        category: 'layout'
-    },
+// =============================================
+// WIDGET TYPES - NOW LOADED FROM DATABASE
+// =============================================
+// Widget definitions are fetched from the database via useDynamicWidgets hook.
+// This empty array is kept for backward compatibility with any code that imports it.
+// All widgets should be created and managed through the Widget Library Manager.
+export const WIDGET_TYPES: WidgetTypeMeta[] = [];
 
-    // === Data Display Widgets ===
-    {
-        type: 'device_status',
-        label: 'Device Status',
-        icon: 'Server',
-        description: 'Online/offline, signal, battery',
-        defaultSize: { w: 6, h: 2 },
-        category: 'data'
-    },
-    {
-        type: 'parameter_card',
-        label: 'Parameter Card',
-        icon: 'Square',
-        description: 'Display a single parameter value with icon',
-        defaultSize: { w: 3, h: 2 },
-        category: 'data',
-        requiresParameter: true
-    },
-    {
-        type: 'counter',
-        label: 'Big Number',
-        icon: 'Hash',
-        description: 'Large numeric display with animation',
-        defaultSize: { w: 3, h: 2 },
-        category: 'data',
-        requiresParameter: true
-    },
-    {
-        type: 'status_indicator',
-        label: 'Status Badge',
-        icon: 'Activity',
-        description: 'Status indicator badge',
-        defaultSize: { w: 3, h: 1 },
-        category: 'data'
-    },
-    {
-        type: 'transparent_parameter',
-        label: 'Transparent Parameter',
-        icon: 'Eye',
-        description: 'Minimalist parameter display',
-        defaultSize: { w: 2, h: 2 },
-        category: 'data',
-        requiresParameter: true
-    },
-
-    // === Visualization Widgets ===
-    {
-        type: 'tank_gauge',
-        label: 'Tank Gauge',
-        icon: 'Container',
-        description: 'Visual liquid level indicator (water, waste, diesel)',
-        defaultSize: { w: 4, h: 4 },
-        category: 'visualization',
-        requiresParameter: true
-    },
-    {
-        type: 'gauge',
-        label: 'Circular Gauge',
-        icon: 'Gauge',
-        description: 'Analog-style circular meter',
-        defaultSize: { w: 4, h: 3 },
-        category: 'visualization',
-        requiresParameter: true
-    },
-    {
-        type: 'line_chart',
-        label: 'Time Series Chart',
-        icon: 'LineChart',
-        description: 'Historical data visualization',
-        defaultSize: { w: 6, h: 3 },
-        category: 'visualization',
-        requiresParameter: true
-    },
-    {
-        type: 'table_view',
-        label: 'Data Table',
-        icon: 'Table',
-        description: 'Tabular data display',
-        defaultSize: { w: 6, h: 4 },
-        category: 'visualization'
-    },
-    {
-        type: 'chart_table_toggle',
-        label: 'Chart/Table Toggle',
-        icon: 'ToggleRight',
-        description: 'Switch between chart and table view',
-        defaultSize: { w: 8, h: 4 },
-        category: 'visualization',
-        requiresParameter: true
-    },
-
-    // === Control Widgets ===
-    {
-        type: 'threshold_editor',
-        label: 'Threshold Editor',
-        icon: 'Sliders',
-        description: 'Set operational limits for parameters',
-        defaultSize: { w: 4, h: 3 },
-        category: 'control',
-        requiresParameter: true
-    },
-    {
-        type: 'recording_control',
-        label: 'Recording Control',
-        icon: 'Circle',
-        description: 'Start/stop data recording',
-        defaultSize: { w: 3, h: 2 },
-        category: 'control'
-    },
-    {
-        type: 'device_config',
-        label: 'Device Configuration',
-        icon: 'Settings',
-        description: 'View/modify device settings',
-        defaultSize: { w: 4, h: 3 },
-        category: 'control'
-    },
-
-    // === Monitoring Widgets ===
-    {
-        type: 'alert_widget',
-        label: 'Alerts Panel',
-        icon: 'AlertTriangle',
-        description: 'Current and historical alerts',
-        defaultSize: { w: 6, h: 3 },
-        category: 'monitoring'
-    },
-    {
-        type: 'audit_log',
-        label: 'Audit Log',
-        icon: 'FileText',
-        description: 'Device event history',
-        defaultSize: { w: 6, h: 4 },
-        category: 'monitoring'
-    },
-    {
-        type: 'available_devices',
-        label: 'Available Devices',
-        icon: 'Cpu',
-        description: 'List of devices with add option',
-        defaultSize: { w: 4, h: 4 },
-        category: 'monitoring'
-    },
-
-    // === Decorative Widgets ===
-    {
-        type: 'text_widget',
-        label: 'Text Block',
-        icon: 'Type',
-        description: 'Custom text with styling',
-        defaultSize: { w: 4, h: 1 },
-        category: 'decorative'
-    },
-    {
-        type: 'logo_widget',
-        label: 'Logo',
-        icon: 'Image',
-        description: 'Display a logo image',
-        defaultSize: { w: 2, h: 2 },
-        category: 'decorative'
-    },
-    {
-        type: 'icon_widget',
-        label: 'Icon Display',
-        icon: 'Smile',
-        description: 'Display a decorative icon',
-        defaultSize: { w: 1, h: 1 },
-        category: 'decorative'
-    },
-    {
-        type: 'background_image',
-        label: 'Background Image',
-        icon: 'Image',
-        description: 'Background image with overlay',
-        defaultSize: { w: 12, h: 4 },
-        category: 'decorative'
-    }
-];
-
-// Helper to get widget metadata by type
+// Helper to get widget metadata by type (deprecated - use useDynamicWidgets().getWidgetMeta instead)
 export const getWidgetMeta = (type: WidgetType): WidgetTypeMeta | undefined => {
     return WIDGET_TYPES.find(w => w.type === type);
 };
 
-// Helper to get widgets by category
+// Helper to get widgets by category (deprecated - use useDynamicWidgets().groupedByCategory instead)
 export const getWidgetsByCategory = (category: WidgetCategory): WidgetTypeMeta[] => {
     return WIDGET_TYPES.filter(w => w.category === category);
 };
