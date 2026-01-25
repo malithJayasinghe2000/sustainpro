@@ -150,7 +150,7 @@ export const authApi = {
 
 // Users API functions
 export const usersApi = {
-    getAll: async (params?: { page?: number; limit?: number; search?: string; role?: string; organization_id?: string; event_id?: string }) => {
+    getAll: async (params?: { page?: number; limit?: number; search?: string; role?: string; organization_id?: string; event_id?: string; department_id?: string }) => {
         const response = await apiClient.get('/users', { params });
         return response.data;
     },
@@ -638,6 +638,11 @@ export const departmentsApi = {
     getServices: async (departmentId: string) => {
         const response = await apiClient.get(`/departments/${departmentId}/services`);
         return response.data;
+    },
+
+    getMyDepartments: async () => {
+        const response = await apiClient.get('/departments/my/departments');
+        return response.data.data;
     }
 };
 
@@ -783,6 +788,10 @@ export const eventsApi = {
 
 
 export const servicesApi = {
+    getMyServices: async () => {
+        const response = await apiClient.get('/services/my/services');
+        return response.data.data;
+    },
     getAll: async (scope?: string) => {
         const response = await apiClient.get('/services', { params: { scope } });
         return response.data.data;

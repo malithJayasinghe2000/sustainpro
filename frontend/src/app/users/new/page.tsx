@@ -94,8 +94,9 @@ function NewUserPageContent() {
 
     // Get query parameters for pre-selection
     const searchParams = useSearchParams();
-    const preselectedOrgId = searchParams.get('org');
-    const preselectedEventId = searchParams.get('event');
+    const preselectedOrgId = searchParams.get('org') || searchParams.get('organization_id');
+    const preselectedEventId = searchParams.get('event') || searchParams.get('event_id');
+    const preselectedDeptId = searchParams.get('dept') || searchParams.get('department_id');
     const preselectedRole = searchParams.get('role');
 
     useEffect(() => {
@@ -113,6 +114,7 @@ function NewUserPageContent() {
             ...prev,
             organization_id: preselectedOrgId || prev.organization_id,
             event_id: preselectedEventId || prev.event_id,
+            dept_id: preselectedDeptId || prev.dept_id,
             role: preselectedRole || prev.role
         }));
 
@@ -120,7 +122,7 @@ function NewUserPageContent() {
         if (preselectedRole) {
             setCurrentStep(1);
         }
-    }, [preselectedOrgId, preselectedEventId, preselectedRole]);
+    }, [preselectedOrgId, preselectedEventId, preselectedDeptId, preselectedRole]);
 
     // Fetch events when organization is selected
     useEffect(() => {

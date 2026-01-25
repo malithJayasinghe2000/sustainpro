@@ -53,12 +53,14 @@ export class UserService {
         limit: number = 20,
         search?: string,
         role?: string,
-        eventId?: string
+        eventId?: string,
+        departmentId?: string
     ): Promise<{ users: User[], total: number, pages: number }> {
         const skip = (page - 1) * limit;
         const { users, total } = await this.userRepo.findAll({
             organizationId: organizationId || undefined,
             eventId: eventId || undefined,
+            departmentId: departmentId || undefined,
             skip,
             take: limit,
             search,

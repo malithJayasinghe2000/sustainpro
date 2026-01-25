@@ -1,9 +1,9 @@
-import { 
-    ServiceRepository, 
-    ServiceTemplate, 
+import {
+    ServiceRepository,
+    ServiceTemplate,
     CreateServiceTemplateDTO,
     UpdateServiceTemplateDTO,
-    DepartmentService as DeptServiceEntity 
+    DepartmentService as DeptServiceEntity
 } from '../repositories/service.repository';
 import { NotFoundError, ForbiddenError, createLogger } from '@sustainpro/shared-utils';
 import { publishEvent } from '../messaging/publisher';
@@ -38,14 +38,14 @@ export class ServiceService {
      */
     async createTemplate(data: CreateServiceTemplateDTO, createdBy?: string): Promise<ServiceTemplate> {
         logger.info('Creating service template', { name: data.name, createdBy });
-        
+
         const template = await this.repo.createTemplate({
             ...data,
             created_by: createdBy,
         });
 
-        logger.info('Service template created', { 
-            templateId: template.id, 
+        logger.info('Service template created', {
+            templateId: template.id,
             name: template.name,
             deviceModelsCount: data.device_models?.length || 0
         });
@@ -64,7 +64,7 @@ export class ServiceService {
      */
     async updateTemplate(id: string, data: UpdateServiceTemplateDTO): Promise<ServiceTemplate> {
         logger.info('Updating service template', { id, fields: Object.keys(data) });
-        
+
         const template = await this.repo.updateTemplate(id, data);
         if (!template) {
             throw new NotFoundError('Service template', id);
@@ -127,7 +127,7 @@ export class ServiceService {
      */
     async deleteTemplate(id: string): Promise<void> {
         logger.info('Deleting service template', { id });
-        
+
         const deleted = await this.repo.deleteTemplate(id);
         if (!deleted) {
             throw new NotFoundError('Service template', id);
@@ -158,11 +158,11 @@ export class ServiceService {
         config?: Record<string, any>;
         assigned_supervisor_id?: string;
     }, assignedBy?: string): Promise<DeptServiceEntity> {
-        logger.info('Assigning service to department', { 
-            departmentId: data.department_id, 
-            templateId: data.service_template_id 
+        logger.info('Assigning service to department', {
+            departmentId: data.department_id,
+            templateId: data.service_template_id
         });
-        
+
         const service = await this.repo.addToDepartment(data);
 
         logger.info('Service assigned to department', {
@@ -185,7 +185,7 @@ export class ServiceService {
      */
     async removeFromDepartment(id: string): Promise<void> {
         logger.info('Removing service from department', { serviceId: id });
-        
+
         const deleted = await this.repo.removeFromDepartment(id);
         if (!deleted) {
             throw new NotFoundError('Department service', id);
@@ -205,7 +205,7 @@ export class ServiceService {
         name?: string;
     }): Promise<DeptServiceEntity> {
         logger.info('Updating department service', { serviceId: id, fields: Object.keys(data) });
-        
+
         const service = await this.repo.updateDepartmentService(id, data);
         if (!service) {
             throw new NotFoundError('Department service', id);
@@ -233,8 +233,16 @@ export class ServiceService {
 
     }
     //   Check if user can edit public dashboard for a service
-     
+
     async canEditPublicDashboard(userId: string, serviceId: string): Promise<boolean> {
         return this.repo.checkSupervisorAccess(userId, serviceId);
+    }
+
+    /**
+     * Get services assigned to user (my services)
+     */
+    async getByUser(userId: string): Promise<any[]> {
+        logger.debug('Fetching services for user', { userId });
+        return this.repo.findByUser(userId);
     }
 }
