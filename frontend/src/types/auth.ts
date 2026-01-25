@@ -15,6 +15,11 @@ export interface User {
     // Flattened roles for UI convenience
     roles: RoleAssignment[];
     permissions?: string[]; // Dynamic Permissions
+    
+    // Context IDs from role assignments
+    eventIds?: string[];  // Event IDs assigned to user
+    deptIds?: string[];   // Department IDs assigned to user
+    serviceIds?: string[]; // Service IDs assigned to user
 
 
     created_at: string;

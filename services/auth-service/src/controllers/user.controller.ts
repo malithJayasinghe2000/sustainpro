@@ -20,6 +20,7 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
         const search = req.query.search as string;
         const role = req.query.role as string;
         const eventId = req.query.event_id as string;
+        const departmentId = (req.query.department_id || req.query.dept_id) as string;
 
         // Determine organization filter
         let targetOrgId = orgId;
@@ -39,7 +40,8 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
             limit,
             search,
             role,
-            eventId
+            eventId,
+            departmentId
         );
 
         res.json({
@@ -183,9 +185,14 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
         const user = await userService.update(req.params.id, updateData);
 
         // If role is provided, update the role assignment
+        // If role is provided, update the role assignment
         if (role) {
+            const orgId = req.body.organizationId || req.body.organization_id || user.organization_id;
             await userService.assignRole(user.id, role, {
-                org_id: user.organization_id || undefined,
+                org_id: orgId || undefined,
+                event_id: req.body.event_id,
+                dept_id: req.body.department_id || req.body.dept_id,
+                service_id: req.body.service_id,
             });
         }
 

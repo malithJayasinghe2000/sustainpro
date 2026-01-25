@@ -22,7 +22,7 @@ const router = Router();
  *       200:
  *         description: Event departments
  */
-router.get('/by-event/:eventId', authenticateToken, deptController.getByEvent);
+router.get('/by-event/:eventId', authenticateToken, requirePermission('departments.view'), deptController.getByEvent);
 
 /**
  * @swagger

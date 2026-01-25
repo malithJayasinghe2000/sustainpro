@@ -74,12 +74,13 @@ export class UserRepository {
     async findAll(params: {
         organizationId?: string;
         eventId?: string;
+        departmentId?: string;
         skip?: number;
         take?: number;
         search?: string;
         role?: string;
     }): Promise<{ users: User[], total: number }> {
-        const { organizationId, eventId, skip, take, search, role } = params;
+        const { organizationId, eventId, departmentId, skip, take, search, role } = params;
 
         // console.log('[UserRepository] findAll called with:', { organizationId, eventId, role });
 
@@ -103,6 +104,9 @@ export class UserRepository {
         }
         if (eventId) {
             roleAssignmentsWhere.event_id = eventId;
+        }
+        if (departmentId) {
+            roleAssignmentsWhere.dept_id = departmentId;
         }
 
         if (Object.keys(roleAssignmentsWhere).length > 0) {

@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { DepartmentService } from '../services/department.service';
 import { ServiceService } from '../services/service.service';
-import { AppError } from '@sustainpro/shared-utils';
+import { AppError, createLogger } from '@sustainpro/shared-utils';
 
+const logger = createLogger({ service: 'core-service' });
 const deptService = new DepartmentService();
 const serviceService = new ServiceService();
 
@@ -11,7 +12,54 @@ const serviceService = new ServiceService();
  */
 export const getByEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const departments = await deptService.getByEvent(req.params.eventId);
+        const user = req.user;
+        const eventId = req.params.eventId;
+
+        // Debug logging
+        logger.info('getByEvent called', {
+            eventId,
+            userId: user?.id,
+            isSuperAdmin: user?.isSuperAdmin,
+            roles: user?.roles,
+            deptIds: user?.deptIds,
+            eventIds: user?.eventIds,
+        });
+
+        // Get all departments for the event
+        const allDepartments = await deptService.getByEvent(eventId);
+
+        logger.info('All departments for event', {
+            eventId,
+            count: allDepartments.length,
+            deptIds: allDepartments.map(d => d.id),
+        });
+
+        // Filter based on user role and context
+        let departments = allDepartments;
+
+        if (user) {
+            // Super admin can see all departments
+            if (user.isSuperAdmin) {
+                departments = allDepartments;
+            }
+            // ORG_ADMIN and EVENT_MANAGER can see all departments in the event
+            else if (user.roles?.includes('ORG_ADMIN') || user.roles?.includes('EVENT_MANAGER')) {
+                departments = allDepartments;
+            }
+            // DEPT_HEAD, SERVICE_SUPERVISOR, TECHNICIAN should only see departments they're assigned to
+            else if (user.deptIds && user.deptIds.length > 0) {
+                departments = allDepartments.filter(dept => user.deptIds!.includes(dept.id));
+            }
+            // If no specific department assignments, return empty array (except for super admin and org admin)
+            else {
+                departments = [];
+            }
+        }
+
+        logger.info('Filtered departments', {
+            userId: user?.id,
+            filteredCount: departments.length,
+        });
 
         res.json({
             success: true,
