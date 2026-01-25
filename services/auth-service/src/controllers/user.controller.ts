@@ -12,6 +12,7 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
     try {
         const isSuperAdmin = req.user?.isSuperAdmin;
         const orgId = req.user?.organization_id;
+        const userRoles = (req.user as any)?.roles || [];
 
         // Super admin sees all, others see only their org
         const page = parseInt(req.query.page as string) || 1;
@@ -25,6 +26,12 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
         if (isSuperAdmin) {
             targetOrgId = (req.query.organization_id as string) || null;
         }
+
+        // TODO: Add department filtering for DEPT_HEAD users
+        // Department heads should only see users in their department
+        // This requires: 1) Getting the department ID where user is head
+        //               2) Filtering users by that department
+        // For now, DEPT_HEAD users can see all users in their organization
 
         const { users, total, pages } = await userService.getAll(
             targetOrgId,
@@ -112,23 +119,40 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
             timezone: req.body.timezone,
         });
 
-        // Assign role if provided
-        if (req.body.role) {
-            const orgId = req.body.organizationId || req.body.organization_id;
-            const eventId = req.body.event_id || req.body.context_id; // Support both field names
+        // Assign roles if provided (Array format - preferred)
+        if (req.body.roles && Array.isArray(req.body.roles) && req.body.roles.length > 0) {
+            for (const roleData of req.body.roles) {
+                // Determine role name (handle string or object)
+                const roleName = typeof roleData === 'string' ? roleData : roleData.role;
 
-            // Debug logging - uncomment to troubleshoot role assignment issues
-            // console.log('[User Create] Assigning role with context:', {
-            //     role: req.body.role,
-            //     orgId,
-            //     eventId,
-            //     body_event_id: req.body.event_id,
-            //     body_context_id: req.body.context_id
-            // });
+                // Determine context from role object or fallback to body
+                const rOrgId = roleData.organization_id || req.body.organizationId || req.body.organization_id;
+                const rEventId = roleData.event_id || req.body.event_id;
+                const rDeptId = roleData.department_id || req.body.department_id;
+                const rServiceId = roleData.service_id || req.body.service_id;
+
+                if (roleName) {
+                    await userService.assignRole(user.id, roleName, {
+                        org_id: rOrgId,
+                        event_id: rEventId,
+                        dept_id: rDeptId,
+                        service_id: rServiceId,
+                    });
+                }
+            }
+        }
+        // Fallback: Single role in body (Legacy/Simple)
+        else if (req.body.role) {
+            const orgId = req.body.organizationId || req.body.organization_id;
+            const eventId = req.body.event_id || req.body.context_id;
+            const deptId = req.body.department_id || req.body.dept_id;
+            const serviceId = req.body.service_id;
 
             await userService.assignRole(user.id, req.body.role, {
                 org_id: orgId,
                 event_id: eventId,
+                dept_id: deptId,
+                service_id: serviceId,
             });
         }
 
@@ -155,7 +179,7 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
     try {
         // Extract role separately (not a direct user field)
         const { role, ...updateData } = req.body;
-        
+
         const user = await userService.update(req.params.id, updateData);
 
         // If role is provided, update the role assignment

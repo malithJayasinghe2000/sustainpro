@@ -44,6 +44,8 @@ export interface JwtPayload {
     roles: string[];
     permissions?: string[]; // permissions codes
     eventIds?: string[]; // Event IDs assigned to user via role assignments
+    deptIds?: string[]; // Department IDs assigned to user
+    serviceIds?: string[]; // Service IDs assigned to user
     iat?: number;
     exp?: number;
 }

@@ -81,6 +81,8 @@ export class UserRepository {
     }): Promise<{ users: User[], total: number }> {
         const { organizationId, eventId, skip, take, search, role } = params;
 
+        // console.log('[UserRepository] findAll called with:', { organizationId, eventId, role });
+
         const where: any = {};
 
         if (organizationId) {
@@ -109,77 +111,93 @@ export class UserRepository {
             };
         }
 
-        const [users, total] = await Promise.all([
-            prisma.sps_users.findMany({
-                where,
-                include: {
-                    sps_organizations: {
-                        select: {
-                            name: true,
-                        },
-                    },
-                    sps_role_assignments: {
-                        select: {
-                            role: true,
-                            org_id: true,
-                            event_id: true,
-                        },
-                    },
-                },
-                orderBy: { created_at: 'desc' },
-                skip,
-                take,
-            }),
-            prisma.sps_users.count({ where })
-        ]);
+        // console.log('[UserRepository] Constructed where clause:', JSON.stringify(where));
 
-        // Fetch all role definitions for display name mapping
-        // With fallback to static mapping if sps_roles table not available
-        let roleDisplayNames = new Map<string, string>();
         try {
-            const allRoles = await (prisma as any).sps_roles?.findMany?.({
-                where: { is_active: true },
-            });
-            if (allRoles && allRoles.length > 0) {
-                roleDisplayNames = new Map(allRoles.map((r: { code: string; name: string }) => [r.code, r.name]));
+            const [users, total] = await Promise.all([
+                prisma.sps_users.findMany({
+                    where,
+                    include: {
+                        sps_organizations: {
+                            select: {
+                                name: true,
+                            },
+                        },
+                        sps_role_assignments: true,
+                    },
+                    orderBy: { created_at: 'desc' },
+                    skip,
+                    take,
+                }),
+                prisma.sps_users.count({ where })
+            ]);
+
+            // ... mapped users logic continues below (I need to ensure I don't break the flow)
+            // Since this tool replaces chunks, I will return the users and total here to match subsequent logic, 
+            // OR I just wrap the query part.
+            // Be careful not to break variable scope for 'users' and 'total'.
+
+            // To be safe with the replace tool, I will just output the users/total assignment.
+            // But 'const [users, total]' declares them. 
+            // So I'll move the declaration out or just wrap the assignment.
+
+            // Actually, I'll just change the start/end lines to cover the Promise.all
+
+            // Fetch all role definitions for display name mapping
+            // With fallback to static mapping if sps_roles table not available
+            let roleDisplayNames = new Map<string, string>();
+            try {
+                const allRoles = await (prisma as any).sps_roles?.findMany?.({
+                    where: { is_active: true },
+                });
+                if (allRoles && allRoles.length > 0) {
+                    roleDisplayNames = new Map(allRoles.map((r: { code: string; name: string }) => [r.code, r.name]));
+                }
+            } catch (error) {
+                // Fallback: Use static role names if sps_roles table doesn't exist or Prisma not regenerated
+                console.warn('sps_roles table not available, using static role names');
             }
+
+            // Fallback static role names
+            const staticRoleNames: Record<string, string> = {
+                'SUPER_ADMIN': 'Super Admin',
+                'ORG_ADMIN': 'Organization Admin',
+                'EVENT_MANAGER': 'Event Manager',
+                'DEPT_HEAD': 'Department Head',
+                'SERVICE_SUPERVISOR': 'Service Supervisor',
+                'TECHNICIAN': 'Onsite Technician',
+                'SERVICE_SUPPLIER': 'Service Supplier',
+                'VIEWER': 'Organizer Viewer',
+            };
+
+            const mappedUsers = users.map((user: any) => {
+                const { password_hash, ...userWithoutPassword } = user;
+                // Map role assignments to the format expected by frontend
+                const roles = (user.sps_role_assignments || []).map((ra: any) => ({
+                    id: ra.id,
+                    role: ra.role,
+                    org_id: ra.org_id,
+                    event_id: ra.event_id,
+                    dept_id: ra.dept_id,
+                    service_id: ra.service_id,
+                }));
+                // Get the primary role (first role assignment)
+                const primaryRoleCode = user.sps_role_assignments?.[0]?.role;
+                return {
+                    ...userWithoutPassword,
+                    org_name: user.sps_organizations?.name,
+                    roles, // Array of role assignments for frontend
+                    role_code: primaryRoleCode || null,
+                    role_name: primaryRoleCode ? (roleDisplayNames.get(primaryRoleCode) || staticRoleNames[primaryRoleCode] || primaryRoleCode) : null,
+                } as User;
+            });
+
+            return { users: mappedUsers, total };
+
         } catch (error) {
-            // Fallback: Use static role names if sps_roles table doesn't exist or Prisma not regenerated
-            console.warn('sps_roles table not available, using static role names');
+            console.error('[UserRepository] findAll failed:', error);
+            throw error;
         }
-
-        // Fallback static role names
-        const staticRoleNames: Record<string, string> = {
-            'SUPER_ADMIN': 'Super Admin',
-            'ORG_ADMIN': 'Organization Admin',
-            'EVENT_MANAGER': 'Event Manager',
-            'DEPT_HEAD': 'Department Head',
-            'SERVICE_SUPERVISOR': 'Service Supervisor',
-            'TECHNICIAN': 'Onsite Technician',
-            'SERVICE_SUPPLIER': 'Service Supplier',
-            'VIEWER': 'Organizer Viewer',
-        };
-
-        const mappedUsers = users.map((user: any) => {
-            const { password_hash, ...userWithoutPassword } = user;
-            // Map role assignments to the format expected by frontend
-            const roles = (user.sps_role_assignments || []).map((ra: any) => ({
-                role: ra.role,
-                org_id: ra.org_id,
-                event_id: ra.event_id,
-            }));
-            // Get the primary role (first role assignment)
-            const primaryRoleCode = user.sps_role_assignments?.[0]?.role;
-            return {
-                ...userWithoutPassword,
-                org_name: user.sps_organizations?.name,
-                roles, // Array of role assignments for frontend
-                role_code: primaryRoleCode || null,
-                role_name: primaryRoleCode ? (roleDisplayNames.get(primaryRoleCode) || staticRoleNames[primaryRoleCode] || primaryRoleCode) : null,
-            } as User;
-        });
-
-        return { users: mappedUsers, total };
     }
 
     /**
@@ -306,20 +324,54 @@ export class UserRepository {
         role: string,
         context: { org_id?: string; event_id?: string; dept_id?: string; service_id?: string }
     ): Promise<RoleAssignment> {
-        // First, remove all existing role assignments for this user
-        await prisma.sps_role_assignments.deleteMany({
-            where: { user_id: userId }
+        let { org_id, event_id, dept_id, service_id } = context;
+
+        // Auto-fill context hierarchy if missing
+        if (dept_id && (!event_id || !org_id)) {
+            const dept = await prisma.sps_departments.findUnique({
+                where: { id: dept_id },
+                include: { sps_events: true }
+            });
+            if (dept) {
+                if (!event_id) event_id = dept.event_id;
+                if (!org_id && dept.sps_events) org_id = dept.sps_events.organization_id;
+            }
+        }
+
+        if (event_id && !org_id) {
+            const event = await prisma.sps_events.findUnique({
+                where: { id: event_id }
+            });
+            if (event) {
+                org_id = event.organization_id;
+            }
+        }
+
+        // Check if this specific assignment already exists to avoid duplicates
+        const existing = await prisma.sps_role_assignments.findFirst({
+            where: {
+                user_id: userId,
+                role: role,
+                org_id: org_id || null,
+                event_id: event_id || null,
+                dept_id: dept_id || null,
+                service_id: service_id || null,
+            }
         });
 
-        // Then create the new role assignment
+        if (existing) {
+            return existing as any as RoleAssignment;
+        }
+
+        // Create new role assignment (Additive)
         return await prisma.sps_role_assignments.create({
             data: {
                 user_id: userId,
                 role,
-                org_id: context.org_id || null,
-                event_id: context.event_id || null,
-                dept_id: context.dept_id || null,
-                service_id: context.service_id || null,
+                org_id: org_id || null,
+                event_id: event_id || null,
+                dept_id: dept_id || null,
+                service_id: service_id || null,
             },
         }) as any as RoleAssignment;
     }
@@ -435,5 +487,19 @@ export class UserRepository {
                 updated_at: new Date(),
             },
         });
+    }
+
+    /**
+     * Get event IDs associated with given department IDs
+     */
+    async getEventIdsForDepartments(deptIds: string[]): Promise<string[]> {
+        if (!deptIds || deptIds.length === 0) return [];
+
+        const depts = await prisma.sps_departments.findMany({
+            where: { id: { in: deptIds } },
+            select: { event_id: true }
+        });
+
+        return depts.map(d => d.event_id).filter(id => !!id) as string[];
     }
 }

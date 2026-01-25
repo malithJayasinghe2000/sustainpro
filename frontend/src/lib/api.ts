@@ -611,11 +611,22 @@ export const departmentsApi = {
         return response.data.data;
     },
 
-    addService: async (departmentId: string, serviceId: string, config?: any) => {
+    addService: async (departmentId: string, serviceId: string, options?: { config?: any; assigned_supervisor_id?: string }) => {
         const response = await apiClient.post(`/departments/${departmentId}/services`, {
             service_template_id: serviceId,
-            config: config || {}
+            config: options?.config || {},
+            assigned_supervisor_id: options?.assigned_supervisor_id || undefined
         });
+        return response.data;
+    },
+
+    updateService: async (departmentId: string, serviceId: string, data: { assigned_supervisor_id?: string; config?: any }) => {
+        const response = await apiClient.put(`/departments/${departmentId}/services/${serviceId}`, data);
+        return response.data;
+    },
+
+    update: async (id: string, data: any) => {
+        const response = await apiClient.put(`/departments/${id}`, data);
         return response.data;
     },
 

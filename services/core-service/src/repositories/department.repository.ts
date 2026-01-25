@@ -21,7 +21,10 @@ export class DepartmentRepository {
                     select: { name: true, description: true, icon: true, color: true }
                 },
                 _count: {
-                    select: { sps_department_services: true }
+                    select: {
+                        sps_department_services: true,
+                        sps_role_assignments: true
+                    }
                 }
             },
             orderBy: { created_at: 'desc' }
@@ -32,7 +35,8 @@ export class DepartmentRepository {
             // If template data exists, we can optionally use it or pass it along.
             // For now, let's keep the department's own fields primary, but you can override here if needed.
             template: d.sps_department_templates,
-            services_count: d._count.sps_department_services
+            services_count: d._count.sps_department_services,
+            staff_count: d._count.sps_role_assignments
         })) as any as DepartmentWithServices[];
     }
 
@@ -47,7 +51,10 @@ export class DepartmentRepository {
                     select: { name: true, description: true, icon: true, color: true }
                 },
                 _count: {
-                    select: { sps_department_services: true }
+                    select: {
+                        sps_department_services: true,
+                        sps_role_assignments: true
+                    }
                 }
             }
         });
@@ -57,7 +64,8 @@ export class DepartmentRepository {
         return {
             ...department,
             template: department.sps_department_templates,
-            services_count: department._count.sps_department_services
+            services_count: department._count.sps_department_services,
+            staff_count: department._count.sps_role_assignments
         } as any as DepartmentWithServices;
     }
 

@@ -161,6 +161,31 @@ router.post('/:id/services', requirePermission('services.assign'), deptControlle
 /**
  * @swagger
  * /departments/{id}/services/{serviceId}:
+ *   put:
+ *     tags: [Departments]
+ *     summary: Update service in department
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service updated
+ */
+router.put('/:id/services/:serviceId', requirePermission('services.update'), deptController.updateService);
+
+/**
+ * @swagger
+ * /departments/{id}/services/{serviceId}:
  *   delete:
  *     tags: [Departments]
  *     summary: Remove service from department

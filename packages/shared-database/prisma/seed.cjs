@@ -35,6 +35,131 @@ async function hashPassword(password) {
     parallelism: 4
   });
 }
+function createEmailLayout(title, subtitle, content) {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); overflow: hidden;">
+                    <!-- Accent Bar -->
+                    <tr>
+                        <td style="height: 4px; background: linear-gradient(90deg, {{primaryColor}} 0%, {{primaryColor}} 100%);"></td>
+                    </tr>
+                    
+                    <!-- Logo Header -->
+                    <tr>
+                        <td style="padding: 32px 40px 0 40px;">
+                            <img src="{{logoUrl}}" alt="{{organizationName}}" height="28" style="display: block;" onerror="this.style.display='none'" />
+                            <span style="font-size: 20px; font-weight: 700; color: #1a1a2e; display: {{logoUrl}} ? 'none' : 'block';">{{organizationName}}</span>
+                        </td>
+                    </tr>
+                    
+                    <!-- Main Content -->
+                    <tr>
+                        <td style="padding: 32px 40px 40px 40px;">
+                            <!-- Title Section -->
+                            <h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 700; color: #1a1a2e; letter-spacing: -0.02em;">${title}</h1>
+                            <p style="margin: 0 0 24px 0; font-size: 14px; color: #6b7280;">${subtitle}</p>
+                            
+                            <!-- Body Content -->
+                            ${content}
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 24px 40px; border-top: 1px solid #f0f0f0;">
+                            <p style="margin: 0 0 16px 0; font-size: 14px; color: #6b7280;">
+                                Having trouble with your account? <a href="mailto:{{supportEmail}}" style="color: {{primaryColor}}; text-decoration: underline;">Contact us</a>
+                            </p>
+                            <p style="margin: 0; font-size: 14px; color: #9ca3af;">
+                                Best,<br/>
+                                ~ {{organizationName}} team
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `.trim();
+}
+function createInfoBox(iconType, label, value) {
+  const icons = {
+    email: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{primaryColor}}" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>`,
+    password: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{primaryColor}}" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`,
+    key: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{primaryColor}}" stroke-width="2"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`,
+    info: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{primaryColor}}" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>`
+  };
+  return `
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 8px; margin-bottom: 12px;">
+            <tr>
+                <td style="padding: 16px 20px;">
+                    <table cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="width: 44px; vertical-align: top;">
+                                <div style="width: 36px; height: 36px; background-color: #e0f2fe; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                    ${icons[iconType]}
+                                </div>
+                            </td>
+                            <td style="vertical-align: top; padding-left: 12px;">
+                                <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em;">${label}</p>
+                                <p style="margin: 0; font-size: 15px; font-weight: 600; color: #1a1a2e;">${value}</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    `;
+}
+function createNoticeBox(message, type = "info") {
+  const colors = {
+    info: { bg: "#eff6ff", border: "#bfdbfe", text: "#1e40af", icon: "#3b82f6" },
+    warning: { bg: "#fffbeb", border: "#fde68a", text: "#92400e", icon: "#f59e0b" },
+    success: { bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46", icon: "#10b981" }
+  };
+  const c = colors[type];
+  return `
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${c.bg}; border-radius: 8px; margin: 20px 0;">
+            <tr>
+                <td style="padding: 16px 20px;">
+                    <table cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="width: 28px; vertical-align: top;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${c.icon}" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+                            </td>
+                            <td style="vertical-align: top; padding-left: 12px;">
+                                <p style="margin: 0; font-size: 14px; color: ${c.text};">${message}</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    `;
+}
+function createButton(text, url) {
+  return `
+        <table cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+            <tr>
+                <td style="background-color: {{primaryColor}}; border-radius: 6px;">
+                    <a href="${url}" style="display: inline-block; padding: 12px 24px; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none;">${text}</a>
+                </td>
+            </tr>
+        </table>
+    `;
+}
 async function main() {
   console.log("\u{1F331} Starting database seeding...\n");
   const passwordHash = await hashPassword(DEFAULT_PASSWORD);
@@ -235,18 +360,24 @@ async function main() {
       name: "Welcome Email",
       category: "SYSTEM",
       description: "Sent to new users upon account creation",
-      subject: "Welcome to SustainPro - {{userName}}",
-      body_html: `
-                <h1>Welcome to SustainPro!</h1>
-                <p>Dear {{userName}},</p>
-                <p>Your account has been created successfully.</p>
-                <p>You can log in using your email: <strong>{{userEmail}}</strong></p>
-                <p><a href="{{loginUrl}}">Click here to login</a></p>
-                <p>If you have any questions, please contact our support team.</p>
-                <p>Best regards,<br>The SustainPro Team</p>
-            `,
-      body_text: "Welcome to SustainPro! Your account has been created. Login at: {{loginUrl}}",
-      available_variables: JSON.stringify(["userName", "userEmail", "loginUrl", "organizationName"]),
+      subject: "Welcome to the Team - {{userName}}",
+      body_html: createEmailLayout("WELCOME TO THE TEAM", "Your account has been created", `
+                <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Hello <strong style="color: #047857;">{{userName}}</strong>,
+                </p>
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    An administrator has created your account. Use the credentials below to access the platform.
+                </p>
+                
+                ${createInfoBox("email", "EMAIL", "{{userEmail}}")}
+                ${createInfoBox("password", "TEMPORARY PASSWORD", "{{tempPassword}}")}
+                
+                ${createNoticeBox("<strong>Password Change Required</strong><br/>You will be asked to create a new password when you first log in.", "info")}
+                
+                ${createButton("Log In to Your Account", "{{loginUrl}}")}
+            `),
+      body_text: "Welcome to the team! Your account has been created. Email: {{userEmail}}. Login at: {{loginUrl}}",
+      available_variables: JSON.stringify(["userName", "userEmail", "tempPassword", "loginUrl", "organizationName"]),
       is_system_template: true
     },
     {
@@ -254,17 +385,21 @@ async function main() {
       name: "Password Reset",
       category: "SYSTEM",
       description: "Sent when a user requests a password reset",
-      subject: "Password Reset Request - SustainPro",
-      body_html: `
-                <h1>Password Reset Request</h1>
-                <p>Dear {{userName}},</p>
-                <p>We received a request to reset your password.</p>
-                <p>Click the link below to reset your password:</p>
-                <p><a href="{{resetUrl}}">Reset Password</a></p>
-                <p>This link will expire in {{expiryMinutes}} minutes.</p>
-                <p>If you did not request this, please ignore this email.</p>
-                <p>Best regards,<br>The SustainPro Team</p>
-            `,
+      subject: "Reset Your Password",
+      body_html: createEmailLayout("PASSWORD RESET", "A password reset was requested for your account", `
+                <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Hello <strong style="color: #047857;">{{userName}}</strong>,
+                </p>
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    We received a request to reset your password. Click the button below to create a new password.
+                </p>
+                
+                ${createButton("Reset Password", "{{resetUrl}}")}
+                
+                <p style="margin: 24px 0 0 0; font-size: 14px; color: #6b7280; line-height: 1.6;">
+                    This link will expire in <strong>{{expiryMinutes}} minutes</strong>. If you didn't request this, you can safely ignore this email.
+                </p>
+            `),
       body_text: "Password Reset Request. Reset your password at: {{resetUrl}}. This link expires in {{expiryMinutes}} minutes.",
       available_variables: JSON.stringify(["userName", "userEmail", "resetUrl", "expiryMinutes"]),
       is_system_template: true
@@ -274,17 +409,28 @@ async function main() {
       name: "2FA OTP Email",
       category: "SYSTEM",
       description: "Sent for email-based two-factor authentication",
-      subject: "Your Verification Code - SustainPro",
-      body_html: `
-                <h1>Two-Factor Authentication</h1>
-                <p>Dear {{userName}},</p>
-                <p>Your verification code is:</p>
-                <h2 style="font-size: 32px; letter-spacing: 5px; color: #3B82F6;">{{otpCode}}</h2>
-                <p>This code will expire in {{expiryMinutes}} minutes.</p>
-                <p>If you did not request this code, please secure your account immediately.</p>
-                <p>Best regards,<br>The SustainPro Team</p>
-            `,
-      body_text: "Your SustainPro verification code is: {{otpCode}}. This code expires in {{expiryMinutes}} minutes.",
+      subject: "Your Verification Code",
+      body_html: createEmailLayout("VERIFICATION CODE", "Use this code to complete your login", `
+                <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Hello <strong style="color: #047857;">{{userName}}</strong>,
+                </p>
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Enter the following verification code to complete your sign-in:
+                </p>
+                
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px; margin: 24px 0; border: 2px dashed #e2e8f0;">
+                    <tr>
+                        <td style="padding: 32px; text-align: center;">
+                            <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: {{primaryColor}}; font-family: monospace;">{{otpCode}}</span>
+                        </td>
+                    </tr>
+                </table>
+                
+                <p style="margin: 0; font-size: 14px; color: #6b7280; line-height: 1.6;">
+                    This code will expire in <strong>{{expiryMinutes}} minutes</strong>. If you didn't attempt to sign in, please secure your account immediately.
+                </p>
+            `),
+      body_text: "Your verification code is: {{otpCode}}. This code expires in {{expiryMinutes}} minutes.",
       available_variables: JSON.stringify(["userName", "otpCode", "expiryMinutes"]),
       is_system_template: true
     },
@@ -293,19 +439,27 @@ async function main() {
       name: "Alert Notification",
       category: "ALERT",
       description: "Sent when a new alert is triggered",
-      subject: "[{{severity}}] Alert: {{alertName}} - SustainPro",
-      body_html: `
-                <h1>Alert Notification</h1>
-                <p>A new alert has been triggered:</p>
-                <table>
-                    <tr><td><strong>Alert:</strong></td><td>{{alertName}}</td></tr>
-                    <tr><td><strong>Severity:</strong></td><td>{{severity}}</td></tr>
-                    <tr><td><strong>Device:</strong></td><td>{{deviceName}}</td></tr>
-                    <tr><td><strong>Message:</strong></td><td>{{alertMessage}}</td></tr>
-                    <tr><td><strong>Time:</strong></td><td>{{alertTime}}</td></tr>
+      subject: "[{{severity}}] Alert: {{alertName}}",
+      body_html: createEmailLayout("ALERT TRIGGERED", "A new alert requires your attention", `
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    A <strong>{{severity}}</strong> alert has been triggered on your platform.
+                </p>
+                
+                ${createInfoBox("info", "ALERT NAME", "{{alertName}}")}
+                ${createInfoBox("info", "DEVICE", "{{deviceName}}")}
+                ${createInfoBox("info", "TIME", "{{alertTime}}")}
+                
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fef2f2; border-radius: 8px; margin: 16px 0;">
+                    <tr>
+                        <td style="padding: 16px 20px;">
+                            <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #991b1b; text-transform: uppercase; letter-spacing: 0.05em;">MESSAGE</p>
+                            <p style="margin: 0; font-size: 14px; color: #7f1d1d;">{{alertMessage}}</p>
+                        </td>
+                    </tr>
                 </table>
-                <p><a href="{{alertUrl}}">View Alert Details</a></p>
-            `,
+                
+                ${createButton("View Alert Details", "{{alertUrl}}")}
+            `),
       body_text: "{{severity}} Alert: {{alertName}}. {{alertMessage}}. View at: {{alertUrl}}",
       available_variables: JSON.stringify(["alertName", "severity", "deviceName", "alertMessage", "alertTime", "alertUrl"]),
       is_system_template: true
@@ -315,19 +469,22 @@ async function main() {
       name: "Task Assigned",
       category: "TASK",
       description: "Sent when a task is assigned to a user",
-      subject: "New Task Assigned: {{taskTitle}} - SustainPro",
-      body_html: `
-                <h1>New Task Assigned</h1>
-                <p>Dear {{userName}},</p>
-                <p>A new task has been assigned to you:</p>
-                <table>
-                    <tr><td><strong>Task:</strong></td><td>{{taskTitle}}</td></tr>
-                    <tr><td><strong>Priority:</strong></td><td>{{taskPriority}}</td></tr>
-                    <tr><td><strong>Due Date:</strong></td><td>{{dueDate}}</td></tr>
-                    <tr><td><strong>Assigned By:</strong></td><td>{{assignedBy}}</td></tr>
-                </table>
-                <p><a href="{{taskUrl}}">View Task Details</a></p>
-            `,
+      subject: "New Task: {{taskTitle}}",
+      body_html: createEmailLayout("NEW TASK ASSIGNED", "A task has been assigned to you", `
+                <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Hello <strong style="color: #047857;">{{userName}}</strong>,
+                </p>
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    A new task has been assigned to you. Please review and update the status as you progress.
+                </p>
+                
+                ${createInfoBox("info", "TASK", "{{taskTitle}}")}
+                ${createInfoBox("info", "PRIORITY", "{{taskPriority}}")}
+                ${createInfoBox("info", "DUE DATE", "{{dueDate}}")}
+                ${createInfoBox("info", "ASSIGNED BY", "{{assignedBy}}")}
+                
+                ${createButton("View Task Details", "{{taskUrl}}")}
+            `),
       body_text: "New Task: {{taskTitle}}. Due: {{dueDate}}. View at: {{taskUrl}}",
       available_variables: JSON.stringify(["userName", "taskTitle", "taskPriority", "dueDate", "assignedBy", "taskUrl"]),
       is_system_template: true
@@ -337,23 +494,47 @@ async function main() {
       name: "Daily Report",
       category: "REPORT",
       description: "Daily summary report email",
-      subject: "Daily Report: {{reportDate}} - SustainPro",
-      body_html: `
-                <h1>Daily Report</h1>
-                <p>Here is your daily summary for {{reportDate}}:</p>
-                <h2>Alerts Summary</h2>
-                <ul>
-                    <li>Critical: {{criticalAlerts}}</li>
-                    <li>Warning: {{warningAlerts}}</li>
-                    <li>Info: {{infoAlerts}}</li>
-                </ul>
-                <h2>Device Status</h2>
-                <ul>
-                    <li>Online: {{devicesOnline}}</li>
-                    <li>Offline: {{devicesOffline}}</li>
-                </ul>
-                <p><a href="{{dashboardUrl}}">View Full Dashboard</a></p>
-            `,
+      subject: "Daily Report: {{reportDate}}",
+      body_html: createEmailLayout("DAILY REPORT", "Your daily system summary for {{reportDate}}", `
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Here's your daily overview of the platform activity:
+                </p>
+                
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr>
+                        <td style="padding: 20px; background-color: #fef2f2; border-radius: 8px; text-align: center; width: 33%;">
+                            <p style="margin: 0 0 4px 0; font-size: 28px; font-weight: 700; color: #dc2626;">{{criticalAlerts}}</p>
+                            <p style="margin: 0; font-size: 12px; color: #991b1b; text-transform: uppercase;">Critical</p>
+                        </td>
+                        <td style="width: 12px;"></td>
+                        <td style="padding: 20px; background-color: #fffbeb; border-radius: 8px; text-align: center; width: 33%;">
+                            <p style="margin: 0 0 4px 0; font-size: 28px; font-weight: 700; color: #d97706;">{{warningAlerts}}</p>
+                            <p style="margin: 0; font-size: 12px; color: #92400e; text-transform: uppercase;">Warning</p>
+                        </td>
+                        <td style="width: 12px;"></td>
+                        <td style="padding: 20px; background-color: #eff6ff; border-radius: 8px; text-align: center; width: 33%;">
+                            <p style="margin: 0 0 4px 0; font-size: 28px; font-weight: 700; color: #2563eb;">{{infoAlerts}}</p>
+                            <p style="margin: 0; font-size: 12px; color: #1e40af; text-transform: uppercase;">Info</p>
+                        </td>
+                    </tr>
+                </table>
+                
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr>
+                        <td style="padding: 20px; background-color: #ecfdf5; border-radius: 8px; text-align: center; width: 48%;">
+                            <p style="margin: 0 0 4px 0; font-size: 28px; font-weight: 700; color: #059669;">{{devicesOnline}}</p>
+                            <p style="margin: 0; font-size: 12px; color: #065f46; text-transform: uppercase;">Devices Online</p>
+                        </td>
+                        <td style="width: 4%;"></td>
+                        <td style="padding: 20px; background-color: #f3f4f6; border-radius: 8px; text-align: center; width: 48%;">
+                            <p style="margin: 0 0 4px 0; font-size: 28px; font-weight: 700; color: #6b7280;">{{devicesOffline}}</p>
+                            <p style="margin: 0; font-size: 12px; color: #4b5563; text-transform: uppercase;">Devices Offline</p>
+                        </td>
+                    </tr>
+                </table>
+                
+                ${createButton("View Full Dashboard", "{{dashboardUrl}}")}
+            `),
       body_text: "Daily Report for {{reportDate}}. Critical: {{criticalAlerts}}, Warnings: {{warningAlerts}}. View dashboard: {{dashboardUrl}}",
       available_variables: JSON.stringify(["reportDate", "criticalAlerts", "warningAlerts", "infoAlerts", "devicesOnline", "devicesOffline", "dashboardUrl"]),
       is_system_template: true
@@ -363,16 +544,23 @@ async function main() {
       name: "Account Locked",
       category: "SYSTEM",
       description: "Sent when user account is locked due to failed login attempts",
-      subject: "Account Security Alert - SustainPro",
-      body_html: `
-                <h1>Account Locked</h1>
-                <p>Dear {{userName}},</p>
-                <p>Your account has been temporarily locked due to multiple failed login attempts.</p>
-                <p>Your account will be automatically unlocked after {{lockoutDuration}} minutes.</p>
-                <p>If this was not you, please contact support immediately.</p>
-                <p>Best regards,<br>The SustainPro Team</p>
-            `,
-      body_text: "Your SustainPro account has been locked. It will be unlocked after {{lockoutDuration}} minutes.",
+      subject: "Account Security Alert",
+      body_html: createEmailLayout("ACCOUNT LOCKED", "Your account has been temporarily locked", `
+                <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Hello <strong style="color: #047857;">{{userName}}</strong>,
+                </p>
+                
+                ${createNoticeBox("Your account has been temporarily locked due to multiple consecutive failed login attempts. This is a security measure to protect your account.", "warning")}
+                
+                <p style="margin: 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Your account will be automatically unlocked after <strong>{{lockoutDuration}} minutes</strong>.
+                </p>
+                
+                <p style="margin: 0; font-size: 14px; color: #6b7280; line-height: 1.6;">
+                    If you did not attempt to sign in, please contact our support team immediately as someone may be trying to access your account.
+                </p>
+            `),
+      body_text: "Your account has been locked due to multiple failed login attempts. It will be unlocked after {{lockoutDuration}} minutes.",
       available_variables: JSON.stringify(["userName", "lockoutDuration", "lockoutTime", "ipAddress"]),
       is_system_template: true
     },
@@ -381,24 +569,26 @@ async function main() {
       name: "Event End Request",
       category: "EVENT",
       description: "Sent to org admins when an event manager requests to end an event",
-      subject: "Event End Request: {{eventName}} - Action Required",
-      body_html: `
-                <h1>Event End Request</h1>
-                <p>Dear {{recipientName}},</p>
-                <p>An event manager has requested to end the following event:</p>
-                <table style="border-collapse: collapse; margin: 20px 0;">
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Event:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">{{eventName}}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Event Code:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">{{eventCode}}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Requested By:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">{{requestedByName}}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Request Time:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">{{requestTime}}</td></tr>
-                </table>
-                <p>Please review and take action:</p>
-                <p style="margin: 20px 0;">
-                    <a href="{{eventUrl}}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">View Event</a>
+      subject: "Event End Request: {{eventName}}",
+      body_html: createEmailLayout("EVENT END REQUEST", "An event manager has requested to end an event", `
+                <p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    Hello <strong style="color: #047857;">{{recipientName}}</strong>,
                 </p>
-                <p>If you approve, you can end the event from the event details page.</p>
-                <p>Best regards,<br>The SustainPro Team</p>
-            `,
+                <p style="margin: 0 0 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                    A request has been submitted to mark the following event as <strong>ENDED</strong>. Please review and take action.
+                </p>
+                
+                ${createInfoBox("info", "EVENT NAME", "{{eventName}}")}
+                ${createInfoBox("key", "EVENT CODE", "{{eventCode}}")}
+                ${createInfoBox("info", "REQUESTED BY", "{{requestedByName}}")}
+                ${createInfoBox("info", "REQUEST TIME", "{{requestTime}}")}
+                
+                ${createButton("Review Event", "{{eventUrl}}")}
+                
+                <p style="margin: 0; font-size: 14px; color: #6b7280; line-height: 1.6;">
+                    If you approve this request, you can terminate the event from the event details page.
+                </p>
+            `),
       body_text: "Event End Request: {{eventName}}. Requested by {{requestedByName}}. Review at: {{eventUrl}}",
       available_variables: JSON.stringify(["recipientName", "eventName", "eventCode", "requestedByName", "requestTime", "eventUrl", "organizationName"]),
       is_system_template: true
@@ -407,7 +597,7 @@ async function main() {
   for (const template of emailTemplates) {
     await prisma.sps_email_templates.upsert({
       where: { code: template.code },
-      update: {},
+      update: template,
       create: template
     });
   }
@@ -523,7 +713,18 @@ async function main() {
     { name: "View Telemetry", code: "telemetry.view", description: "View telemetry data", category: "telemetry" },
     { name: "Manage Alerts", code: "alerts.manage", description: "Create and manage alert rules", category: "alerts" },
     { name: "View Audit Logs", code: "audit.view", description: "View system audit logs", category: "audit" },
-    { name: "Export Audit Logs", code: "audit.export", description: "Export audit logs to CSV", category: "audit" }
+    { name: "Export Audit Logs", code: "audit.export", description: "Export audit logs to CSV", category: "audit" },
+    // Service permissions
+    { name: "View Services", code: "services.view", description: "View service templates", category: "services" },
+    { name: "Create Services", code: "services.create", description: "Create service templates", category: "services" },
+    { name: "Update Services", code: "services.update", description: "Update service templates", category: "services" },
+    { name: "Delete Services", code: "services.delete", description: "Delete service templates", category: "services" },
+    { name: "Assign Services", code: "services.assign", description: "Assign services to departments", category: "services" },
+    // Department permissions
+    { name: "View Departments", code: "departments.view", description: "View departments", category: "departments" },
+    { name: "Create Departments", code: "departments.create", description: "Create departments", category: "departments" },
+    { name: "Update Departments", code: "departments.update", description: "Update departments", category: "departments" },
+    { name: "Delete Departments", code: "departments.delete", description: "Delete departments", category: "departments" }
   ];
   for (const perm of permissions) {
     await prisma.sps_permissions.upsert({
@@ -700,7 +901,18 @@ async function main() {
       "telemetry.view",
       "alerts.manage",
       "audit.view",
-      "audit.export"
+      "audit.export",
+      // Service permissions
+      "services.view",
+      "services.create",
+      "services.update",
+      "services.delete",
+      "services.assign",
+      // Department permissions
+      "departments.view",
+      "departments.create",
+      "departments.update",
+      "departments.delete"
     ],
     "EVENT_MANAGER": [
       "dashboard.view",
@@ -712,14 +924,25 @@ async function main() {
       "devices.view",
       "reports.view",
       "telemetry.view",
-      "users.view"
+      "users.view",
+      // Service permissions (view and assign only)
+      "services.view",
+      "services.assign",
+      // Department permissions
+      "departments.view",
+      "departments.create",
+      "departments.update",
+      "departments.delete"
     ],
     "DEPT_HEAD": [
       "dashboard.view",
       "events.view",
       "devices.view",
       "reports.view",
-      "telemetry.view"
+      "telemetry.view",
+      "services.view",
+      "departments.view",
+      "departments.update"
     ],
     "SERVICE_SUPERVISOR": [
       "dashboard.view",
@@ -727,25 +950,36 @@ async function main() {
       "devices.view",
       "devices.manage",
       "telemetry.view",
-      "alerts.manage"
+      "alerts.manage",
+      "services.view",
+      "services.update",
+      "departments.view",
+      "users.view",
+      "users.manage",
+      "reports.view"
     ],
     "TECHNICIAN": [
       "dashboard.view",
       "events.view",
       "devices.view",
-      "telemetry.view"
+      "telemetry.view",
+      "services.view",
+      "departments.view"
     ],
     "SERVICE_SUPPLIER": [
       "dashboard.view",
       "devices.view",
-      "telemetry.view"
+      "telemetry.view",
+      "services.view"
     ],
     "VIEWER": [
       "dashboard.view",
       "events.view",
       "devices.view",
       "reports.view",
-      "telemetry.view"
+      "telemetry.view",
+      "services.view",
+      "departments.view"
     ],
     "OPERATOR": [
       "dashboard.view",
@@ -753,7 +987,9 @@ async function main() {
       "devices.view",
       "devices.manage",
       "reports.view",
-      "telemetry.view"
+      "telemetry.view",
+      "services.view",
+      "departments.view"
     ]
   };
   for (const [role, permCodes] of Object.entries(rolePermissionMappings)) {

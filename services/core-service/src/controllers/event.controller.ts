@@ -9,27 +9,55 @@ const eventService = new EventService();
  */
 export const getAll = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const isSuperAdmin = req.user?.isSuperAdmin;
+        const user = req.user!;
+        const isSuperAdmin = user.isSuperAdmin;
+
+        console.log(`[EventController] getAll request. User: ${user.id}, SuperAdmin: ${isSuperAdmin}, Org: ${user.organization_id}`);
+
+        // Determine organization context
+        let organizationId = req.query.organization_id as string;
 
         if (!isSuperAdmin) {
-            res.status(403).json({
-                success: false,
-                error: 'Super Admin access required',
-            });
-            return;
+            // Non-super admins are restricted to their own organization
+            organizationId = user.organization_id!;
+        }
+
+        // Determine event access
+        let allowedEventIds: string[] | undefined;
+        if (!isSuperAdmin) {
+            const permissions = (user as any).permissions || [];
+            console.log(`[EventController] User permissions: ${permissions.join(', ')}`);
+
+            if (!permissions.includes('events.view_all')) {
+                // If cannot view all, restrict to assigned events
+                allowedEventIds = (user as any).eventIds || [];
+                console.log(`[EventController] Restricted to eventIds: ${allowedEventIds?.join(', ')}`);
+
+                // If no assigned events, they can't see anything
+                if (allowedEventIds && allowedEventIds.length === 0) {
+                    res.json({
+                        success: true,
+                        data: [],
+                        meta: { page: 1, limit: 20, total: 0, pages: 0 }
+                    });
+                    return;
+                }
+            }
         }
 
         // Pagination and filtering
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 20;
         const search = req.query.search as string;
-        const organizationId = req.query.organization_id as string;
+
+        console.log('[EventController] Calling service with params:', { page, limit, organizationId, allowedEventIdsCount: allowedEventIds?.length });
 
         const { events, total, pages } = await eventService.getAll({
             page,
             limit,
             search,
-            organizationId
+            organizationId,
+            allowedEventIds
         });
 
         res.json({
@@ -43,6 +71,7 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
             }
         });
     } catch (error) {
+        console.error('[EventController] getAll error:', error);
         next(error);
     }
 };
