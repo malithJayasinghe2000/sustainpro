@@ -39,13 +39,16 @@ interface IotConfig {
 // CONFIGURATION
 // ============================================================
 
+const isProduction = process.env.NODE_ENV === 'production';
+const baseDir = isProduction ? 'dist' : 'src';
+
 const config: IotConfig = {
   host: 'a3a0yoo2557wbr-ats.iot.me-central-1.amazonaws.com',
   region: 'me-central-1',
 
-  keyPath: path.join(__dirname, 'certificates', 'private.pem.key'),
-  certPath: path.join(__dirname, 'certificates', 'certificate.pem.crt'),
-  caPath: path.join(__dirname, 'certificates', 'AmazonRootCA1.pem'),
+  keyPath: path.join(process.cwd(), baseDir, 'certificates', 'private.pem.key'),
+  certPath: path.join(process.cwd(), baseDir, 'certificates', 'certificate.pem.crt'),
+  caPath: path.join(process.cwd(), baseDir, 'certificates', 'AmazonRootCA1.pem'),
 
   clientId: `NodeJS_Subscriber_${Math.random().toString(16).slice(2, 8)}`,
 
