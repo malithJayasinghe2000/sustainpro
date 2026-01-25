@@ -188,6 +188,9 @@ export class DeviceService {
         location?: string;
         service_id?: string;
         organization_id: string;
+        department_id?: string;
+        event_id?: string;
+        host?: string;
     }): Promise<{ device: Device; apiKey: string; isNew: boolean }> {
         // Check if device already exists by hardware_id (stored in metadata)
         const existingDevices = await deviceRepository.findAll(data.organization_id);
@@ -210,6 +213,9 @@ export class DeviceService {
                     ...existingDevice.metadata,
                     location: data.location,
                     hardware_id: data.hardware_id,
+                    department_id: data.department_id,
+                    event_id: data.event_id,
+                    host: data.host,
                 },
             });
 
@@ -230,6 +236,9 @@ export class DeviceService {
                 hardware_id: data.hardware_id,
                 location: data.location,
                 provisioned_at: new Date().toISOString(),
+                department_id: data.department_id,
+                event_id: data.event_id,
+                host: data.host,
             },
         });
 
@@ -245,6 +254,8 @@ export class DeviceService {
             device_code: deviceCode,
             hardware_id: data.hardware_id,
             organization_id: data.organization_id,
+            department_id: data.department_id,
+            event_id: data.event_id,
         }).catch((err) => {
             logger.warn('Failed to publish device.registered event', { error: err.message });
         });

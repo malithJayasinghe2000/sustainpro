@@ -778,6 +778,8 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                         currentOrganizationId={serviceInstance?.organization_id}
                         currentServiceType={serviceInstance?.service_type || 'waterwall'}
                         currentServiceName={serviceInstance?.service_name || 'Waterwall'}
+                        eventId={eventId}
+                        deptId={deptId}
                     />
                 )}
 

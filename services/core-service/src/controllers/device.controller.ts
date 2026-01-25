@@ -259,7 +259,7 @@ export const regenerateApiKey = async (req: Request, res: Response, next: NextFu
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const user = (req as any).user;
-        const { hardware_id, device_code, location, service_id, organization_id } = req.body;
+        const { hardware_id, device_code, location, service_id, organization_id, department_id, event_id, host } = req.body;
 
         // Validate required fields
         if (!hardware_id) {
@@ -296,6 +296,9 @@ export const register = async (req: Request, res: Response, next: NextFunction):
             location,
             service_id,
             organization_id: orgId,
+            department_id,
+            event_id,
+            host,
         });
 
         logger.info('Device registered via USB provisioning', {
