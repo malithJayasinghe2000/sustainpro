@@ -103,51 +103,7 @@ export function startIotSubscriber() {
   device.on('message', (topic: string, payload: Buffer) => {
     try {
       const message = JSON.parse(payload.toString()) as TelemetryMessage;
-      const timestamp = new Date().toISOString();
-
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(`📥 Message Received at ${timestamp}`);
-      console.log(`📍 Topic: ${topic}`);
-
-      const topicParts = topic.split('/');
-      if (topicParts.length > 1) {
-        console.log('📂 Topic Structure:');
-        if (topicParts[1]) console.log(`   Organization ID: ${topicParts[1]}`);
-        if (topicParts[2]) console.log(`   Event ID: ${topicParts[2]}`);
-        if (topicParts[3]) console.log(`   Department ID: ${topicParts[3]}`);
-      }
-
-      console.log('\n🔧 Device Information:');
-      console.log(`   Hardware ID: ${message.hardware_id}`);
-      console.log(`   Device Code: ${message.device_code}`);
-      console.log(`   Organization: ${message.organization_id}`);
-
-      if (message.data) {
-        console.log('\n💧 Water Wall Data:');
-        console.log(`   Flow Rate: ${message.data.flow_rate} L/min`);
-        console.log(`   Total Liters: ${message.data.total_liters.toFixed(2)} L`);
-        console.log(`   Bottles Avoided: ${message.data.bottles_avoided}`);
-        console.log(`   CO₂ Saved: ${message.data.co2_saved.toFixed(3)} kg`);
-        console.log(`   WiFi Strength: ${message.data.wifi_strength} dBm`);
-        let data: TelemetryData = message.data;
-        
-        emitTelemetry({
-            device_code: message.device_code,
-            device_id: String(1),
-            organization_id: message.organization_id,
-            timestamp: new Date(),
-            data,
-            status: 'online',
-        });
-
-        console.log('\n📨 Emitted telemetry data to Socket.IO clients.');
-
-      }
-
-      console.log(`\n⏰ Device Timestamp: ${message.timestamp}`);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-      processData(message);
+      handleMessage(topic, message);
     } catch (err) {
       console.error('❌ Error parsing message:', err);
       console.log('Raw payload:', payload.toString());
@@ -163,17 +119,131 @@ export function startIotSubscriber() {
   device.on('offline', () => console.log('📴 Device offline'));
 }
 
+export function injectSimulatedMessage(topic: string, message: TelemetryMessage) {
+  console.log('🧪 Injecting Simulated Message...');
+  handleMessage(topic, message);
+}
+
+function handleMessage(topic: string, message: TelemetryMessage) {
+  const timestamp = new Date().toISOString();
+
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(`📥 Message Received at ${timestamp}`);
+  console.log(`📍 Topic: ${topic}`);
+
+  let eventId: string | undefined;
+  let departmentId: string | undefined;
+
+  const topicParts = topic.split('/');
+  if (topicParts.length > 1) {
+    console.log('📂 Topic Structure:');
+    if (topicParts[1]) console.log(`   Organization ID: ${topicParts[1]}`);
+    if (topicParts[2]) {
+      console.log(`   Event ID: ${topicParts[2]}`);
+      eventId = topicParts[2];
+    }
+    if (topicParts[3]) {
+      console.log(`   Department ID: ${topicParts[3]}`);
+      departmentId = topicParts[3];
+    }
+  }
+
+  console.log('\n🔧 Device Information:');
+  console.log(`   Hardware ID: ${message.hardware_id}`);
+  console.log(`   Device Code: ${message.device_code}`);
+  console.log(`   Organization: ${message.organization_id}`);
+
+  if (message.data) {
+    console.log('\n💧 Water Wall Data:');
+    console.log(`   Flow Rate: ${message.data.flow_rate} L/min`);
+    console.log(`   Total Liters: ${message.data.total_liters.toFixed(2)} L`);
+    console.log(`   Bottles Avoided: ${message.data.bottles_avoided}`);
+    console.log(`   CO₂ Saved: ${message.data.co2_saved.toFixed(3)} kg`);
+    console.log(`   WiFi Strength: ${message.data.wifi_strength} dBm`);
+    let data: TelemetryData = message.data;
+
+    emitTelemetry({
+      device_code: message.device_code,
+      device_id: String(1), // TODO: Look up device ID from DB if needed
+      organization_id: message.organization_id,
+      event_id: eventId,
+      department_id: departmentId,
+      timestamp: new Date(),
+      data,
+      status: 'online',
+    });
+
+    console.log('\n📨 Emitted telemetry data to Socket.IO clients.');
+
+  }
+
+  console.log(`\n⏰ Device Timestamp: ${message.timestamp}`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  processData(message, eventId, departmentId);
+}
+
 // ============================================================
 // DATA PROCESSING
 // ============================================================
 
-function processData(message: TelemetryMessage): void {
+import { query } from './db';
+
+// ... (existing imports)
+
+function processData(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string): void {
   if (message.data && message.data.flow_rate > 2.5) {
     console.log('⚠️ WARNING: High flow rate detected!');
   }
 
-  // saveToDatabase(message)
+  saveToDatabase(message, topicEventId, topicDeptId).catch(err => {
+    console.error('❌ Failed to save telemetry to DB:', err);
+  });
+
   // triggerAlerts(message)
+}
+
+async function saveToDatabase(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string) {
+  try {
+    // 1. Get Device Metadata (ID, Service, Event)
+    // We use device_code as the lookup key
+    const deviceRes = await query(
+      'SELECT id, service_id, event_id, organization_id FROM sps_devices WHERE device_code = $1',
+      [message.device_code]
+    );
+
+    if (deviceRes.rows.length === 0) {
+      console.warn(`⚠️ Device not found for code: ${message.device_code}. Skipping DB save.`);
+      return;
+    }
+
+    const device = deviceRes.rows[0];
+
+    // Use incoming IDs if available in topic, else fall back to device's provisioned IDs
+    // Note: message.organization_id comes from topic/payload usually
+
+    // 2. Insert Telemetry
+    await query(
+      `INSERT INTO sps_telemetry 
+            (device_id, device_code, organization_id, event_id, service_id, data, recorded_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        device.id,
+        message.device_code,
+        message.organization_id || device.organization_id, // Prefer message/topic org
+        topicEventId || device.event_id,         // Prefer topic event
+        device.service_id,       // From DB
+        JSON.stringify(message.data),
+        message.timestamp || new Date().toISOString()
+      ]
+    );
+
+    console.log('💾 Saved telemetry to database');
+
+  } catch (error) {
+    console.error('Error in saveToDatabase:', error);
+    throw error;
+  }
 }
 
 // ============================================================

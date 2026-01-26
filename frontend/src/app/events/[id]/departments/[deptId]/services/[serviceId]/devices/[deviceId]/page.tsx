@@ -31,56 +31,70 @@ export default function DeviceDashboardPage({ params }: DeviceDashboardPageProps
 
     useEffect(() => {
         loadData();
+    }, [deviceId, serviceId]); // Added serviceId to dependencies for correctness
 
-        // Socket.IO: Listen for real-time telemetry updates
+    useEffect(() => {
+        if (!device?.device_code) return;
+
         const socket = getSocket();
+        const deviceCode = device.device_code;
+
+        console.log('🔌 Setting up socket for device:', deviceCode);
+
+        // Subscribe to this specific device
+        socket.emit('subscribe:device', deviceCode);
 
         const handleTelemetry = (payload: any) => {
             console.log('📡 [Device Detail] Telemetry received:', payload);
+            if (payload.device_code !== deviceCode) return;
 
-            // Update device with new telemetry data
-            setDevice((prev: any) => {
-                if (!prev) return prev;
-
-                // Match by hardware_id or device_code
-                if (prev.hardware_id === payload.hardware_id || prev.device_code === payload.device_code) {
-                    return {
-                        ...prev,
-                        status: 'ONLINE',
-                        last_seen: payload.timestamp || new Date().toISOString(),
-                        metadata: {
-                            ...(prev.metadata || {}),
-                            ...payload.data  // Merge telemetry data into metadata
-                        }
-                    };
+            setDevice((prev: any) => ({
+                ...prev,
+                status: 'ONLINE',
+                last_seen: payload.timestamp || new Date().toISOString(),
+                metadata: {
+                    ...(prev.metadata || {}),
+                    ...payload.data
                 }
-                return prev;
-            });
+            }));
         };
 
-        socket.on('dashboard:telemetry', handleTelemetry);
+        const handleStatus = (payload: any) => {
+            console.log('📡 [Device Detail] Status received:', payload);
+            if (payload.device_code !== deviceCode) return;
 
-        // Offline detection: Check every 5 seconds if device is silent > 10s
+            setDevice((prev: any) => ({
+                ...prev,
+                status: payload.status,
+                last_seen: payload.timestamp || new Date().toISOString()
+            }));
+        }
+
+        socket.on('telemetry', handleTelemetry);
+        socket.on('device:status', handleStatus);
+
+        // Offline detection
         const offlineCheckInterval = setInterval(() => {
             setDevice((prev: any) => {
                 if (!prev || prev.status !== 'ONLINE') return prev;
 
                 if (prev.last_seen) {
                     const timeSinceLastSeen = Date.now() - new Date(prev.last_seen).getTime();
-                    if (timeSinceLastSeen > 10000) { // 10 seconds timeout
-                        console.log('⚠️ Device went offline (no data for 10s)');
+                    if (timeSinceLastSeen > 10000) {
                         return { ...prev, status: 'OFFLINE' };
                     }
                 }
                 return prev;
             });
-        }, 5000); // Check every 5 seconds
+        }, 5000);
 
         return () => {
-            socket.off('dashboard:telemetry', handleTelemetry);
+            socket.emit('unsubscribe:device', deviceCode);
+            socket.off('telemetry', handleTelemetry);
+            socket.off('device:status', handleStatus);
             clearInterval(offlineCheckInterval);
         };
-    }, [deviceId]);
+    }, [device?.device_code]);
 
     const loadData = async () => {
         try {

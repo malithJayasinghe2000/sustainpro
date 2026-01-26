@@ -1,7 +1,7 @@
 import express from 'express';
 import { config } from './config';
-import { 
-    errorHandler, 
+import {
+    errorHandler,
     notFoundHandler,
     setApiSecurityConfigFetcher,
     setMaintenanceSettingsFetcher,
@@ -17,6 +17,7 @@ const prisma = getPrismaClient();
 // Import routes
 import telemetryRoutes from './routes/telemetry.routes';
 import webhookRoutes from './routes/webhook.routes';
+import simulationRoutes from './routes/simulation.routes';
 
 const logger = createLogger({ service: 'iot-service' });
 
@@ -94,6 +95,7 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/v1/telemetry', telemetryRoutes);
 app.use('/api/v1/webhook', webhookRoutes);
+app.use('/api/v1/simulation', simulationRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

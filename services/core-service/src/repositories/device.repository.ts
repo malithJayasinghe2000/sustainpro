@@ -6,6 +6,7 @@ export interface Device {
     id: number;
     organization_id: string;
     service_id?: string;
+    event_id?: string;
     device_code: string;
     api_key?: string;
     name?: string;
@@ -13,6 +14,7 @@ export interface Device {
     status: string;
     last_seen?: Date;
     metadata?: Record<string, any>;
+    host?: string;
     created_at: Date;
     updated_at: Date;
     // Joined fields
@@ -27,7 +29,9 @@ export interface CreateDeviceInput {
     type?: string;
     api_key?: string;
     service_id?: string;
+    event_id?: string;
     metadata?: Record<string, any>;
+    host?: string;
 }
 
 export interface UpdateDeviceInput {
@@ -142,19 +146,29 @@ export class DeviceRepository {
     }
 
     async create(data: CreateDeviceInput): Promise<Device> {
-        const result = await prisma.sps_devices.create({
-            data: {
-                organization_id: data.organization_id,
-                device_code: data.device_code,
-                name: data.name || null,
-                type: data.type || null,
-                api_key: data.api_key || null,
-                service_id: data.service_id || null,
-                status: 'OFFLINE',
-                metadata: data.metadata || {},
-            },
-        });
-        return result as any as Device;
+        try {
+            const result = await prisma.sps_devices.create({
+                data: {
+                    organization_id: data.organization_id,
+                    device_code: data.device_code,
+                    name: data.name || null,
+                    type: data.type || null,
+                    api_key: data.api_key || null,
+                    service_id: data.service_id || null,
+                    event_id: data.event_id || null,
+                    status: 'OFFLINE',
+                    metadata: data.metadata || {},
+                    host: data.host || null,
+                },
+            });
+            return result as any as Device;
+        } catch (error: any) {
+            // Check for foreign key violation
+            if (error.code === 'P2003') {
+                throw new Error(`Foreign key constraint failed on field: ${error.meta?.field_name}`);
+            }
+            throw error;
+        }
     }
 
     async update(id: string, data: UpdateDeviceInput): Promise<Device> {

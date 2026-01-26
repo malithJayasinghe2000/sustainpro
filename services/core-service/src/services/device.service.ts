@@ -231,14 +231,14 @@ export class DeviceService {
             organization_id: data.organization_id,
             name: data.device_code,
             service_id: data.service_id,
+            event_id: data.event_id,
             api_key: apiKey,
+            host: data.host,
             metadata: {
                 hardware_id: data.hardware_id,
                 location: data.location,
                 provisioned_at: new Date().toISOString(),
                 department_id: data.department_id,
-                event_id: data.event_id,
-                host: data.host,
             },
         });
 

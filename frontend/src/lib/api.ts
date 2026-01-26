@@ -148,6 +148,13 @@ export const authApi = {
     },
 };
 
+export const simulationApi = {
+    injectTelemetry: async (topic: string, message: any) => {
+        const response = await apiClient.post('/simulation/telemetry', { topic, message });
+        return response.data;
+    },
+};
+
 // Users API functions
 export const usersApi = {
     getAll: async (params?: { page?: number; limit?: number; search?: string; role?: string; organization_id?: string; event_id?: string; department_id?: string }) => {

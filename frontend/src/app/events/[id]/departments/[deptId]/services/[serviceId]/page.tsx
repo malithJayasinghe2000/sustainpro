@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use, useMemo } from 'react';
+import { useState, useEffect, use, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { departmentServicesApi, devicesApi, usersApi } from '@/lib/api';
@@ -133,31 +133,35 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     };
 
 
+    const assignedDevicesRef = useRef(assignedDevices);
+
+    useEffect(() => {
+        assignedDevicesRef.current = assignedDevices;
+    }, [assignedDevices]);
+
     useEffect(() => {
         loadData();
+    }, [serviceId]);
 
-        // Socket.IO: Listen for real-time telemetry updates
+    useEffect(() => {
         const socket = getSocket();
-
-        socket.on('connect', () => {
-            console.log('✅ Socket connected:', socket.id);
-
-            socket.emit('subscribe:dashboard');
-        });
 
         const handleTelemetry = (payload: any) => {
             console.log('📡 Telemetry received:', payload);
 
             // Update assigned devices with new telemetry data
             setAssignedDevices((prev: any[]) => prev.map(device => {
-                if (device.hardware_id === payload.hardware_id || device.device_code === payload.device_code) {
+                // Check if device matches by hardware_id or device_code
+                const matches = (device.hardware_id && device.hardware_id === payload.hardware_id) ||
+                    (device.device_code && device.device_code === payload.device_code);
+
+                if (matches) {
                     return {
                         ...device,
                         status: 'ONLINE',
                         last_seen: payload.timestamp || new Date().toISOString(),
                         metadata: {
-                            ...device.metadata,
-                            ...device.metadata, // Correcting potential typo in original logical doubling, assuming standard merging
+                            ...(device.metadata || {}), // Handle null metadata
                             ...payload.data
                         }
                     };
@@ -165,14 +169,39 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                 return device;
             }));
 
-            // Also update aggregated data for dashboard widgets
-            setAggregatedData((prev: Record<string, any>) => ({
-                ...prev,
-                ...payload.data,
-                status: 'ONLINE',
-                last_seen: payload.timestamp || new Date().toISOString()
-            }));
+            // Only update aggregated data if the device belongs to this service AND we found it
+            const deviceInService = assignedDevicesRef.current.some(d =>
+                (d.hardware_id && d.hardware_id === payload.hardware_id) ||
+                (d.device_code && d.device_code === payload.device_code)
+            );
+
+            if (deviceInService) {
+                // Also update aggregated data for dashboard widgets
+                setAggregatedData((prev: Record<string, any>) => ({
+                    ...prev,
+                    ...payload.data,
+                    status: 'ONLINE',
+                    last_seen: payload.timestamp || new Date().toISOString()
+                }));
+            }
         };
+
+        const onConnect = () => {
+            console.log('✅ Socket connected:', socket.id);
+            socket.emit('subscribe:event', eventId);
+            socket.emit('subscribe:department', deptId);
+
+            if (serviceInstance?.organization_id) {
+                socket.emit('subscribe:organization', serviceInstance.organization_id);
+            }
+        };
+
+        if (socket.connected) {
+            onConnect();
+        }
+
+        socket.on('connect', onConnect);
+        socket.on('telemetry', handleTelemetry);
         socket.on('dashboard:telemetry', handleTelemetry);
 
         // Offline detection: Check every 5 seconds if device is silent > 10s
@@ -186,13 +215,15 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                 }
                 return device;
             }));
-        }, 5000); // Check every 5 seconds
+        }, 5000);
 
         return () => {
+            socket.off('connect', onConnect);
+            socket.off('telemetry', handleTelemetry);
             socket.off('dashboard:telemetry', handleTelemetry);
             clearInterval(offlineCheckInterval);
         };
-    }, [serviceId]);
+    }, [serviceId, eventId, deptId, serviceInstance?.organization_id]); // Re-subscribe if org ID loads later
 
     const canConfigure = useMemo(() => {
         if (!user) return false;

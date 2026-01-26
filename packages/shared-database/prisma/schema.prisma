@@ -226,6 +226,7 @@ model sps_devices {
   status                  String?                  @default("OFFLINE") @db.VarChar(50)
   last_seen               DateTime?                @db.Timestamptz(6)
   metadata                Json?                    @default("{}")
+  host                    String?                  @db.VarChar(255)
   created_at              DateTime?                @default(now()) @db.Timestamptz(6)
   updated_at              DateTime?                @default(now()) @db.Timestamptz(6)
   sps_alerts              sps_alerts[]
