@@ -7,6 +7,8 @@ import { setupSwagger } from '@sustainpro/shared-swagger';
 
 // Import routes
 import notificationRoutes from './routes/notification.routes';
+import escalationRoutes from './routes/escalation.routes';
+import alertRoutes from './routes/alert.routes';
 
 const logger = createLogger({ service: 'notification-service' });
 
@@ -31,13 +33,15 @@ app.use((req, res, next) => {
 // Setup Swagger API documentation
 setupSwagger(app, {
     serviceName: 'SustainPro Notification Service',
-    serviceDescription: 'Email, SMS, and Push Notification API',
+    serviceDescription: 'Email, SMS, Push Notification, and Escalation Management API',
     version: '1.0.0',
     port: config.port,
     apiPrefix: '/api/v1',
     tags: [
         { name: 'Notifications', description: 'Notification management' },
         { name: 'Email', description: 'Email sending operations' },
+        { name: 'Escalations', description: 'Escalation management' },
+        { name: 'Alerts', description: 'Alert processing (internal)' },
     ],
 });
 
@@ -53,6 +57,8 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/escalations', escalationRoutes);
+app.use('/api/v1/alerts', alertRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

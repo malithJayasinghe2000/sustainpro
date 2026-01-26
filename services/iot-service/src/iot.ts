@@ -4,6 +4,8 @@
 import awsIot from 'aws-iot-device-sdk';
 import path from 'path';
 import { emitTelemetry, emitDashboardStats } from './socket'
+import { ruleEngineService } from './services/rule-engine.service';
+import { LiveDataEntry } from './services/live-data.service';
 
 // ============================================================
 // TYPES
@@ -215,22 +217,130 @@ async function handleMessage(topic: string, message: TelemetryMessage) {
 }
 
 // ============================================================
-// DATA PROCESSING
+// DATA PROCESSING - with Queue for 100+ devices optimization
 // ============================================================
 
 import { query } from './db';
 
-// ... (existing imports)
+// ============================================================
+// MESSAGE QUEUE FOR RULE ENGINE (Handles 100+ devices)
+// ============================================================
+
+interface QueuedMessage {
+  liveData: LiveDataEntry;
+  addedAt: number;
+}
+
+// Queue for batching rule engine evaluations
+const ruleEngineQueue: QueuedMessage[] = [];
+const QUEUE_FLUSH_INTERVAL = 500; // Flush every 500ms
+const MAX_QUEUE_SIZE = 100; // Max items before forced flush
+const CONCURRENT_EVALUATIONS = 10; // Max concurrent rule evaluations
+let isProcessingQueue = false;
+let queueFlushTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Queue a message for rule engine processing
+ * This prevents overload when 100+ devices send data simultaneously
+ */
+function queueForRuleEngine(liveData: LiveDataEntry): void {
+  ruleEngineQueue.push({
+    liveData,
+    addedAt: Date.now(),
+  });
+
+  // Force flush if queue is too large
+  if (ruleEngineQueue.length >= MAX_QUEUE_SIZE) {
+    processRuleEngineQueue();
+    return;
+  }
+
+  // Schedule flush if not already scheduled
+  if (!queueFlushTimer) {
+    queueFlushTimer = setTimeout(() => {
+      queueFlushTimer = null;
+      processRuleEngineQueue();
+    }, QUEUE_FLUSH_INTERVAL);
+  }
+}
+
+/**
+ * Process the rule engine queue in batches
+ */
+async function processRuleEngineQueue(): Promise<void> {
+  if (isProcessingQueue || ruleEngineQueue.length === 0) {
+    return;
+  }
+
+  isProcessingQueue = true;
+
+  try {
+    // Take items from queue
+    const itemsToProcess = ruleEngineQueue.splice(0, MAX_QUEUE_SIZE);
+
+    if (itemsToProcess.length === 0) {
+      return;
+    }
+
+    console.log(`📊 Processing ${itemsToProcess.length} queued messages for rule engine...`);
+
+    // Process in parallel batches with concurrency limit
+    for (let i = 0; i < itemsToProcess.length; i += CONCURRENT_EVALUATIONS) {
+      const batch = itemsToProcess.slice(i, i + CONCURRENT_EVALUATIONS);
+
+      await Promise.allSettled(
+        batch.map(item =>
+          ruleEngineService.evaluate(item.liveData).catch((err) => {
+            console.error('❌ Error executing rule engine:', err);
+          })
+        )
+      );
+    }
+
+    console.log(`✅ Processed ${itemsToProcess.length} messages through rule engine`);
+
+  } catch (err: any) {
+    console.error('Error processing rule engine queue:', err);
+  } finally {
+    isProcessingQueue = false;
+
+    // If more items were added during processing, schedule another flush
+    if (ruleEngineQueue.length > 0) {
+      setTimeout(processRuleEngineQueue, 100);
+    }
+  }
+}
+
+// ============================================================
+// MAIN DATA PROCESSOR
+// ============================================================
 
 function processData(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string, deviceMetadata?: any): void {
-  // Generic processing - Alert rules should be implemented based on DB configuration
-  // for now, we just save to DB.
-
+  // Save to database (non-blocking)
   saveToDatabase(message, topicEventId, topicDeptId, deviceMetadata).catch(err => {
     console.error('❌ Failed to save telemetry to DB:', err);
   });
 
-  // triggerAlerts(message)
+  // Queue rule evaluation (optimized for 100+ devices)
+  if (deviceMetadata && message.data) {
+    const liveData: LiveDataEntry = {
+      device_id: deviceMetadata.id,
+      device_code: message.device_code,
+      organization_id: message.organization_id || deviceMetadata.organization_id,
+      event_id: topicEventId || deviceMetadata.event_id,
+      service_id: deviceMetadata.service_id,
+      data: message.data,
+      timestamp: message.timestamp
+        ? (typeof message.timestamp === 'number'
+          ? new Date(message.timestamp * (Number(message.timestamp) < 10000000000 ? 1000 : 1))
+          : new Date(message.timestamp))
+        : new Date(),
+      status: 'online',
+    };
+
+    // Add to queue instead of direct evaluation
+    queueForRuleEngine(liveData);
+  }
 }
 
 async function saveToDatabase(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string, deviceMetadata?: any) {

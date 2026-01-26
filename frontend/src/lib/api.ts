@@ -1211,3 +1211,458 @@ export const systemNotificationsApi = {
         return response.data.data;
     },
 };
+
+// =============================================
+// ALERT RULES API
+// =============================================
+export interface AlertRuleCondition {
+    metric: string;
+    operator: '>' | '<' | '>=' | '<=' | '==' | '!=' | 'contains' | 'in';
+    threshold: number | string | any[];
+}
+
+export interface AlertRuleAction {
+    type: 'alert' | 'email' | 'webhook' | 'escalate' | 'notification';
+    config?: Record<string, any>;
+    delay_minutes?: number;
+}
+
+export interface AlertRule {
+    id: string;
+    organization_id: string;
+    name: string;
+    description?: string;
+    device_type?: string;
+    condition: AlertRuleCondition;
+    actions: AlertRuleAction[];
+    severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+    is_active: boolean;
+    priority: number;
+    cooldown_seconds: number;
+    last_triggered_at?: Date;
+    trigger_count: number;
+    event_id?: string;
+    service_id?: string;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
+export interface CreateAlertRuleDto {
+    organization_id: string;
+    name: string;
+    description?: string;
+    device_type?: string;
+    condition: AlertRuleCondition;
+    actions?: AlertRuleAction[];
+    severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+    is_active?: boolean;
+    priority?: number;
+    cooldown_seconds?: number;
+    event_id?: string;
+    service_id?: string;
+}
+
+export const alertRulesApi = {
+    /**
+     * Get all alert rules for organization
+     */
+    getAll: async (params?: { service_id?: string; event_id?: string }): Promise<AlertRule[]> => {
+        const response = await apiClient.get('/alert-rules', { params });
+        return response.data.data || [];
+    },
+
+    /**
+     * Get alert rule by ID
+     */
+    getById: async (id: string): Promise<AlertRule> => {
+        const response = await apiClient.get(`/alert-rules/${id}`);
+        return response.data.data;
+    },
+
+    /**
+     * Create a new alert rule
+     */
+    create: async (data: CreateAlertRuleDto): Promise<AlertRule> => {
+        const response = await apiClient.post('/alert-rules', data);
+        return response.data.data;
+    },
+
+    /**
+     * Create multiple alert rules (bulk)
+     */
+    createBulk: async (rules: CreateAlertRuleDto[]): Promise<AlertRule[]> => {
+        const response = await apiClient.post('/alert-rules/bulk', { rules });
+        return response.data.data;
+    },
+
+    /**
+     * Update an alert rule
+     */
+    update: async (id: string, data: Partial<CreateAlertRuleDto>): Promise<AlertRule> => {
+        const response = await apiClient.put(`/alert-rules/${id}`, data);
+        return response.data.data;
+    },
+
+    /**
+     * Delete an alert rule
+     */
+    delete: async (id: string): Promise<void> => {
+        await apiClient.delete(`/alert-rules/${id}`);
+    },
+
+    /**
+     * Toggle alert rule active status
+     */
+    toggleActive: async (id: string, is_active: boolean): Promise<AlertRule> => {
+        const response = await apiClient.patch(`/alert-rules/${id}/toggle`, { is_active });
+        return response.data.data;
+    },
+
+    /**
+     * Get alert rules by service
+     */
+    getByService: async (serviceId: string): Promise<AlertRule[]> => {
+        const response = await apiClient.get(`/alert-rules/service/${serviceId}`);
+        return response.data.data || [];
+    },
+};
+
+// =============================================
+// ESCALATION POLICIES API
+// =============================================
+export interface EscalationPolicy {
+    id: string;
+    organization_id: string;
+    event_id?: string;
+    service_id?: string;
+    name: string;
+    description?: string;
+    escalation_level: number;
+    escalation_delay_minutes: number;
+    auto_assign_to?: string;
+    notify_method?: string;
+    is_active: boolean;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
+export interface CreateEscalationPolicyDto {
+    organization_id: string;
+    event_id?: string;
+    service_id?: string;
+    name: string;
+    description?: string;
+    escalation_level: number;
+    escalation_delay_minutes: number;
+    auto_assign_to?: string;
+    notify_method?: string;
+    is_active?: boolean;
+}
+
+export const escalationPoliciesApi = {
+    /**
+     * Get all escalation policies for organization
+     */
+    getAll: async (params?: { service_id?: string; event_id?: string }): Promise<EscalationPolicy[]> => {
+        const response = await apiClient.get('/escalation-policies', { params });
+        return response.data.data || [];
+    },
+
+    /**
+     * Get escalation policy by ID
+     */
+    getById: async (id: string): Promise<EscalationPolicy> => {
+        const response = await apiClient.get(`/escalation-policies/${id}`);
+        return response.data.data;
+    },
+
+    /**
+     * Create a new escalation policy
+     */
+    create: async (data: CreateEscalationPolicyDto): Promise<EscalationPolicy> => {
+        const response = await apiClient.post('/escalation-policies', data);
+        return response.data.data;
+    },
+
+    /**
+     * Create multiple escalation policies (bulk)
+     */
+    createBulk: async (policies: CreateEscalationPolicyDto[]): Promise<EscalationPolicy[]> => {
+        const response = await apiClient.post('/escalation-policies/bulk', { policies });
+        return response.data.data;
+    },
+
+    /**
+     * Update an escalation policy
+     */
+    update: async (id: string, data: Partial<CreateEscalationPolicyDto>): Promise<EscalationPolicy> => {
+        const response = await apiClient.put(`/escalation-policies/${id}`, data);
+        return response.data.data;
+    },
+
+    /**
+     * Delete an escalation policy
+     */
+    delete: async (id: string): Promise<void> => {
+        await apiClient.delete(`/escalation-policies/${id}`);
+    },
+
+    /**
+     * Get escalation policies by service
+     */
+    getByService: async (serviceId: string): Promise<EscalationPolicy[]> => {
+        const response = await apiClient.get(`/escalation-policies/service/${serviceId}`);
+        return response.data.data || [];
+    },
+};
+
+// =============================================
+// ALERTS API
+// =============================================
+export interface Alert {
+    id: string;
+    rule_id?: string;
+    organization_id: string;
+    event_id?: string;
+    department_id?: string;
+    service_id?: string;
+    device_id?: number;
+    message: string;
+    severity: string;
+    status: string;
+    acknowledged_by?: string;
+    acknowledged_at?: Date;
+    resolved_by?: string;
+    resolved_at?: Date;
+    escalation_level?: number;
+    auto_assigned_to?: string;
+    metadata?: Record<string, any>;
+    created_at?: Date;
+}
+
+export const alertsApi = {
+    /**
+     * Get all alerts with optional filters
+     */
+    getAll: async (params?: { 
+        status?: string; 
+        severity?: string; 
+        event_id?: string;
+        department_id?: string;
+        service_id?: string;
+        device_id?: string;
+        from_date?: string;
+        to_date?: string;
+        page?: number;
+        limit?: number;
+    }): Promise<{ success: boolean; data: Alert[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
+        const response = await apiClient.get('/alerts', { params });
+        return response.data;
+    },
+
+    /**
+     * Get alert by ID
+     */
+    getById: async (id: string): Promise<{ success: boolean; data: Alert }> => {
+        const response = await apiClient.get(`/alerts/${id}`);
+        return response.data;
+    },
+
+    /**
+     * Acknowledge an alert
+     */
+    acknowledge: async (id: string): Promise<{ success: boolean; data: Alert }> => {
+        const response = await apiClient.post(`/alerts/${id}/acknowledge`);
+        return response.data;
+    },
+
+    /**
+     * Resolve an alert
+     */
+    resolve: async (id: string): Promise<{ success: boolean; data: Alert }> => {
+        const response = await apiClient.post(`/alerts/${id}/resolve`);
+        return response.data;
+    },
+
+    /**
+     * Escalate an alert
+     */
+    escalate: async (id: string, escalation_level: number, assign_to?: string): Promise<{ success: boolean; data: Alert }> => {
+        const response = await apiClient.post(`/alerts/${id}/escalate`, { escalation_level, assign_to });
+        return response.data;
+    },
+
+    /**
+     * Get alert statistics
+     */
+    getStats: async (params?: { organization_id?: string }): Promise<{
+        success: boolean;
+        data: {
+            total: number;
+            active: number;
+            acknowledged: number;
+            resolved: number;
+            expired: number;
+            by_severity: {
+                critical: number;
+                high: number;
+                medium: number;
+                low: number;
+            };
+        };
+    }> => {
+        const response = await apiClient.get('/alerts/stats', { params });
+        return response.data;
+    },
+
+    /**
+     * Delete an alert (admin only)
+     */
+    delete: async (id: string): Promise<{ success: boolean; message: string }> => {
+        const response = await apiClient.delete(`/alerts/${id}`);
+        return response.data;
+    },
+};
+
+// =============================================
+// ESCALATIONS API
+// =============================================
+
+export interface Escalation {
+    id: string;
+    organization_id: string;
+    event_id: string | null;
+    department_id: string | null;
+    service_id: string | null;
+    alert_id: string | null;
+    task_id: string | null;
+    reason: string;
+    status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED';
+    severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+    assigned_to: string | null;
+    escalated_at: string;
+    acknowledged_at: string | null;
+    acknowledged_by: string | null;
+    resolved_at: string | null;
+    resolved_by: string | null;
+    resolution_notes: string | null;
+    evidence_urls: string[];
+    metadata: Record<string, any> | null;
+    created_at: string;
+    updated_at: string;
+    sps_organizations?: { id: string; name: string };
+    sps_events?: { id: string; name: string };
+    sps_departments?: { id: string; name: string };
+    sps_department_services?: { id: string; name: string };
+    sps_alerts?: { id: string; message: string; severity: string };
+    sps_tasks?: { id: string; title: string; status: string };
+    assigned_user?: { id: string; full_name: string; email: string };
+    acknowledged_user?: { id: string; full_name: string };
+    resolved_user?: { id: string; full_name: string };
+}
+
+export interface EscalationStats {
+    total: number;
+    open: number;
+    acknowledged: number;
+    resolved: number;
+    bySeverity: Record<string, number>;
+}
+
+export const escalationsApi = {
+    /**
+     * Get all escalations with optional filters
+     */
+    getAll: async (params?: {
+        organization_id?: string;
+        event_id?: string;
+        department_id?: string;
+        service_id?: string;
+        status?: string;
+        severity?: string;
+        assigned_to?: string;
+        page?: number;
+        limit?: number;
+    }): Promise<{
+        success: boolean;
+        data: Escalation[];
+        pagination?: { page: number; limit: number; total: number; totalPages: number };
+    }> => {
+        const response = await apiClient.get('/escalations', { params });
+        return response.data;
+    },
+
+    /**
+     * Get my escalations (assigned to current user)
+     */
+    getMyEscalations: async (params?: {
+        status?: string;
+        page?: number;
+        limit?: number;
+    }): Promise<{
+        success: boolean;
+        data: Escalation[];
+        pagination?: { page: number; limit: number; total: number; totalPages: number };
+    }> => {
+        const response = await apiClient.get('/escalations/my', { params });
+        return response.data;
+    },
+
+    /**
+     * Get pending count for navbar badge
+     */
+    getPendingCount: async (): Promise<{ success: boolean; data: { count: number } }> => {
+        const response = await apiClient.get('/escalations/pending-count');
+        return response.data;
+    },
+
+    /**
+     * Get escalation statistics
+     */
+    getStatistics: async (params?: {
+        organization_id?: string;
+        event_id?: string;
+        assigned_to?: string;
+    }): Promise<{ success: boolean; data: EscalationStats }> => {
+        const response = await apiClient.get('/escalations/statistics', { params });
+        return response.data;
+    },
+
+    /**
+     * Get escalation by ID
+     */
+    getById: async (id: string): Promise<{ success: boolean; data: Escalation }> => {
+        const response = await apiClient.get(`/escalations/${id}`);
+        return response.data;
+    },
+
+    /**
+     * Acknowledge an escalation
+     */
+    acknowledge: async (id: string): Promise<{ success: boolean; message: string; data: Escalation }> => {
+        const response = await apiClient.post(`/escalations/${id}/acknowledge`);
+        return response.data;
+    },
+
+    /**
+     * Resolve an escalation
+     */
+    resolve: async (
+        id: string,
+        data: { resolution_notes?: string; evidence_urls?: string[] }
+    ): Promise<{ success: boolean; message: string; data: Escalation }> => {
+        const response = await apiClient.post(`/escalations/${id}/resolve`, data);
+        return response.data;
+    },
+
+    /**
+     * Add evidence to an escalation
+     */
+    addEvidence: async (
+        id: string,
+        evidence_urls: string[]
+    ): Promise<{ success: boolean; message: string; data: Escalation }> => {
+        const response = await apiClient.post(`/escalations/${id}/evidence`, { evidence_urls });
+        return response.data;
+    },
+};

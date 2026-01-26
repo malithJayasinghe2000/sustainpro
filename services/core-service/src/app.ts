@@ -31,6 +31,10 @@ import deviceRoutes from './routes/device.routes';
 import deviceModelRoutes from './routes/device-model.routes';
 import auditLogRoutes from './routes/audit-log.routes';
 import systemNotificationRoutes from './routes/system-notification.routes';
+import alertRuleRoutes from './routes/alert-rule.routes';
+import escalationPolicyRoutes from './routes/escalation-policy.routes';
+import alertRoutes from './routes/alert.routes';
+import taskRoutes from './routes/task.routes';
 import { getS3Status, isS3Configured } from './storage/s3';
 
 const logger = createLogger({ service: 'core-service' });
@@ -97,6 +101,10 @@ setupSwagger(app, {
         { name: 'Settings', description: 'System settings' },
         { name: 'Uploads', description: 'File upload operations' },
         { name: 'Notifications', description: 'System notifications' },
+        { name: 'Alert Rules', description: 'Alert rule management for IoT monitoring' },
+        { name: 'Escalation Policies', description: 'Alert escalation policy management' },
+        { name: 'Alerts', description: 'Alert management and monitoring' },
+        { name: 'Tasks', description: 'Task management with evidence' },
     ],
 });
 
@@ -147,6 +155,10 @@ app.use('/api/v1/devices', authenticateToken, deviceRoutes);
 app.use('/api/v1/device-models', authenticateToken, deviceModelRoutes);
 app.use('/api/v1/audit-logs', authenticateToken, auditLogRoutes);
 app.use('/api/v1/notifications', authenticateToken, systemNotificationRoutes);
+app.use('/api/v1/alert-rules', authenticateToken, alertRuleRoutes);
+app.use('/api/v1/escalation-policies', authenticateToken, escalationPolicyRoutes);
+app.use('/api/v1/alerts', authenticateToken, alertRoutes);
+app.use('/api/v1/tasks', authenticateToken, taskRoutes);
 
 
 // Admin routes - Super Admin only

@@ -5,6 +5,7 @@ import { initSocket, getConnectedClientsCount } from './socket';
 import { createLogger, auditLogger } from '@sustainpro/shared-utils';
 import { initDatabase, closeDatabase, getPrismaClient } from '@sustainpro/shared-database';
 import { startIotSubscriber } from './iot';
+import { escalationScheduler } from './services/escalation-scheduler.service';
 
 const logger = createLogger({ service: 'iot-service' });
 
@@ -28,6 +29,9 @@ const startServer = async () => {
         // Initialize AWS IoT Subscriber
         startIotSubscriber();
 
+        // Start Escalation Scheduler (runs every 1 minute like a cron job)
+        escalationScheduler.start();
+
         // Start server
         server.listen(config.port, () => {
             logger.info(`IoT Service running on port ${config.port}`);
@@ -39,6 +43,9 @@ const startServer = async () => {
         // Graceful shutdown
         const shutdown = async (signal: string) => {
             logger.info(`${signal} received, shutting down gracefully`);
+
+            // Stop Escalation Scheduler
+            escalationScheduler.stop();
 
             // Close Socket.IO
             io.close(() => {
