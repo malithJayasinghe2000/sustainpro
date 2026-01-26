@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { UploadService } from '../services/upload.service';
-import { AppError } from '@sustainpro/shared-utils';
+import { AppError, createLogger } from '@sustainpro/shared-utils';
 
 const uploadService = new UploadService();
+const logger = createLogger({ service: 'upload-controller' });
 
 /**
  * POST /api/v1/upload
@@ -20,6 +21,13 @@ export const upload = async (req: Request, res: Response, next: NextFunction): P
         const folder = (req.query.folder as string) || 'general';
         const organizationId = req.user?.organization_id || undefined;
 
+        logger.info('Upload request received', { 
+            filename: req.file.originalname, 
+            size: req.file.size, 
+            mimetype: req.file.mimetype,
+            folder 
+        });
+
         const result = await uploadService.upload(req.file, folder, organizationId);
 
         res.json({
@@ -28,7 +36,13 @@ export const upload = async (req: Request, res: Response, next: NextFunction): P
             url: result.url,
             key: result.key,
         });
-    } catch (error) {
+    } catch (error: any) {
+        logger.error('Upload failed', { 
+            error: error.message, 
+            stack: error.stack,
+            filename: req.file?.originalname 
+        });
+        
         if (error instanceof AppError) {
             res.status(error.statusCode).json({
                 success: false,
@@ -36,7 +50,13 @@ export const upload = async (req: Request, res: Response, next: NextFunction): P
             });
             return;
         }
-        next(error);
+        
+        // Return a proper error message instead of 500
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Upload failed - please try again',
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 };
 
