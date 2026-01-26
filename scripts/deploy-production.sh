@@ -30,8 +30,19 @@ docker compose -f $COMPOSE_FILE build
 echo -e "${YELLOW}Step 3/6: Starting database and message broker...${NC}"
 docker compose -f $COMPOSE_FILE up -d postgres rabbitmq
 
-echo -e "${YELLOW}Step 4/6: Waiting for database to be ready...${NC}"
+echo -e "${YELLOW}Step 4/6: Waiting for database to be ready and configuring TimescaleDB...${NC}"
 sleep 10
+
+# TimescaleDB Configuration (Idempotent)
+echo "Configuring TimescaleDB..."
+docker compose -f $COMPOSE_FILE exec -T postgres sh -c "grep -q \"shared_preload_libraries = 'timescaledb'\" /var/lib/postgresql/data/pgdata/postgresql.conf || (echo \"shared_preload_libraries = 'timescaledb'\" >> /var/lib/postgresql/data/pgdata/postgresql.conf && echo 'Configuration updated, restarting...' && exit 10)" || docker compose -f $COMPOSE_FILE restart postgres
+
+# Wait for restart if needed
+sleep 5
+
+# Enable Extension and Hypertable
+echo "Enabling Hypertable..."
+docker compose -f $COMPOSE_FILE exec -T postgres psql -U sustainpro -d sustainpro -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE; SELECT create_hypertable('sps_telemetry', 'recorded_at', migrate_data => true, if_not_exists => true);" || echo -e "${RED}Warning: Hypertable setup failed (might already exist), continuing...${NC}"
 
 echo -e "${YELLOW}Step 5/6: Running database sync and seed...${NC}"
 # Use db:deploy:prod which runs: prisma generate + db push + seed (compiled)
