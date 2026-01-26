@@ -970,17 +970,18 @@ model sps_tasks {
 }
 
 model sps_telemetry {
-  id              Int          @id @default(autoincrement())
+  id              Int          @default(autoincrement())
   device_id       Int?
   device_code     String       @db.VarChar(50)
   organization_id String       @db.Uuid
   event_id        String?      @db.Uuid
   service_id      String?      @db.Uuid
   data            Json
-  recorded_at     DateTime?    @default(now()) @db.Timestamptz(6)
+  recorded_at     DateTime     @default(now()) @db.Timestamptz(6)
   created_at      DateTime?    @default(now()) @db.Timestamptz(6)
   sps_devices     sps_devices? @relation(fields: [device_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@id([id, recorded_at])
   @@index([device_id], map: "idx_telemetry_device")
   @@index([organization_id], map: "idx_telemetry_org")
   @@index([recorded_at(sort: Desc)], map: "idx_telemetry_recorded")

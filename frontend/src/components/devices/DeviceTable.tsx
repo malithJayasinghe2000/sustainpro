@@ -44,6 +44,7 @@ interface DeviceTableProps {
     deptId: string;
     onDeviceRemove?: (deviceId: number) => void;
     onRefresh?: () => void;
+    liveUpdates?: Record<string, Device>; // keyed by device_code
 }
 
 export default function DeviceTable({
@@ -51,7 +52,8 @@ export default function DeviceTable({
     eventId,
     deptId,
     onDeviceRemove,
-    onRefresh
+    onRefresh,
+    liveUpdates = {}
 }: DeviceTableProps) {
     const router = useRouter();
 
@@ -244,80 +246,84 @@ export default function DeviceTable({
                                 </td>
                             </tr>
                         ) : (
-                            devices.map((device) => (
-                                <tr
-                                    key={device.id}
-                                    className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
-                                    onClick={() => handleViewDevice(device.id)}
-                                >
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                                                device.status === 'ONLINE'
+                            devices.map((initialDevice) => {
+                                // Merge with live updates
+                                const update = liveUpdates[initialDevice.device_code];
+                                const device = update ? { ...initialDevice, ...update } : initialDevice;
+
+                                return (
+                                    <tr
+                                        key={device.id}
+                                        className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
+                                        onClick={() => handleViewDevice(device.id)}
+                                    >
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${device.status === 'ONLINE'
                                                     ? 'bg-emerald-500/10 text-emerald-600'
                                                     : 'bg-muted text-muted-foreground'
-                                            }`}>
-                                                <Cpu className="w-5 h-5" />
+                                                    }`}>
+                                                    <Cpu className="w-5 h-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium">{device.name || 'Unnamed Device'}</p>
+                                                    {device.metadata?.location && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            📍 {device.metadata.location}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-medium">{device.name || 'Unnamed Device'}</p>
-                                                {device.metadata?.location && (
-                                                    <p className="text-xs text-muted-foreground">
-                                                        📍 {device.metadata.location}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <code className="px-2 py-1 bg-muted rounded text-xs font-mono">
-                                            {device.device_code}
-                                        </code>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-muted-foreground">
-                                            {device.type || '-'}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                                            device.status === 'ONLINE'
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <code className="px-2 py-1 bg-muted rounded text-xs font-mono">
+                                                {device.device_code}
+                                            </code>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className="text-sm text-muted-foreground">
+                                                {device.type || '-'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${device.status === 'ONLINE'
                                                 ? 'bg-emerald-500/10 text-emerald-600'
                                                 : 'bg-gray-500/10 text-gray-500'
-                                        }`}>
-                                            {device.status === 'ONLINE' ? (
-                                                <Wifi className="w-3 h-3" />
-                                            ) : (
-                                                <WifiOff className="w-3 h-3" />
-                                            )}
-                                            {device.status || 'OFFLINE'}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-muted-foreground">
-                                            {formatLastSeen(device.last_seen)}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                                            <button
-                                                onClick={() => handleViewDevice(device.id)}
-                                                className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-primary"
-                                                title="View Dashboard"
-                                            >
-                                                <Eye className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleRemoveDevice(device.id)}
-                                                className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive"
-                                                title="Remove from Service"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))
+                                                }`}>
+                                                {device.status === 'ONLINE' ? (
+                                                    <Wifi className="w-3 h-3" />
+                                                ) : (
+                                                    <WifiOff className="w-3 h-3" />
+                                                )}
+                                                {device.status || 'OFFLINE'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className="text-sm text-muted-foreground">
+                                                {formatLastSeen(device.last_seen)}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                                                <button
+                                                    onClick={() => handleViewDevice(device.id)}
+                                                    className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-primary"
+                                                    title="View Dashboard"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleRemoveDevice(device.id)}
+                                                    className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive"
+                                                    title="Remove from Service"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })
                         )}
                     </tbody>
                 </table>
@@ -339,7 +345,7 @@ export default function DeviceTable({
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </button>
-                        
+
                         {/* Page Numbers */}
                         {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
                             let pageNum;
@@ -352,16 +358,15 @@ export default function DeviceTable({
                             } else {
                                 pageNum = pagination.page - 2 + i;
                             }
-                            
+
                             return (
                                 <button
                                     key={pageNum}
                                     onClick={() => handlePageChange(pageNum)}
-                                    className={`w-8 h-8 rounded-lg text-sm transition-colors ${
-                                        pageNum === pagination.page
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'hover:bg-muted'
-                                    }`}
+                                    className={`w-8 h-8 rounded-lg text-sm transition-colors ${pageNum === pagination.page
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'hover:bg-muted'
+                                        }`}
                                 >
                                     {pageNum}
                                 </button>

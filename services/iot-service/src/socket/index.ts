@@ -13,6 +13,7 @@ export interface TelemetryPayload {
     organization_id?: string;
     event_id?: string;
     department_id?: string;
+    service_id?: string;
     timestamp: Date;
     data: Record<string, any>;
     status: 'online' | 'offline';
@@ -88,6 +89,12 @@ export const initSocket = (server: http.Server): Server => {
             logger.debug('Client subscribed to department', { socketId: socket.id, deptId });
         });
 
+        // Subscribe to service updates (NEW)
+        socket.on('subscribe:service', (serviceId: string) => {
+            socket.join(`service:${serviceId}`);
+            logger.debug('Client subscribed to service', { socketId: socket.id, serviceId });
+        });
+
         socket.on('disconnect', (reason) => {
             logger.info('Client disconnected', { socketId: socket.id, reason });
         });
@@ -134,6 +141,11 @@ export const emitTelemetry = (payload: TelemetryPayload): void => {
     // Emit to department room
     if (payload.department_id) {
         io.to(`dept:${payload.department_id}`).emit('telemetry', payload);
+    }
+
+    // Emit to service room (NEW)
+    if (payload.service_id) {
+        io.to(`service:${payload.service_id}`).emit('telemetry', payload);
     }
 
     // Emit to dashboard

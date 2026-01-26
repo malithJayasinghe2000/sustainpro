@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { simulationApi, deviceModelsApi } from '@/lib/api';
+import { simulationApi, deviceModelsApi, devicesApi } from '@/lib/api';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
@@ -108,13 +108,27 @@ export default function SimulatorPage() {
     // Global Loop Ref
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Real devices from database
+    const [realDevices, setRealDevices] = useState<any[]>([]);
+
     // ----------------------------------------------------------------------
     // Data Loading
     // ----------------------------------------------------------------------
 
     useEffect(() => {
         fetchDeviceModels();
+        fetchRealDevices();
     }, []);
+
+    const fetchRealDevices = async () => {
+        try {
+            const data = await devicesApi.getAll();
+            setRealDevices(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Failed to fetch real devices:', error);
+            // toast.error('Failed to load existing devices');
+        }
+    };
 
     const fetchDeviceModels = async () => {
         try {
@@ -134,7 +148,7 @@ export default function SimulatorPage() {
 
     const getDefaultTelemetryForModel = (deviceModel: DeviceModel): TelemetryState => {
         const telemetry: TelemetryState = {};
-        
+
         if (deviceModel?.parameters) {
             deviceModel.parameters.forEach(param => {
                 switch (param.dataType) {
@@ -152,7 +166,7 @@ export default function SimulatorPage() {
                 }
             });
         }
-        
+
         return telemetry;
     };
 
@@ -169,7 +183,7 @@ export default function SimulatorPage() {
 
     const renderParameterInput = (device: SimulatedDevice, param: ParameterDefinition) => {
         const value = device.telemetry[param.key];
-        
+
         switch (param.dataType) {
             case 'boolean':
                 return (
@@ -188,7 +202,7 @@ export default function SimulatorPage() {
                         </div>
                     </div>
                 );
-            
+
             case 'string':
                 return (
                     <div>
@@ -203,7 +217,7 @@ export default function SimulatorPage() {
                         />
                     </div>
                 );
-            
+
             case 'integer':
                 return (
                     <div>
@@ -221,7 +235,7 @@ export default function SimulatorPage() {
                         />
                     </div>
                 );
-            
+
             case 'float':
             default:
                 return (
@@ -268,7 +282,7 @@ export default function SimulatorPage() {
 
         setDevices(prev => [...prev, device]);
         toast.success(`Created virtual device ${device.config.device_code}`);
-        
+
         // Reset form
         setSelectedDeviceModel(null);
         setNewDeviceConfig(DEFAULT_CONFIG);
@@ -390,17 +404,17 @@ export default function SimulatorPage() {
         // Apply simulation logic based on parameter types
         device.deviceModel.parameters.forEach(param => {
             const currentValue = newTelemetry[param.key];
-            
+
             if (param.dataType === 'float' || param.dataType === 'integer') {
                 // Add some realistic variance to numeric values
                 const variance = (Math.random() - 0.5) * 0.2; // +/- 10%
                 let newValue = Number(currentValue) + variance;
-                
+
                 // Apply min/max constraints if defined
                 if (param.min !== undefined) newValue = Math.max(param.min, newValue);
                 if (param.max !== undefined) newValue = Math.min(param.max, newValue);
-                
-                newTelemetry[param.key] = param.dataType === 'integer' ? 
+
+                newTelemetry[param.key] = param.dataType === 'integer' ?
                     Math.round(newValue) : Number(newValue.toFixed(2));
             }
             // Boolean and string parameters remain unchanged during simulation
@@ -718,24 +732,100 @@ export default function SimulatorPage() {
                             <div className="my-1 border-t border-border/50"></div>
 
                             {/* Telemetry Controls - Dynamic Parameters */}
-                            {device.deviceModel && device.deviceModel.parameters && (
-                                <div className="bg-muted/20 p-3 rounded-lg text-sm space-y-3">
-                                    <div className="flex items-center gap-2 mb-2">
+                            {/* Combined Predefined and Custom Parameters */}
+                            <div className="bg-muted/20 p-3 rounded-lg text-sm space-y-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
                                         <Component className="w-4 h-4 text-primary" />
-                                        <span className="text-xs font-medium text-muted-foreground">
-                                            {device.deviceModel.name} Parameters
-                                        </span>
+                                        <span className="text-xs font-medium text-muted-foreground">Parameters</span>
                                     </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-3">
+                                </div>
+
+                                {/* Predefined Parameters from Device Model */}
+                                {device.deviceModel && device.deviceModel.parameters && (
+                                    <div className="grid grid-cols-2 gap-3 pb-3 border-b border-border/50">
                                         {device.deviceModel.parameters.map(param => (
                                             <div key={param.key}>
                                                 {renderParameterInput(device, param)}
                                             </div>
                                         ))}
                                     </div>
+                                )}
+
+                                {/* Custom Parameters Section */}
+                                <div className="space-y-2">
+                                    <div className="text-xs font-semibold text-muted-foreground">Custom Parameters</div>
+
+                                    {/* List Custom Parameters */}
+                                    {Object.entries(device.telemetry).map(([key, value]) => {
+                                        // Skip if parameter is part of device model
+                                        if (device.deviceModel?.parameters.some(p => p.key === key)) return null;
+
+                                        return (
+                                            <div key={key} className="flex items-end gap-2 group">
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] text-muted-foreground block mb-0.5">{key}</label>
+                                                    <input
+                                                        type="text" // Treat all custom as string/number for simplicity or try to infer
+                                                        className="w-full bg-background border border-border rounded px-2 py-1 font-mono text-sm"
+                                                        value={value}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            // Try to keep numbers as numbers
+                                                            const numVal = parseFloat(val);
+                                                            updateDeviceTelemetryStart(device.id, key, isNaN(numVal) ? val : numVal);
+                                                        }}
+                                                    />
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        const newTelemetry = { ...device.telemetry };
+                                                        delete newTelemetry[key];
+                                                        setDevices(prev => prev.map(d => d.id === device.id ? { ...d, telemetry: newTelemetry } : d));
+                                                    }}
+                                                    className="p-1.5 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive transition-colors mb-0.5"
+                                                    title="Remove Parameter"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Add New Parameter */}
+                                    <div className="pt-2 flex items-center gap-2">
+                                        <input
+                                            placeholder="Param Name"
+                                            className="flex-1 min-w-0 bg-background border border-border rounded px-2 py-1 text-xs"
+                                            id={`new-param-name-${device.id}`}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    const input = e.currentTarget;
+                                                    const key = input.value.trim();
+                                                    if (key) {
+                                                        updateDeviceTelemetryStart(device.id, key, 0); // Default value 0
+                                                        input.value = '';
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const input = document.getElementById(`new-param-name-${device.id}`) as HTMLInputElement;
+                                                const key = input.value.trim();
+                                                if (key) {
+                                                    updateDeviceTelemetryStart(device.id, key, 0);
+                                                    input.value = '';
+                                                }
+                                            }}
+                                            className="p-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded transition-colors"
+                                            title="Add Parameter"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
-                            )}
+                            </div>
 
                             {!device.deviceModel && (
                                 <div className="bg-muted/20 p-3 rounded-lg text-sm text-center">
@@ -761,8 +851,8 @@ export default function SimulatorPage() {
                                     onClick={() => registerDevice(device)}
                                     disabled={device.isRegistered}
                                     className={`py-2 rounded-lg text-sm font-medium transition-colors border ${device.isRegistered
-                                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
-                                            : 'bg-background hover:bg-muted border-primary/20 text-primary'
+                                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+                                        : 'bg-background hover:bg-muted border-primary/20 text-primary'
                                         }`}
                                 >
                                     {device.isRegistered ? 'Registered' : 'Provision Device'}
@@ -770,8 +860,8 @@ export default function SimulatorPage() {
                                 <button
                                     onClick={() => toggleDeviceRunning(device.id)}
                                     className={`py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${device.isRunning
-                                            ? 'bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20'
-                                            : 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20'
+                                        ? 'bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20'
+                                        : 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20'
                                         }`}
                                 >
                                     {device.isRunning ? (
@@ -790,6 +880,123 @@ export default function SimulatorPage() {
                             <p>No simulated devices. Create one to get started.</p>
                         </div>
                     )}
+                </div>
+
+                {/* Real Devices Section */}
+                <div className="bg-card border border-border rounded-xl p-6 shadow-sm mt-8">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-lg flex items-center gap-2">
+                            <Server className="w-5 h-5 text-blue-500" /> Database Devices (sps_devices)
+                        </h3>
+                        <button
+                            onClick={fetchRealDevices}
+                            className="text-sm text-primary hover:underline"
+                        >
+                            Refresh List
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-muted/50 text-muted-foreground uppercase text-xs font-semibold">
+                                <tr>
+                                    <th className="px-4 py-3">ID</th>
+                                    <th className="px-4 py-3">Device Code</th>
+                                    <th className="px-4 py-3">Type</th>
+                                    <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3">Last Seen</th>
+                                    <th className="px-4 py-3">Org ID</th>
+                                    <th className="px-4 py-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {realDevices.length > 0 ? (
+                                    realDevices.map((device: any) => (
+                                        <tr key={device.id} className="hover:bg-muted/10">
+                                            <td className="px-4 py-3 font-mono">{device.id}</td>
+                                            <td className="px-4 py-3 font-medium">{device.device_code}</td>
+                                            <td className="px-4 py-3 text-xs">{device.type || '-'}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold ${device.status === 'ONLINE' ? 'bg-emerald-500/10 text-emerald-600' :
+                                                    'bg-gray-500/10 text-gray-500'
+                                                    }`}>
+                                                    {device.status || 'UNKNOWN'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-muted-foreground">
+                                                {device.last_seen ? new Date(device.last_seen).toLocaleString() : '-'}
+                                            </td>
+                                            <td className="px-4 py-3 font-mono text-xs">{device.organization_id}</td>
+                                            <td className="px-4 py-3">
+                                                {/* Action to load this into simulator? */}
+                                                <button
+                                                    onClick={() => {
+                                                        // 1. Identify Model
+                                                        // Try strict match on ID or Name
+                                                        let model = deviceModels.find(m =>
+                                                            (device.type && (m.id === device.type || m.name === device.type))
+                                                        );
+
+                                                        // Fallback textual match if type is missing or didn't match
+                                                        if (!model && device.device_code) {
+                                                            model = deviceModels.find(m => device.device_code.includes(m.name));
+                                                        }
+
+                                                        // 2. Prepare Config using DB values
+                                                        const config: DeviceConfig = {
+                                                            ...DEFAULT_CONFIG,
+                                                            hardware_id: device.device_code, // Use code as hardware_id 
+                                                            device_code: device.device_code,
+                                                            organization_id: device.organization_id || DEFAULT_CONFIG.organization_id,
+                                                            event_id: device.event_id || DEFAULT_CONFIG.event_id,
+                                                            department_id: device.department_id || DEFAULT_CONFIG.department_id,
+                                                            service_id: device.service_id || '',
+                                                            host: device.host || DEFAULT_CONFIG.host,
+                                                            device_model_id: model?.id || ''
+                                                        };
+
+                                                        // 3. Prepare Telemetry from MODEL ONLY (as requested)
+                                                        const telemetry = model ? getDefaultTelemetryForModel(model) : {};
+
+                                                        const newDevice: SimulatedDevice = {
+                                                            id: generateId(),
+                                                            config,
+                                                            telemetry,
+                                                            deviceModel: model, // Important: Attach model so simulation loop can use it
+                                                            isRunning: false,
+                                                            isRegistered: true, // It comes from DB, so it is registered
+                                                            lastLog: {
+                                                                message: model ? `Loaded ${model.name}` : 'Loaded (No Model Match)',
+                                                                type: model ? 'success' : 'info',
+                                                                timestamp: new Date().toLocaleTimeString()
+                                                            }
+                                                        };
+
+                                                        setDevices(prev => [...prev, newDevice]);
+
+                                                        if (model) {
+                                                            toast.success(`Loaded ${device.device_code}`);
+                                                        } else {
+                                                            toast.error(`Loaded ${device.device_code} but could not identify Device Model`);
+                                                        }
+                                                    }}
+                                                    className="px-2 py-1 bg-primary/10 hover:bg-primary/20 text-primary rounded text-xs transition-colors"
+                                                >
+                                                    Load
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                                            No devices found in database.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </DashboardLayout>

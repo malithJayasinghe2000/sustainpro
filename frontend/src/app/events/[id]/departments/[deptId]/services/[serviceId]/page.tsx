@@ -51,6 +51,8 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     const [isLoading, setIsLoading] = useState(true);
     const [aggregatedData, setAggregatedData] = useState<Record<string, any>>({});
 
+    const [liveDeviceUpdates, setLiveDeviceUpdates] = useState<Record<string, any>>({});
+
     // View State
     const [currentView, setCurrentView] = useState<'dashboard' | 'devices' | 'users'>('dashboard');
 
@@ -149,6 +151,16 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
         const handleTelemetry = (payload: any) => {
             console.log('📡 Telemetry received:', payload);
 
+            // Update live updates map for DeviceTable
+            setLiveDeviceUpdates(prev => ({
+                ...prev,
+                [payload.device_code]: {
+                    status: 'ONLINE',
+                    last_seen: payload.timestamp || new Date().toISOString(),
+                    metadata: payload.data
+                }
+            }));
+
             // Update assigned devices with new telemetry data
             setAssignedDevices((prev: any[]) => prev.map(device => {
                 // Check if device matches by hardware_id or device_code
@@ -190,6 +202,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             console.log('✅ Socket connected:', socket.id);
             socket.emit('subscribe:event', eventId);
             socket.emit('subscribe:department', deptId);
+            socket.emit('subscribe:service', serviceId); // Subscribe to service room
 
             if (serviceInstance?.organization_id) {
                 socket.emit('subscribe:organization', serviceInstance.organization_id);
@@ -645,6 +658,7 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                             eventId={eventId}
                             deptId={deptId}
                             onRefresh={loadData}
+                            liveUpdates={liveDeviceUpdates}
                         />
                     </div>
                 )}

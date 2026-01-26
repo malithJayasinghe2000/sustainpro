@@ -9,13 +9,15 @@ import { emitTelemetry, emitDashboardStats } from './socket'
 // TYPES
 // ============================================================
 
-interface TelemetryData {
-  flow_rate: number;
-  total_liters: number;
-  bottles_avoided: number;
-  co2_saved: number;
-  wifi_strength: number;
-}
+// 12: interface TelemetryData {
+// 13:   flow_rate: number;
+// 14:   total_liters: number;
+// 15:   bottles_avoided: number;
+// 16:   co2_saved: number;
+// 17:   wifi_strength: number;
+// 18: }
+
+type TelemetryData = Record<string, any>;
 
 interface TelemetryMessage {
   hardware_id: string;
@@ -124,15 +126,15 @@ export function injectSimulatedMessage(topic: string, message: TelemetryMessage)
   handleMessage(topic, message);
 }
 
-function handleMessage(topic: string, message: TelemetryMessage) {
+async function handleMessage(topic: string, message: TelemetryMessage) {
   const timestamp = new Date().toISOString();
 
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`📥 Message Received at ${timestamp}`);
   console.log(`📍 Topic: ${topic}`);
 
-  let eventId: string | undefined;
-  let departmentId: string | undefined;
+  let topicEventId: string | undefined;
+  let topicDeptId: string | undefined;
 
   const topicParts = topic.split('/');
   if (topicParts.length > 1) {
@@ -140,11 +142,11 @@ function handleMessage(topic: string, message: TelemetryMessage) {
     if (topicParts[1]) console.log(`   Organization ID: ${topicParts[1]}`);
     if (topicParts[2]) {
       console.log(`   Event ID: ${topicParts[2]}`);
-      eventId = topicParts[2];
+      topicEventId = topicParts[2];
     }
     if (topicParts[3]) {
       console.log(`   Department ID: ${topicParts[3]}`);
-      departmentId = topicParts[3];
+      topicDeptId = topicParts[3];
     }
   }
 
@@ -153,34 +155,63 @@ function handleMessage(topic: string, message: TelemetryMessage) {
   console.log(`   Device Code: ${message.device_code}`);
   console.log(`   Organization: ${message.organization_id}`);
 
+  // 1. Get Device Metadata EARLY (for correct Socket emission)
+  let deviceMetadata: any = null;
+  try {
+    const deviceRes = await query(
+      `SELECT 
+            d.id, 
+            d.service_id, 
+            d.event_id, 
+            d.organization_id, 
+            ds.department_id 
+           FROM sps_devices d
+           LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+           WHERE d.device_code = $1`,
+      [message.device_code]
+    );
+    if (deviceRes.rows.length > 0) {
+      deviceMetadata = deviceRes.rows[0];
+    } else {
+      console.warn(`⚠️ Device not found for code: ${message.device_code}.`);
+    }
+  } catch (err) {
+    console.error('❌ Failed to fetch device metadata:', err);
+  }
+
   if (message.data) {
-    console.log('\n💧 Water Wall Data:');
-    console.log(`   Flow Rate: ${message.data.flow_rate} L/min`);
-    console.log(`   Total Liters: ${message.data.total_liters.toFixed(2)} L`);
-    console.log(`   Bottles Avoided: ${message.data.bottles_avoided}`);
-    console.log(`   CO₂ Saved: ${message.data.co2_saved.toFixed(3)} kg`);
-    console.log(`   WiFi Strength: ${message.data.wifi_strength} dBm`);
+    console.log('\n� Telemetry Data Received:');
+    Object.entries(message.data).forEach(([key, value]) => {
+      console.log(`   ${key}: ${value}`);
+    });
     let data: TelemetryData = message.data;
+
+    // Use DB metadata if available, otherwise fall back to topic/message
+    const finalOrgId = message.organization_id || deviceMetadata?.organization_id;
+    const finalEventId = topicEventId || deviceMetadata?.event_id;
+    const finalDeptId = topicDeptId || deviceMetadata?.department_id;
+    const finalServiceId = deviceMetadata?.service_id;
+    const finalDeviceId = deviceMetadata?.id ? String(deviceMetadata.id) : undefined;
 
     emitTelemetry({
       device_code: message.device_code,
-      device_id: String(1), // TODO: Look up device ID from DB if needed
-      organization_id: message.organization_id,
-      event_id: eventId,
-      department_id: departmentId,
+      device_id: finalDeviceId,
+      organization_id: finalOrgId,
+      event_id: finalEventId,
+      department_id: finalDeptId,
+      service_id: finalServiceId, // NEW: Emit to service room
       timestamp: new Date(),
       data,
       status: 'online',
     });
 
     console.log('\n📨 Emitted telemetry data to Socket.IO clients.');
-
   }
 
   console.log(`\n⏰ Device Timestamp: ${message.timestamp}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-  processData(message, eventId, departmentId);
+  processData(message, topicEventId, topicDeptId, deviceMetadata);
 }
 
 // ============================================================
@@ -191,36 +222,40 @@ import { query } from './db';
 
 // ... (existing imports)
 
-function processData(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string): void {
-  if (message.data && message.data.flow_rate > 2.5) {
-    console.log('⚠️ WARNING: High flow rate detected!');
-  }
+function processData(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string, deviceMetadata?: any): void {
+  // Generic processing - Alert rules should be implemented based on DB configuration
+  // for now, we just save to DB.
 
-  saveToDatabase(message, topicEventId, topicDeptId).catch(err => {
+  saveToDatabase(message, topicEventId, topicDeptId, deviceMetadata).catch(err => {
     console.error('❌ Failed to save telemetry to DB:', err);
   });
 
   // triggerAlerts(message)
 }
 
-async function saveToDatabase(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string) {
+async function saveToDatabase(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string, deviceMetadata?: any) {
   try {
-    // 1. Get Device Metadata (ID, Service, Event)
-    // We use device_code as the lookup key
-    const deviceRes = await query(
-      'SELECT id, service_id, event_id, organization_id FROM sps_devices WHERE device_code = $1',
-      [message.device_code]
-    );
+    let device = deviceMetadata;
 
-    if (deviceRes.rows.length === 0) {
-      console.warn(`⚠️ Device not found for code: ${message.device_code}. Skipping DB save.`);
-      return;
+    // If metadata wasn't passed (e.g. called from elsewhere), fetch it now
+    if (!device) {
+      const deviceRes = await query(
+        `SELECT 
+           d.id, 
+           d.service_id, 
+           d.event_id, 
+           d.organization_id 
+         FROM sps_devices d
+         WHERE d.device_code = $1`,
+        [message.device_code]
+      );
+
+      if (deviceRes.rows.length === 0) {
+        console.warn(`⚠️ Device not found for code: ${message.device_code}. Skipping DB save.`);
+        return;
+      }
+      device = deviceRes.rows[0];
     }
-
-    const device = deviceRes.rows[0];
-
-    // Use incoming IDs if available in topic, else fall back to device's provisioned IDs
-    // Note: message.organization_id comes from topic/payload usually
 
     // 2. Insert Telemetry
     await query(
@@ -234,11 +269,32 @@ async function saveToDatabase(message: TelemetryMessage, topicEventId?: string, 
         topicEventId || device.event_id,         // Prefer topic event
         device.service_id,       // From DB
         JSON.stringify(message.data),
-        message.timestamp || new Date().toISOString()
+        message.timestamp ?
+          (typeof message.timestamp === 'number'
+            // Handle Unix timestamp (check if seconds or milliseconds)
+            ? new Date(message.timestamp * (Number(message.timestamp) < 10000000000 ? 1000 : 1)).toISOString()
+            : new Date(message.timestamp).toISOString() // Handle string
+          )
+          : new Date().toISOString()
       ]
     );
 
     console.log('💾 Saved telemetry to database');
+
+    // 3. Update Device Status & Last Seen
+    await query(
+      `UPDATE sps_devices 
+       SET status = 'ONLINE', 
+           last_seen = $1,
+           metadata = metadata || $2::jsonb
+       WHERE id = $3`,
+      [
+        new Date().toISOString(),
+        JSON.stringify(message.data || {}),
+        device.id
+      ]
+    );
+    console.log('🔄 Updated device status to ONLINE');
 
   } catch (error) {
     console.error('Error in saveToDatabase:', error);
