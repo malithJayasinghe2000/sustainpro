@@ -170,27 +170,82 @@ class AlertService {
                 alertData.severity === 'CRITICAL' ? 'CRITICAL' :
                 alertData.severity === 'HIGH' ? 'WARNING' : 'INFO';
 
-            // Use assigned user from alert or fallback to organization admin
-            const targetUserId = alert.auto_assigned_to || alertData.organization_id;
+            // Determine target user(s) for notification
+            let targetUserIds: string[] = [];
 
-            await prisma.sps_system_notifications.create({
-                data: {
-                    organization_id: alertData.organization_id,
-                    target_user_id: targetUserId,
-                    type: notificationType,
-                    title: `Alert: ${alertData.rule_name}`,
-                    message: alertData.message,
-                    metadata: {
-                        alert_id: alert.id,
-                        device_code: alertData.device_code,
-                        rule_id: alertData.rule_id,
-                        severity: alertData.severity,
+            // Primary target: assigned user from escalation policy
+            if (alert.auto_assigned_to) {
+                targetUserIds.push(alert.auto_assigned_to);
+            }
+
+            // If no assigned user, find organization admin(s)
+            if (targetUserIds.length === 0) {
+                // Find users with ORG_ADMIN or SUPER_ADMIN role assignments in this organization
+                const adminAssignments = await prisma.sps_role_assignments.findMany({
+                    where: {
+                        role: { in: ['ORG_ADMIN', 'SUPER_ADMIN'] },
+                        OR: [
+                            { org_id: alertData.organization_id },
+                            { org_id: null } // Global admins
+                        ]
                     },
-                },
-            });
-            logger.debug('System notification created', { alertId: alert.id });
+                    include: { 
+                        sps_users: {
+                            select: { 
+                                id: true, 
+                                organization_id: true,
+                                is_active: true 
+                            }
+                        }
+                    },
+                    take: 10, // Limit to prevent too many notifications
+                });
+                
+                // Filter to active users in this organization
+                targetUserIds = adminAssignments
+                    .filter(a => 
+                        a.sps_users?.is_active && 
+                        (a.sps_users?.organization_id === alertData.organization_id || !a.sps_users?.organization_id)
+                    )
+                    .map(a => a.user_id)
+                    .slice(0, 5); // Limit to 5 admins max
+            }
+
+            // If still no targets found, log warning and skip
+            if (targetUserIds.length === 0) {
+                logger.warn('No target users found for system notification', { 
+                    alertId: alert.id, 
+                    organizationId: alertData.organization_id 
+                });
+                return;
+            }
+
+            // Create notification for each target user
+            for (const targetUserId of targetUserIds) {
+                await prisma.sps_system_notifications.create({
+                    data: {
+                        organization_id: alertData.organization_id,
+                        target_user_id: targetUserId,
+                        type: notificationType,
+                        title: `Alert: ${alertData.rule_name}`,
+                        message: alertData.message,
+                        source: 'alert',
+                        source_id: alert.id,
+                        source_name: alertData.rule_name,
+                        action_url: `/alerts?id=${alert.id}`,
+                        action_label: 'View Alert',
+                        metadata: {
+                            alert_id: alert.id,
+                            device_code: alertData.device_code,
+                            rule_id: alertData.rule_id,
+                            severity: alertData.severity,
+                        },
+                    },
+                });
+            }
+            logger.debug('System notification(s) created', { alertId: alert.id, targetCount: targetUserIds.length });
         } catch (err: any) {
-            logger.error('Failed to create system notification', { error: err.message });
+            logger.error('Failed to create system notification', { error: err.message, stack: err.stack });
         }
     }
 

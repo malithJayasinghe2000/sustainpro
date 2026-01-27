@@ -117,17 +117,65 @@ export class EscalationController {
     async getAll(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const user = (req as any).user;
-            logger.info('Getting all escalations', { userId: user?.id, role: user?.role });
+            logger.info('Getting all escalations', { userId: user?.id, roles: user?.roles, isSuperAdmin: user?.isSuperAdmin });
 
-            const filters: EscalationFilters = {
-                organization_id: req.query.organization_id as string,
-                event_id: req.query.event_id as string,
-                department_id: req.query.department_id as string,
-                service_id: req.query.service_id as string,
-                status: req.query.status as any,
-                severity: req.query.severity as any,
-                assigned_to: req.query.assigned_to as string,
-            };
+            const filters: EscalationFilters = {};
+
+            // Apply role-based filtering
+            if (user.isSuperAdmin || user.is_super_admin) {
+                // Super admin sees all - can optionally filter by org
+                if (req.query.organization_id) {
+                    filters.organization_id = req.query.organization_id as string;
+                }
+            } else if (user.roles?.includes('ORG_ADMIN')) {
+                // Org admin sees organization escalations
+                filters.organization_id = user.organization_id;
+            } else if (user.roles?.includes('EVENT_MANAGER') && user.eventIds?.length > 0) {
+                // Event manager sees event escalations
+                if (req.query.event_id && user.eventIds.includes(req.query.event_id as string)) {
+                    filters.event_id = req.query.event_id as string;
+                } else {
+                    filters.event_id = user.eventIds[0]; // Default to first event
+                }
+            } else if (user.roles?.includes('DEPT_HEAD') && user.deptIds?.length > 0) {
+                // Dept head sees department escalations
+                if (req.query.department_id && user.deptIds.includes(req.query.department_id as string)) {
+                    filters.department_id = req.query.department_id as string;
+                } else {
+                    filters.department_id = user.deptIds[0];
+                }
+            } else if ((user.roles?.includes('SERVICE_SUPERVISOR') || user.roles?.includes('TECHNICIAN') || user.roles?.includes('SERVICE_SUPPLIER')) && user.serviceIds?.length > 0) {
+                // Service-level roles see service escalations OR assigned escalations
+                if (req.query.service_id && user.serviceIds.includes(req.query.service_id as string)) {
+                    filters.service_id = req.query.service_id as string;
+                } else {
+                    // Show escalations assigned to them
+                    filters.assigned_to = user.id;
+                }
+            } else {
+                // Default: only see assigned escalations
+                filters.assigned_to = user.id;
+            }
+
+            // Apply additional query filters (if allowed by role)
+            if (req.query.event_id && !filters.event_id) {
+                filters.event_id = req.query.event_id as string;
+            }
+            if (req.query.department_id && !filters.department_id) {
+                filters.department_id = req.query.department_id as string;
+            }
+            if (req.query.service_id && !filters.service_id) {
+                filters.service_id = req.query.service_id as string;
+            }
+            if (req.query.status) {
+                filters.status = req.query.status as any;
+            }
+            if (req.query.severity) {
+                filters.severity = req.query.severity as any;
+            }
+            if (req.query.assigned_to && (user.isSuperAdmin || user.is_super_admin || user.roles?.includes('ORG_ADMIN'))) {
+                filters.assigned_to = req.query.assigned_to as string;
+            }
 
             const page = parseInt(req.query.page as string) || 1;
             const limit = parseInt(req.query.limit as string) || 20;

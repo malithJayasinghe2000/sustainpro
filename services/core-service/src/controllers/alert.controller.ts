@@ -171,6 +171,8 @@ export async function getAll(req: Request, res: Response) {
                 break;
 
             case 'SERVICE_SUPERVISOR':
+            case 'TECHNICIAN':
+            case 'SERVICE_SUPPLIER':
                 // Can see alerts for their assigned services
                 if (user.serviceIds && user.serviceIds.length > 0) {
                     if (req.query.service_id) {
@@ -186,15 +188,17 @@ export async function getAll(req: Request, res: Response) {
                         filters.service_ids = user.serviceIds;
                     }
                 } else {
-                    return res.status(403).json({
-                        success: false,
-                        error: 'Supervisor must be assigned to at least one service',
-                    });
+                    // Fallback: show alerts assigned to them or in their organization
+                    if (user.organization_id) {
+                        filters.organization_id = user.organization_id;
+                    } else {
+                        filters.assigned_to = user.id;
+                    }
                 }
                 break;
 
             default:
-                // Other roles can only see alerts assigned to them
+                // VIEWER and other roles can only see alerts assigned to them
                 filters.assigned_to = user.id;
         }
 
@@ -481,8 +485,12 @@ export async function getStats(req: Request, res: Response) {
                 }
                 break;
             case 'SERVICE_SUPERVISOR':
+            case 'TECHNICIAN':
+            case 'SERVICE_SUPPLIER':
                 if (user.serviceIds && user.serviceIds.length > 0) {
                     filters.service_ids = user.serviceIds;
+                } else if (user.organization_id) {
+                    filters.organization_id = user.organization_id;
                 }
                 break;
             default:
@@ -621,9 +629,20 @@ function hasAccessToAlert(user: any, alert: any): boolean {
         case 'DEPT_HEAD':
             return user.deptIds?.includes(alert.department_id);
         case 'SERVICE_SUPERVISOR':
-            return user.serviceIds?.includes(alert.service_id);
+        case 'TECHNICIAN':
+        case 'SERVICE_SUPPLIER':
+            // Can access alerts for their assigned services or alerts assigned to them
+            if (user.serviceIds?.includes(alert.service_id)) {
+                return true;
+            }
+            // Fallback: check if alert is assigned to them
+            if (alert.auto_assigned_to === user.id) {
+                return true;
+            }
+            // Fallback: check organization access
+            return alert.organization_id === user.organization_id;
         default:
-            // Other roles can only access alerts assigned to them
+            // VIEWER and other roles can only access alerts assigned to them
             return alert.auto_assigned_to === user.id;
     }
 }

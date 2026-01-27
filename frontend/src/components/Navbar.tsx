@@ -70,6 +70,9 @@ export default function Navbar() {
 
     // Fetch notifications from API
     const fetchNotifications = useCallback(async () => {
+        // Don't fetch if user is not authenticated yet
+        if (!user) return;
+        
         try {
             setNotificationsLoading(true);
             const response = await systemNotificationsApi.getAll({ limit: 10 });
@@ -80,10 +83,13 @@ export default function Navbar() {
         } finally {
             setNotificationsLoading(false);
         }
-    }, []);
+    }, [user]);
 
     // Fetch escalation count for badge
     const fetchEscalationCount = useCallback(async () => {
+        // Don't fetch if user is not authenticated yet
+        if (!user) return;
+        
         try {
             const response = await escalationsApi.getPendingCount();
             if (response.success) {
@@ -92,7 +98,7 @@ export default function Navbar() {
         } catch (error) {
             console.error('Failed to fetch escalation count:', error);
         }
-    }, []);
+    }, [user]);
 
     // Handle notification click - mark as read and navigate if action_url exists
     const handleNotificationClick = async (notification: SystemNotification) => {
