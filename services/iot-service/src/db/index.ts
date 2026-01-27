@@ -8,7 +8,7 @@ const pool = new Pool({
     connectionString: config.database.connectionString,
     max: 20,
     idleTimeoutMillis: 300000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000,
 });
 
 // Log pool events

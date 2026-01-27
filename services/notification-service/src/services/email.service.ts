@@ -311,6 +311,108 @@ class EmailService {
             port: config.smtp.port,
         };
     }
+
+    /**
+     * Send alert notification email
+     */
+    async sendAlertEmail(options: {
+        to: string;
+        alertId: string;
+        severity: string;
+        message: string;
+        deviceCode: string;
+        ruleName: string;
+    }): Promise<EmailResult> {
+        const severityColors: Record<string, string> = {
+            CRITICAL: '#DC2626',
+            HIGH: '#F59E0B',
+            MEDIUM: '#3B82F6',
+            LOW: '#6B7280',
+        };
+
+        const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: ${severityColors[options.severity] || '#3B82F6'}; color: white; padding: 20px; text-align: center;">
+                    <h1 style="margin: 0;">⚠️ Alert Notification</h1>
+                    <p style="margin: 10px 0 0 0; font-size: 18px;">Severity: ${options.severity}</p>
+                </div>
+                <div style="padding: 20px; background-color: #f9fafb;">
+                    <h2 style="color: #111827; margin-top: 0;">Alert Details</h2>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">Rule:</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${options.ruleName}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">Device:</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${options.deviceCode}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">Message:</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${options.message}</td>
+                        </tr>
+                    </table>
+                    <p style="margin-top: 20px; color: #6b7280; font-size: 14px;">
+                        Alert ID: ${options.alertId}
+                    </p>
+                </div>
+                <div style="padding: 15px; background-color: #e5e7eb; text-align: center; color: #6b7280; font-size: 12px;">
+                    This is an automated notification from SustainPro.
+                </div>
+            </div>
+        `;
+
+        return this.send({
+            to: options.to,
+            subject: `[${options.severity}] Alert: ${options.ruleName}`,
+            html,
+            text: `Alert: ${options.message}\nDevice: ${options.deviceCode}\nSeverity: ${options.severity}`,
+        });
+    }
+
+    /**
+     * Send escalation notification email
+     */
+    async sendEscalationEmail(options: {
+        to: string;
+        alertId: string;
+        escalationLevel: number;
+        message: string;
+        severity: string;
+    }): Promise<EmailResult> {
+        const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #DC2626; color: white; padding: 20px; text-align: center;">
+                    <h1 style="margin: 0;">🔺 Alert Escalated</h1>
+                    <p style="margin: 10px 0 0 0; font-size: 18px;">Level ${options.escalationLevel}</p>
+                </div>
+                <div style="padding: 20px; background-color: #f9fafb;">
+                    <h2 style="color: #111827; margin-top: 0;">Escalation Details</h2>
+                    <p style="color: #374151;">
+                        An alert has been escalated to you because it was not addressed at the previous level.
+                    </p>
+                    <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 15px 0;">
+                        <strong>Alert Message:</strong><br>
+                        ${options.message}
+                    </div>
+                    <p style="color: #6b7280; font-size: 14px;">
+                        Severity: ${options.severity}<br>
+                        Alert ID: ${options.alertId}
+                    </p>
+                </div>
+                <div style="padding: 15px; background-color: #e5e7eb; text-align: center; color: #6b7280; font-size: 12px;">
+                    Please take immediate action on this escalation.
+                </div>
+            </div>
+        `;
+
+        return this.send({
+            to: options.to,
+            subject: `[ESCALATED - Level ${options.escalationLevel}] Alert Requires Attention`,
+            html,
+            text: `Alert Escalated to Level ${options.escalationLevel}\n\nMessage: ${options.message}\nSeverity: ${options.severity}\nAlert ID: ${options.alertId}`,
+        });
+    }
 }
 
 // Singleton instance

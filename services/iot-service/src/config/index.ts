@@ -8,7 +8,7 @@ export const config = {
 
     // Database
     database: {
-        connectionString: process.env.DATABASE_URL || 'postgresql://sustainpro:sustainpro_dev@localhost:5432/sustainpro',
+        connectionString: process.env.DATABASE_URL || 'postgresql://sustainpro:sustainpro_dev@localhost:5433/sustainpro',
     },
 
     // CORS

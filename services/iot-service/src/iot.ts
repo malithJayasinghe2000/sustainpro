@@ -4,18 +4,22 @@
 import awsIot from 'aws-iot-device-sdk';
 import path from 'path';
 import { emitTelemetry, emitDashboardStats } from './socket'
+import { ruleEngineService } from './services/rule-engine.service';
+import { LiveDataEntry } from './services/live-data.service';
 
 // ============================================================
 // TYPES
 // ============================================================
 
-interface TelemetryData {
-  flow_rate: number;
-  total_liters: number;
-  bottles_avoided: number;
-  co2_saved: number;
-  wifi_strength: number;
-}
+// 12: interface TelemetryData {
+// 13:   flow_rate: number;
+// 14:   total_liters: number;
+// 15:   bottles_avoided: number;
+// 16:   co2_saved: number;
+// 17:   wifi_strength: number;
+// 18: }
+
+type TelemetryData = Record<string, any>;
 
 interface TelemetryMessage {
   hardware_id: string;
@@ -103,51 +107,7 @@ export function startIotSubscriber() {
   device.on('message', (topic: string, payload: Buffer) => {
     try {
       const message = JSON.parse(payload.toString()) as TelemetryMessage;
-      const timestamp = new Date().toISOString();
-
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(`📥 Message Received at ${timestamp}`);
-      console.log(`📍 Topic: ${topic}`);
-
-      const topicParts = topic.split('/');
-      if (topicParts.length > 1) {
-        console.log('📂 Topic Structure:');
-        if (topicParts[1]) console.log(`   Organization ID: ${topicParts[1]}`);
-        if (topicParts[2]) console.log(`   Event ID: ${topicParts[2]}`);
-        if (topicParts[3]) console.log(`   Department ID: ${topicParts[3]}`);
-      }
-
-      console.log('\n🔧 Device Information:');
-      console.log(`   Hardware ID: ${message.hardware_id}`);
-      console.log(`   Device Code: ${message.device_code}`);
-      console.log(`   Organization: ${message.organization_id}`);
-
-      if (message.data) {
-        console.log('\n💧 Water Wall Data:');
-        console.log(`   Flow Rate: ${message.data.flow_rate} L/min`);
-        console.log(`   Total Liters: ${message.data.total_liters.toFixed(2)} L`);
-        console.log(`   Bottles Avoided: ${message.data.bottles_avoided}`);
-        console.log(`   CO₂ Saved: ${message.data.co2_saved.toFixed(3)} kg`);
-        console.log(`   WiFi Strength: ${message.data.wifi_strength} dBm`);
-        let data: TelemetryData = message.data;
-        
-        emitTelemetry({
-            device_code: message.device_code,
-            device_id: String(1),
-            organization_id: message.organization_id,
-            timestamp: new Date(),
-            data,
-            status: 'online',
-        });
-
-        console.log('\n📨 Emitted telemetry data to Socket.IO clients.');
-
-      }
-
-      console.log(`\n⏰ Device Timestamp: ${message.timestamp}`);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-      processData(message);
+      handleMessage(topic, message);
     } catch (err) {
       console.error('❌ Error parsing message:', err);
       console.log('Raw payload:', payload.toString());
@@ -163,17 +123,293 @@ export function startIotSubscriber() {
   device.on('offline', () => console.log('📴 Device offline'));
 }
 
-// ============================================================
-// DATA PROCESSING
-// ============================================================
+export function injectSimulatedMessage(topic: string, message: TelemetryMessage) {
+  console.log('🧪 Injecting Simulated Message...');
+  handleMessage(topic, message);
+}
 
-function processData(message: TelemetryMessage): void {
-  if (message.data && message.data.flow_rate > 2.5) {
-    console.log('⚠️ WARNING: High flow rate detected!');
+async function handleMessage(topic: string, message: TelemetryMessage) {
+  const timestamp = new Date().toISOString();
+
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(`📥 Message Received at ${timestamp}`);
+  console.log(`📍 Topic: ${topic}`);
+
+  let topicEventId: string | undefined;
+  let topicDeptId: string | undefined;
+
+  const topicParts = topic.split('/');
+  if (topicParts.length > 1) {
+    console.log('📂 Topic Structure:');
+    if (topicParts[1]) console.log(`   Organization ID: ${topicParts[1]}`);
+    if (topicParts[2]) {
+      console.log(`   Event ID: ${topicParts[2]}`);
+      topicEventId = topicParts[2];
+    }
+    if (topicParts[3]) {
+      console.log(`   Department ID: ${topicParts[3]}`);
+      topicDeptId = topicParts[3];
+    }
   }
 
-  // saveToDatabase(message)
-  // triggerAlerts(message)
+  console.log('\n🔧 Device Information:');
+  console.log(`   Hardware ID: ${message.hardware_id}`);
+  console.log(`   Device Code: ${message.device_code}`);
+  console.log(`   Organization: ${message.organization_id}`);
+
+  // 1. Get Device Metadata EARLY (for correct Socket emission)
+  let deviceMetadata: any = null;
+  try {
+    const deviceRes = await query(
+      `SELECT 
+            d.id, 
+            d.service_id, 
+            d.event_id, 
+            d.organization_id, 
+            ds.department_id 
+           FROM sps_devices d
+           LEFT JOIN sps_department_services ds ON d.service_id = ds.id
+           WHERE d.device_code = $1`,
+      [message.device_code]
+    );
+    if (deviceRes.rows.length > 0) {
+      deviceMetadata = deviceRes.rows[0];
+    } else {
+      console.warn(`⚠️ Device not found for code: ${message.device_code}.`);
+    }
+  } catch (err) {
+    console.error('❌ Failed to fetch device metadata:', err);
+  }
+
+  if (message.data) {
+    console.log('\n� Telemetry Data Received:');
+    Object.entries(message.data).forEach(([key, value]) => {
+      console.log(`   ${key}: ${value}`);
+    });
+    let data: TelemetryData = message.data;
+
+    // Use DB metadata if available, otherwise fall back to topic/message
+    const finalOrgId = message.organization_id || deviceMetadata?.organization_id;
+    const finalEventId = topicEventId || deviceMetadata?.event_id;
+    const finalDeptId = topicDeptId || deviceMetadata?.department_id;
+    const finalServiceId = deviceMetadata?.service_id;
+    const finalDeviceId = deviceMetadata?.id ? String(deviceMetadata.id) : undefined;
+
+    emitTelemetry({
+      device_code: message.device_code,
+      device_id: finalDeviceId,
+      organization_id: finalOrgId,
+      event_id: finalEventId,
+      department_id: finalDeptId,
+      service_id: finalServiceId, // NEW: Emit to service room
+      timestamp: new Date(),
+      data,
+      status: 'online',
+    });
+
+    console.log('\n📨 Emitted telemetry data to Socket.IO clients.');
+  }
+
+  console.log(`\n⏰ Device Timestamp: ${message.timestamp}`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  processData(message, topicEventId, topicDeptId, deviceMetadata);
+}
+
+// ============================================================
+// DATA PROCESSING - with Queue for 100+ devices optimization
+// ============================================================
+
+import { query } from './db';
+
+// ============================================================
+// MESSAGE QUEUE FOR RULE ENGINE (Handles 100+ devices)
+// ============================================================
+
+interface QueuedMessage {
+  liveData: LiveDataEntry;
+  addedAt: number;
+}
+
+// Queue for batching rule engine evaluations
+const ruleEngineQueue: QueuedMessage[] = [];
+const QUEUE_FLUSH_INTERVAL = 500; // Flush every 500ms
+const MAX_QUEUE_SIZE = 100; // Max items before forced flush
+const CONCURRENT_EVALUATIONS = 10; // Max concurrent rule evaluations
+let isProcessingQueue = false;
+let queueFlushTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Queue a message for rule engine processing
+ * This prevents overload when 100+ devices send data simultaneously
+ */
+function queueForRuleEngine(liveData: LiveDataEntry): void {
+  ruleEngineQueue.push({
+    liveData,
+    addedAt: Date.now(),
+  });
+
+  // Force flush if queue is too large
+  if (ruleEngineQueue.length >= MAX_QUEUE_SIZE) {
+    processRuleEngineQueue();
+    return;
+  }
+
+  // Schedule flush if not already scheduled
+  if (!queueFlushTimer) {
+    queueFlushTimer = setTimeout(() => {
+      queueFlushTimer = null;
+      processRuleEngineQueue();
+    }, QUEUE_FLUSH_INTERVAL);
+  }
+}
+
+/**
+ * Process the rule engine queue in batches
+ */
+async function processRuleEngineQueue(): Promise<void> {
+  if (isProcessingQueue || ruleEngineQueue.length === 0) {
+    return;
+  }
+
+  isProcessingQueue = true;
+
+  try {
+    // Take items from queue
+    const itemsToProcess = ruleEngineQueue.splice(0, MAX_QUEUE_SIZE);
+
+    if (itemsToProcess.length === 0) {
+      return;
+    }
+
+    console.log(`📊 Processing ${itemsToProcess.length} queued messages for rule engine...`);
+
+    // Process in parallel batches with concurrency limit
+    for (let i = 0; i < itemsToProcess.length; i += CONCURRENT_EVALUATIONS) {
+      const batch = itemsToProcess.slice(i, i + CONCURRENT_EVALUATIONS);
+
+      await Promise.allSettled(
+        batch.map(item =>
+          ruleEngineService.evaluate(item.liveData).catch((err) => {
+            console.error('❌ Error executing rule engine:', err);
+          })
+        )
+      );
+    }
+
+    console.log(`✅ Processed ${itemsToProcess.length} messages through rule engine`);
+
+  } catch (err: any) {
+    console.error('Error processing rule engine queue:', err);
+  } finally {
+    isProcessingQueue = false;
+
+    // If more items were added during processing, schedule another flush
+    if (ruleEngineQueue.length > 0) {
+      setTimeout(processRuleEngineQueue, 100);
+    }
+  }
+}
+
+// ============================================================
+// MAIN DATA PROCESSOR
+// ============================================================
+
+function processData(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string, deviceMetadata?: any): void {
+  // Save to database (non-blocking)
+  saveToDatabase(message, topicEventId, topicDeptId, deviceMetadata).catch(err => {
+    console.error('❌ Failed to save telemetry to DB:', err);
+  });
+
+  // Queue rule evaluation (optimized for 100+ devices)
+  if (deviceMetadata && message.data) {
+    const liveData: LiveDataEntry = {
+      device_id: deviceMetadata.id,
+      device_code: message.device_code,
+      organization_id: message.organization_id || deviceMetadata.organization_id,
+      event_id: topicEventId || deviceMetadata.event_id,
+      service_id: deviceMetadata.service_id,
+      data: message.data,
+      timestamp: message.timestamp
+        ? (typeof message.timestamp === 'number'
+          ? new Date(message.timestamp * (Number(message.timestamp) < 10000000000 ? 1000 : 1))
+          : new Date(message.timestamp))
+        : new Date(),
+      status: 'online',
+    };
+
+    // Add to queue instead of direct evaluation
+    queueForRuleEngine(liveData);
+  }
+}
+
+async function saveToDatabase(message: TelemetryMessage, topicEventId?: string, topicDeptId?: string, deviceMetadata?: any) {
+  try {
+    let device = deviceMetadata;
+
+    // If metadata wasn't passed (e.g. called from elsewhere), fetch it now
+    if (!device) {
+      const deviceRes = await query(
+        `SELECT 
+           d.id, 
+           d.service_id, 
+           d.event_id, 
+           d.organization_id 
+         FROM sps_devices d
+         WHERE d.device_code = $1`,
+        [message.device_code]
+      );
+
+      if (deviceRes.rows.length === 0) {
+        console.warn(`⚠️ Device not found for code: ${message.device_code}. Skipping DB save.`);
+        return;
+      }
+      device = deviceRes.rows[0];
+    }
+
+    // 2. Insert Telemetry
+    await query(
+      `INSERT INTO sps_telemetry 
+            (device_id, device_code, organization_id, event_id, service_id, data, recorded_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        device.id,
+        message.device_code,
+        message.organization_id || device.organization_id, // Prefer message/topic org
+        topicEventId || device.event_id,         // Prefer topic event
+        device.service_id,       // From DB
+        JSON.stringify(message.data),
+        message.timestamp ?
+          (typeof message.timestamp === 'number'
+            // Handle Unix timestamp (check if seconds or milliseconds)
+            ? new Date(message.timestamp * (Number(message.timestamp) < 10000000000 ? 1000 : 1)).toISOString()
+            : new Date(message.timestamp).toISOString() // Handle string
+          )
+          : new Date().toISOString()
+      ]
+    );
+
+    console.log('💾 Saved telemetry to database');
+
+    // 3. Update Device Status & Last Seen
+    await query(
+      `UPDATE sps_devices 
+       SET status = 'ONLINE', 
+           last_seen = $1,
+           metadata = metadata || $2::jsonb
+       WHERE id = $3`,
+      [
+        new Date().toISOString(),
+        JSON.stringify(message.data || {}),
+        device.id
+      ]
+    );
+    console.log('🔄 Updated device status to ONLINE');
+
+  } catch (error) {
+    console.error('Error in saveToDatabase:', error);
+    throw error;
+  }
 }
 
 // ============================================================

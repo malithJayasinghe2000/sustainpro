@@ -1,5 +1,6 @@
 import { TelemetryRepository, CreateTelemetryInput, TelemetryRecord } from '../repositories/telemetry.repository';
 import { liveDataService, LiveDataEntry } from './live-data.service';
+import { ruleEngineService } from './rule-engine.service';
 import { emitTelemetry, emitDashboardStats } from '../socket';
 import { getPrismaClient } from '@sustainpro/shared-database';
 import { createLogger } from '@sustainpro/shared-utils';
@@ -87,6 +88,11 @@ export class TelemetryService {
         // Update device last_seen
         this.updateDeviceLastSeen(device.id).catch((err) => {
             logger.error('Failed to update device last_seen', { deviceId: device.id, error: err.message });
+        });
+
+        // Evaluate alert rules (async, don't block response)
+        ruleEngineService.evaluate(liveEntry).catch((err) => {
+            logger.error('Failed to evaluate alert rules', { deviceCode: device.device_code, error: err.message });
         });
 
         logger.debug('Telemetry ingested', { deviceCode: device.device_code });

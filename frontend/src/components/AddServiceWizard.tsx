@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import SetupWizard, { WikiStep } from '@/components/SetupWizard';
-import { servicesApi, departmentsApi, usersApi } from '@/lib/api';
+import { servicesApi, departmentsApi, usersApi, alertRulesApi, escalationPoliciesApi } from '@/lib/api';
 import { toast } from 'sonner';
-import { Layers, Check, Search, User, Mail, UserCog, CheckCircle2, Activity, Wrench, Settings } from 'lucide-react';
+import { Layers, Check, Search, User, Mail, UserCog, CheckCircle2, Activity, Wrench, Settings, AlertTriangle, ArrowUp } from 'lucide-react';
+import AlertRulesStep, { AlertRuleRow, ActionType } from '@/components/AlertRulesStep';
+import EscalationPolicyStep, { EscalationLevel } from '@/components/EscalationPolicyStep';
 import { Input } from '@/components/ui/Input';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import PasswordRequirements, { usePasswordValidation } from '@/components/PasswordRequirements';
@@ -30,6 +32,8 @@ interface AddServiceWizardProps {
 const STEPS: WikiStep[] = [
     { id: 'TEMPLATE', label: 'Select Service' },
     { id: 'SUPERVISOR', label: 'Service Supervisor' },
+    { id: 'ALERT_RULES', label: 'Alert Rules' },
+    { id: 'ESCALATION', label: 'Escalation Policy' },
     { id: 'REVIEW', label: 'Review & Create' }
 ];
 
@@ -60,8 +64,15 @@ export default function AddServiceWizard({
     });
     const [createSupervisor, setCreateSupervisor] = useState(false);
 
+    // Step 3: Alert Rules Data
+    const [alertRules, setAlertRules] = useState<AlertRuleRow[]>([]);
+
+    // Step 4: Escalation Policies Data
+    const [escalationPolicies, setEscalationPolicies] = useState<EscalationLevel[]>([]);
+
     const { isValid: isPasswordValid } = usePasswordValidation(userData.password);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
 
     useEffect(() => {
         if (isOpen) {
@@ -74,6 +85,8 @@ export default function AddServiceWizard({
             setCreateSupervisor(false);
             setUserData({ full_name: '', email: '', password: '', confirmPassword: '' });
             setFieldErrors({});
+            setAlertRules([]);
+            setEscalationPolicies([]);
         }
     }, [isOpen]);
 
@@ -183,6 +196,71 @@ export default function AddServiceWizard({
                 } catch (userError: any) {
                     console.error("Supervisor user creation failed:", userError);
                     toast.error(`Service created, but supervisor account failed: ${userError.message}`);
+                }
+            }
+
+            // 3. Create Alert Rules if any configured
+            if (alertRules.length > 0) {
+                try {
+                    const rulesToCreate = alertRules
+                        .filter(rule => rule.metric && rule.threshold) // Only valid rules
+                        .map(rule => ({
+                            organization_id: organizationId,
+                            name: rule.name || `${rule.metric} Alert`,
+                            description: rule.description || `Alert when ${rule.metric} ${rule.operator} ${rule.threshold}`,
+                            condition: {
+                                metric: rule.metric,
+                                operator: rule.operator,
+                                threshold: isNaN(Number(rule.threshold)) ? rule.threshold : Number(rule.threshold),
+                                aggregation: rule.aggregation && rule.aggregation !== 'none' ? rule.aggregation : undefined,
+                                time_window: rule.timeWindow || undefined,
+                            },
+                            severity: rule.severity,
+                            is_active: true,
+                            service_id: newService.id,
+                            event_id: eventId,
+                            cooldown_seconds: rule.cooldownSeconds || 300,
+                            actions: rule.actions && rule.actions.length > 0 
+                                ? rule.actions.map((a: ActionType) => ({ type: a as 'alert' | 'email' | 'webhook' | 'escalate' | 'notification', config: {} }))
+                                : [{ type: 'alert' as const, config: {} }],
+                        }));
+
+                    if (rulesToCreate.length > 0) {
+                        await alertRulesApi.createBulk(rulesToCreate);
+                        console.log('[Service Wizard] Alert rules created:', rulesToCreate.length);
+                        toast.success(`${rulesToCreate.length} alert rule(s) configured.`);
+                    }
+                } catch (rulesError: any) {
+                    console.error('Failed to create alert rules:', rulesError);
+                    toast.error('Service created, but some alert rules failed to save.');
+                }
+            }
+
+            // 4. Create Escalation Policies if any configured
+            if (escalationPolicies.length > 0) {
+                try {
+                    const policiesToCreate = escalationPolicies
+                        .filter(policy => policy.autoAssignTo) // Only policies with assigned user
+                        .map(policy => ({
+                            organization_id: organizationId,
+                            event_id: eventId,
+                            service_id: newService.id,
+                            name: `Level ${policy.level} Escalation`,
+                            escalation_level: policy.level,
+                            escalation_delay_minutes: policy.delayMinutes,
+                            auto_assign_to: policy.autoAssignTo,
+                            notify_method: policy.notifyMethod,
+                            is_active: true,
+                        }));
+
+                    if (policiesToCreate.length > 0) {
+                        await escalationPoliciesApi.createBulk(policiesToCreate);
+                        console.log('[Service Wizard] Escalation policies created:', policiesToCreate.length);
+                        toast.success(`${policiesToCreate.length} escalation level(s) configured.`);
+                    }
+                } catch (escError: any) {
+                    console.error('Failed to create escalation policies:', escError);
+                    toast.error('Service created, but escalation policies failed to save.');
                 }
             }
 
@@ -392,6 +470,22 @@ export default function AddServiceWizard({
         </div>
     );
 
+    const renderAlertRulesStep = () => (
+        <AlertRulesStep
+            serviceTemplateId={selectedTemplate?.id || ''}
+            rules={alertRules}
+            onRulesChange={setAlertRules}
+        />
+    );
+
+    const renderEscalationStep = () => (
+        <EscalationPolicyStep
+            organizationId={organizationId}
+            policies={escalationPolicies}
+            onPoliciesChange={setEscalationPolicies}
+        />
+    );
+
     const renderReviewStep = () => (
         <div className="space-y-6">
             <h3 className="text-lg font-semibold">Review Details</h3>
@@ -442,6 +536,69 @@ export default function AddServiceWizard({
                 </div>
             </div>
 
+            {/* Alert Rules Summary */}
+            <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+                <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Alert Rules
+                </h4>
+                {alertRules.length > 0 ? (
+                    <div className="space-y-2">
+                        {alertRules.filter(r => r.metric && r.threshold).map((rule, index) => (
+                            <div key={rule.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-medium text-muted-foreground">#{index + 1}</span>
+                                    <span className="text-sm">{rule.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <code className="text-xs px-1.5 py-0.5 bg-muted rounded">
+                                        {rule.metric} {rule.operator} {rule.threshold}
+                                    </code>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                        rule.severity === 'CRITICAL' ? 'bg-red-500/10 text-red-600' :
+                                        rule.severity === 'HIGH' ? 'bg-orange-500/10 text-orange-600' :
+                                        rule.severity === 'MEDIUM' ? 'bg-yellow-500/10 text-yellow-600' :
+                                        'bg-blue-500/10 text-blue-600'
+                                    }`}>
+                                        {rule.severity}
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-sm text-muted-foreground italic">No alert rules configured</div>
+                )}
+            </div>
+
+            {/* Escalation Policies Summary */}
+            <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+                <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <ArrowUp className="w-4 h-4" />
+                    Escalation Policy
+                </h4>
+                {escalationPolicies.length > 0 ? (
+                    <div className="space-y-2">
+                        {escalationPolicies.filter(p => p.autoAssignTo).map((policy) => (
+                            <div key={policy.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-full bg-primary/10 border border-primary flex items-center justify-center text-xs font-bold text-primary">
+                                        {policy.level}
+                                    </span>
+                                    <span className="text-sm">Level {policy.level}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>Escalate after {policy.delayMinutes} min</span>
+                                    <span className="px-2 py-0.5 bg-muted rounded">{policy.notifyMethod}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-sm text-muted-foreground italic">No escalation policy configured</div>
+                )}
+            </div>
+
             {selectedTemplate?.description && (
                 <div className="bg-muted/30 border border-border rounded-xl p-6">
                     <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">Service Description</h4>
@@ -472,7 +629,9 @@ export default function AddServiceWizard({
                 >
                     {currentStep === 0 && renderTemplateStep()}
                     {currentStep === 1 && renderSupervisorStep()}
-                    {currentStep === 2 && renderReviewStep()}
+                    {currentStep === 2 && renderAlertRulesStep()}
+                    {currentStep === 3 && renderEscalationStep()}
+                    {currentStep === 4 && renderReviewStep()}
                 </SetupWizard>
             </div>
         </div>

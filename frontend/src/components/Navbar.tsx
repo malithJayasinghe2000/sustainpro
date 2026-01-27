@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { Sun, Moon, Bell, Clock, AlertTriangle, Info, XCircle, X, CheckCheck, Loader2, ExternalLink } from 'lucide-react';
+import { Sun, Moon, Bell, Clock, AlertTriangle, Info, XCircle, X, CheckCheck, Loader2, ExternalLink, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminApi, systemNotificationsApi, SystemNotification } from '@/lib/api';
+import { adminApi, systemNotificationsApi, SystemNotification, escalationsApi } from '@/lib/api';
 import UniversalCreator from './UniversalCreator';
 import { getFullImageUrl } from './ImageUpload';
 import { Plus, Activity, Cpu } from 'lucide-react';
@@ -40,6 +40,9 @@ export default function Navbar() {
     const [notificationsLoading, setNotificationsLoading] = useState(false);
     const [markingAllRead, setMarkingAllRead] = useState(false);
 
+    // Escalation badge state
+    const [escalationCount, setEscalationCount] = useState(0);
+
     // Format relative time
     const formatRelativeTime = (dateString: string) => {
         const date = new Date(dateString);
@@ -67,6 +70,9 @@ export default function Navbar() {
 
     // Fetch notifications from API
     const fetchNotifications = useCallback(async () => {
+        // Don't fetch if user is not authenticated yet
+        if (!user) return;
+        
         try {
             setNotificationsLoading(true);
             const response = await systemNotificationsApi.getAll({ limit: 10 });
@@ -77,7 +83,22 @@ export default function Navbar() {
         } finally {
             setNotificationsLoading(false);
         }
-    }, []);
+    }, [user]);
+
+    // Fetch escalation count for badge
+    const fetchEscalationCount = useCallback(async () => {
+        // Don't fetch if user is not authenticated yet
+        if (!user) return;
+        
+        try {
+            const response = await escalationsApi.getPendingCount();
+            if (response.success) {
+                setEscalationCount(response.data.count);
+            }
+        } catch (error) {
+            console.error('Failed to fetch escalation count:', error);
+        }
+    }, [user]);
 
     // Handle notification click - mark as read and navigate if action_url exists
     const handleNotificationClick = async (notification: SystemNotification) => {
@@ -119,13 +140,18 @@ export default function Navbar() {
         setMounted(true);
         // Fetch notifications on mount
         fetchNotifications();
-    }, [fetchNotifications]);
+        // Fetch escalation count on mount
+        fetchEscalationCount();
+    }, [fetchNotifications, fetchEscalationCount]);
 
     // Poll notifications every 30 seconds
     useEffect(() => {
-        const interval = setInterval(fetchNotifications, 30000);
+        const interval = setInterval(() => {
+            fetchNotifications();
+            fetchEscalationCount();
+        }, 30000);
         return () => clearInterval(interval);
-    }, [fetchNotifications]);
+    }, [fetchNotifications, fetchEscalationCount]);
 
     // Separate effect for the timer that depends on the timezone
     const effectiveTimezone = user?.timezone || settings?.default_timezone || 'Asia/Dubai';
@@ -363,6 +389,20 @@ export default function Navbar() {
                             </div>
 
                             <div className="flex items-center gap-1 border-l border-border pl-3 ml-1">
+                                {/* Escalations Badge */}
+                                <button
+                                    onClick={() => router.push('/escalations')}
+                                    className="relative p-2 text-muted-foreground hover:bg-muted hover:text-foreground rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    title="Escalations"
+                                >
+                                    <Zap className="w-5 h-5" />
+                                    {escalationCount > 0 && (
+                                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1 border-2 border-card">
+                                            {escalationCount > 99 ? '99+' : escalationCount}
+                                        </span>
+                                    )}
+                                </button>
+
                                 {/* Alerts Dropdown */}
                                 <div className="relative" ref={alertsRef}>
                                     <button

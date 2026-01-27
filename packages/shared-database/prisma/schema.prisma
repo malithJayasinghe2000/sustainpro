@@ -9,37 +9,72 @@ datasource db {
 }
 
 model sps_alert_rules {
-  id                String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organization_id   String            @db.Uuid
-  name              String            @db.VarChar(100)
-  description       String?
-  condition         Json
-  severity          String?           @default("WARNING") @db.VarChar(20)
-  is_active         Boolean?          @default(true)
-  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime?         @default(now()) @db.Timestamptz(6)
-  sps_organizations sps_organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  sps_alerts        sps_alerts[]
+  id                  String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organization_id     String            @db.Uuid
+  name                String            @db.VarChar(255)
+  description         String?
+  device_type         String?           @db.VarChar(100)
+  condition           Json
+  actions             Json?             @default("[]")
+  severity            String            @db.VarChar(50)
+  is_active           Boolean?          @default(true)
+  priority            Int?              @default(100)
+  cooldown_seconds    Int?              @default(300)
+  last_triggered_at   DateTime?         @db.Timestamptz(6)
+  trigger_count       Int?              @default(0)
+  event_id            String?           @db.Uuid
+  service_id          String?           @db.Uuid
+  created_at          DateTime?         @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?         @default(now()) @db.Timestamptz(6)
+  sps_organizations   sps_organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_events          sps_events?       @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_department_services sps_department_services? @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_alerts          sps_alerts[]
+
+  @@index([organization_id], map: "idx_alert_rules_org")
+  @@index([service_id], map: "idx_alert_rules_service")
+  @@index([event_id], map: "idx_alert_rules_event")
 }
 
 model sps_alerts {
-  id                String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  rule_id           String?           @db.Uuid
-  organization_id   String            @db.Uuid
-  device_id         Int?
-  message           String
-  severity          String?           @default("WARNING") @db.VarChar(20)
-  status            String?           @default("ACTIVE") @db.VarChar(20)
-  acknowledged_by   String?           @db.Uuid
-  acknowledged_at   DateTime?         @db.Timestamptz(6)
-  resolved_at       DateTime?         @db.Timestamptz(6)
-  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
-  sps_users         sps_users?        @relation(fields: [acknowledged_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  sps_devices       sps_devices?      @relation(fields: [device_id], references: [id], onUpdate: NoAction)
-  sps_organizations sps_organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  sps_alert_rules   sps_alert_rules?  @relation(fields: [rule_id], references: [id], onUpdate: NoAction)
+  id                      String                   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  rule_id                 String?                  @db.Uuid
+  organization_id         String                   @db.Uuid
+  event_id                String?                  @db.Uuid
+  department_id           String?                  @db.Uuid
+  service_id              String?                  @db.Uuid
+  device_id               Int?
+  message                 String
+  severity                String?                  @default("WARNING") @db.VarChar(20)
+  status                  String?                  @default("ACTIVE") @db.VarChar(20)
+  value                   Json?                    @default("{}")
+  threshold               Json?                    @default("{}")
+  acknowledged_by         String?                  @db.Uuid
+  acknowledged_at         DateTime?                @db.Timestamptz(6)
+  resolved_by             String?                  @db.Uuid
+  resolved_at             DateTime?                @db.Timestamptz(6)
+  escalation_level        Int?                     @default(0)
+  auto_assigned_to        String?                  @db.Uuid
+  metadata                Json?                    @default("{}")
+  created_at              DateTime?                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                @default(now()) @db.Timestamptz(6)
+  alert_acknowledged_by   sps_users?               @relation("alert_acknowledged_by", fields: [acknowledged_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  alert_resolved_by       sps_users?               @relation("alert_resolved_by", fields: [resolved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  alert_assigned_to       sps_users?               @relation("alert_assigned_to", fields: [auto_assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sps_devices             sps_devices?             @relation(fields: [device_id], references: [id], onUpdate: NoAction)
+  sps_organizations       sps_organizations        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_events              sps_events?              @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_departments         sps_departments?         @relation(fields: [department_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_department_services sps_department_services? @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_alert_rules         sps_alert_rules?         @relation(fields: [rule_id], references: [id], onUpdate: NoAction)
+  sps_escalations         sps_escalations[]
 
   @@index([organization_id], map: "idx_alerts_org")
+  @@index([event_id], map: "idx_alerts_event")
+  @@index([service_id], map: "idx_alerts_service")
+  @@index([status], map: "idx_alerts_status")
+  @@index([severity], map: "idx_alerts_severity")
+  @@index([created_at], map: "idx_alerts_created")
 }
 
 // =============================================
@@ -140,20 +175,24 @@ model sps_dashboard_templates {
 }
 
 model sps_department_services {
-  id                     String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  department_id          String                 @db.Uuid
-  service_template_id    String                 @db.Uuid
-  name                   String?                @db.VarChar(100)
-  config                 Json?                  @default("{}")
-  status                 String?                @default("ACTIVE") @db.VarChar(50)
-  assigned_supervisor_id String?                @db.Uuid
-  created_at             DateTime?              @default(now()) @db.Timestamptz(6)
-  updated_at             DateTime?              @default(now()) @db.Timestamptz(6)
-  sps_users              sps_users?             @relation(fields: [assigned_supervisor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  sps_departments        sps_departments        @relation(fields: [department_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  sps_service_templates  sps_service_templates  @relation(fields: [service_template_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  sps_devices            sps_devices[]
-  sps_role_assignments   sps_role_assignments[]
+  id                      String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  department_id           String                    @db.Uuid
+  service_template_id     String                    @db.Uuid
+  name                    String?                   @db.VarChar(100)
+  config                  Json?                     @default("{}")
+  status                  String?                   @default("ACTIVE") @db.VarChar(50)
+  assigned_supervisor_id  String?                   @db.Uuid
+  created_at              DateTime?                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                 @default(now()) @db.Timestamptz(6)
+  sps_users               sps_users?                @relation(fields: [assigned_supervisor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sps_departments         sps_departments           @relation(fields: [department_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_service_templates   sps_service_templates     @relation(fields: [service_template_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sps_devices             sps_devices[]
+  sps_role_assignments    sps_role_assignments[]
+  sps_alert_rules         sps_alert_rules[]
+  sps_alerts              sps_alerts[]
+  sps_escalation_policies sps_escalation_policies[]
+  sps_escalations         sps_escalations[]
 
   @@index([department_id], map: "idx_dept_services_dept")
 }
@@ -197,6 +236,8 @@ model sps_departments {
   sps_department_templates sps_department_templates? @relation(fields: [department_template_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   spsOrganizations         sps_organizations?        @relation(fields: [sps_organizationsId], references: [id])
   sps_organizationsId      String?                   @db.Uuid
+  sps_alerts               sps_alerts[]
+  sps_escalations          sps_escalations[]
 
   @@index([event_id], map: "idx_depts_event")
   @@index([department_template_id], map: "idx_depts_template")
@@ -226,6 +267,7 @@ model sps_devices {
   status                  String?                  @default("OFFLINE") @db.VarChar(50)
   last_seen               DateTime?                @db.Timestamptz(6)
   metadata                Json?                    @default("{}")
+  host                    String?                  @db.VarChar(255)
   created_at              DateTime?                @default(now()) @db.Timestamptz(6)
   updated_at              DateTime?                @default(now()) @db.Timestamptz(6)
   sps_alerts              sps_alerts[]
@@ -240,33 +282,112 @@ model sps_devices {
 }
 
 model sps_events {
-  id                   String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organization_id      String                 @db.Uuid
-  name                 String                 @db.VarChar(100)
-  code                 String?                @unique @db.VarChar(50)
-  location             String?                @db.VarChar(255)
-  start_date           DateTime?              @db.Timestamptz(6)
-  end_date             DateTime?              @db.Timestamptz(6)
-  status               String?                @default("PLANNING") @db.VarChar(50)
-  description          String?
-  event_type           String?                @db.VarChar(50)
-  image_url            String?
-  coordinates          Json?                  @default("{}")
-  end_requested        Boolean?               @default(false)
-  end_requested_by     String?                @db.Uuid
-  end_requested_at     DateTime?              @db.Timestamptz(6)
-  delete_requested     Boolean?               @default(false)
-  delete_requested_by  String?                @db.Uuid
-  delete_requested_at  DateTime?              @db.Timestamptz(6)
-  created_at           DateTime?              @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime?              @default(now()) @db.Timestamptz(6)
-  sps_departments      sps_departments[]
-  sps_devices          sps_devices[]
-  sps_organizations    sps_organizations      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  sps_role_assignments sps_role_assignments[]
+  id                      String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organization_id         String                    @db.Uuid
+  name                    String                    @db.VarChar(100)
+  code                    String?                   @unique @db.VarChar(50)
+  location                String?                   @db.VarChar(255)
+  start_date              DateTime?                 @db.Timestamptz(6)
+  end_date                DateTime?                 @db.Timestamptz(6)
+  status                  String?                   @default("PLANNING") @db.VarChar(50)
+  description             String?
+  event_type              String?                   @db.VarChar(50)
+  image_url               String?
+  coordinates             Json?                     @default("{}")
+  end_requested           Boolean?                  @default(false)
+  end_requested_by        String?                   @db.Uuid
+  end_requested_at        DateTime?                 @db.Timestamptz(6)
+  delete_requested        Boolean?                  @default(false)
+  delete_requested_by     String?                   @db.Uuid
+  delete_requested_at     DateTime?                 @db.Timestamptz(6)
+  created_at              DateTime?                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                 @default(now()) @db.Timestamptz(6)
+  sps_departments         sps_departments[]
+  sps_devices             sps_devices[]
+  sps_organizations       sps_organizations         @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_role_assignments    sps_role_assignments[]
+  sps_alert_rules         sps_alert_rules[]
+  sps_alerts              sps_alerts[]
+  sps_escalation_policies sps_escalation_policies[]
+  sps_escalations         sps_escalations[]
 
   @@index([organization_id], map: "idx_events_org")
   @@index([status], map: "idx_events_status")
+}
+
+// =============================================
+// ESCALATION POLICIES
+// =============================================
+// Defines escalation chains for alerts at service, event, or organization level
+model sps_escalation_policies {
+  id                      String                   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organization_id         String                   @db.Uuid
+  event_id                String?                  @db.Uuid
+  service_id              String?                  @db.Uuid
+  name                    String                   @db.VarChar(100)
+  description             String?
+  escalation_level        Int                      @default(1) // 1 = first level, 2 = second level, etc.
+  escalation_delay_minutes Int                     @default(15) // Time before escalating to next level
+  auto_assign_to          String?                  @db.Uuid // User to auto-assign alerts to
+  notify_method           String?                  @default("email") @db.VarChar(50) // email, sms, push, all
+  is_active               Boolean?                 @default(true)
+  created_at              DateTime?                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                @default(now()) @db.Timestamptz(6)
+  sps_organizations       sps_organizations        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_events              sps_events?              @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_department_services sps_department_services? @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_users               sps_users?               @relation(fields: [auto_assign_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organization_id], map: "idx_escalation_org")
+  @@index([event_id], map: "idx_escalation_event")
+  @@index([service_id], map: "idx_escalation_service")
+  @@index([escalation_level], map: "idx_escalation_level")
+}
+
+// =============================================
+// ESCALATIONS
+// =============================================
+// Tracks escalated alerts and tasks for assigned users
+model sps_escalations {
+  id                      String                   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organization_id         String                   @db.Uuid
+  event_id                String?                  @db.Uuid
+  department_id           String?                  @db.Uuid
+  service_id              String?                  @db.Uuid
+  alert_id                String?                  @db.Uuid
+  task_id                 String?                  @db.Uuid
+  reason                  String                   @db.VarChar(50) // THRESHOLD_BREACH, TIMEOUT, MANUAL, etc.
+  status                  String?                  @default("OPEN") @db.VarChar(20) // OPEN, ACKNOWLEDGED, RESOLVED
+  severity                String?                  @default("MEDIUM") @db.VarChar(20) // CRITICAL, HIGH, MEDIUM, LOW
+  assigned_to             String?                  @db.Uuid
+  escalated_at            DateTime?                @default(now()) @db.Timestamptz(6)
+  acknowledged_at         DateTime?                @db.Timestamptz(6)
+  acknowledged_by         String?                  @db.Uuid
+  resolved_at             DateTime?                @db.Timestamptz(6)
+  resolved_by             String?                  @db.Uuid
+  resolution_notes        String?
+  evidence_urls           Json?                    @default("[]") // Array of image URLs for evidence
+  metadata                Json?                    @default("{}")
+  created_at              DateTime?                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                @default(now()) @db.Timestamptz(6)
+  
+  sps_organizations       sps_organizations        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_events              sps_events?              @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_departments         sps_departments?         @relation(fields: [department_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_department_services sps_department_services? @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_alerts              sps_alerts?              @relation(fields: [alert_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sps_tasks               sps_tasks?               @relation(fields: [task_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  assigned_user           sps_users?               @relation("escalation_assigned_to", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  acknowledged_user       sps_users?               @relation("escalation_acknowledged_by", fields: [acknowledged_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resolved_user           sps_users?               @relation("escalation_resolved_by", fields: [resolved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organization_id], map: "idx_escalations_org")
+  @@index([event_id], map: "idx_escalations_event")
+  @@index([department_id], map: "idx_escalations_dept")
+  @@index([service_id], map: "idx_escalations_service")
+  @@index([alert_id], map: "idx_escalations_alert")
+  @@index([status], map: "idx_escalations_status")
+  @@index([assigned_to], map: "idx_escalations_assigned")
 }
 
 model sps_organizations {
@@ -296,6 +417,8 @@ model sps_organizations {
   updated_at                DateTime?                   @default(now()) @db.Timestamptz(6)
   sps_alert_rules           sps_alert_rules[]
   sps_alerts                sps_alerts[]
+  sps_escalation_policies   sps_escalation_policies[]
+  sps_escalations           sps_escalations[]
   sps_audit_logs            sps_audit_logs[]
   sps_dashboard_templates   sps_dashboard_templates[]
   sps_department_templates  sps_department_templates[]
@@ -960,6 +1083,7 @@ model sps_tasks {
   created_at                                 DateTime?           @default(now()) @db.Timestamptz(6)
   updated_at                                 DateTime?           @default(now()) @db.Timestamptz(6)
   sps_task_evidence                          sps_task_evidence[]
+  sps_escalations                            sps_escalations[]
   sps_users_sps_tasks_assigned_toTosps_users sps_users?          @relation("sps_tasks_assigned_toTosps_users", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
   sps_users_sps_tasks_created_byTosps_users  sps_users?          @relation("sps_tasks_created_byTosps_users", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   sps_departments                            sps_departments?    @relation(fields: [department_id], references: [id], onUpdate: NoAction)
@@ -969,17 +1093,18 @@ model sps_tasks {
 }
 
 model sps_telemetry {
-  id              Int          @id @default(autoincrement())
+  id              Int          @default(autoincrement())
   device_id       Int?
   device_code     String       @db.VarChar(50)
   organization_id String       @db.Uuid
   event_id        String?      @db.Uuid
   service_id      String?      @db.Uuid
   data            Json
-  recorded_at     DateTime?    @default(now()) @db.Timestamptz(6)
+  recorded_at     DateTime     @default(now()) @db.Timestamptz(6)
   created_at      DateTime?    @default(now()) @db.Timestamptz(6)
   sps_devices     sps_devices? @relation(fields: [device_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@id([id, recorded_at])
   @@index([device_id], map: "idx_telemetry_device")
   @@index([organization_id], map: "idx_telemetry_org")
   @@index([recorded_at(sort: Desc)], map: "idx_telemetry_recorded")
@@ -1011,7 +1136,15 @@ model sps_users {
   password_changed_at                        DateTime?                 @db.Timestamptz(6)
   created_at                                 DateTime?                 @default(now()) @db.Timestamptz(6)
   updated_at                                 DateTime?                 @default(now()) @db.Timestamptz(6)
-  sps_alerts                                 sps_alerts[]
+  // Alert relations
+  sps_alerts_acknowledged                    sps_alerts[]              @relation("alert_acknowledged_by")
+  sps_alerts_resolved                        sps_alerts[]              @relation("alert_resolved_by")
+  sps_alerts_assigned                        sps_alerts[]              @relation("alert_assigned_to")
+  // Escalation relations
+  sps_escalations_assigned                   sps_escalations[]         @relation("escalation_assigned_to")
+  sps_escalations_acknowledged               sps_escalations[]         @relation("escalation_acknowledged_by")
+  sps_escalations_resolved                   sps_escalations[]         @relation("escalation_resolved_by")
+  sps_escalation_policies                    sps_escalation_policies[]
   sps_audit_logs                             sps_audit_logs[]
   sps_dashboard_templates                    sps_dashboard_templates[]
   sps_department_services                    sps_department_services[]

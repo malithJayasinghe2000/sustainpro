@@ -7,7 +7,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import Navbar from '@/components/Navbar';
 import MaintenancePage from '@/components/MaintenancePage';
 import { getRoleLabel, hasRole, isAdmin, ROLES } from '@/lib/roles';
-import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User, ScrollText } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Settings, LogOut, ChevronLeft, ChevronRight, Menu, Bell, Search, Plus, Filter, LayoutTemplate, Calendar, Building2, Cpu, Database, Network, Activity, Layers, Smartphone, FileText, Component, Shield, User, ScrollText, AlertTriangle, Zap } from 'lucide-react';
 import { applyOrganizationTheme } from '@/lib/theme-utils';
 import { getPrimaryColor } from '@/lib/theme-parser';
 
@@ -105,6 +105,8 @@ export default function DashboardLayout({ children }: SidebarProps) {
         { name: 'System Settings', icon: Settings, path: '/admin/settings' },
         { name: 'Access Control (RBAC)', icon: Shield, path: '/admin/rbac' },
         { name: 'Admin Settings', icon: Shield, path: '/admin/platform-settings' },
+        { name: 'Alerts', icon: AlertTriangle, path: '/alerts' },
+        { name: 'Escalations', icon: Zap, path: '/escalations' },
         { name: 'Audit Logs', icon: ScrollText, path: '/audit-logs' },
     ];
 
@@ -135,6 +137,8 @@ export default function DashboardLayout({ children }: SidebarProps) {
         { name: 'My Devices', icon: Component, path: '/devices', requiredPermission: 'devices.view' },
         { name: 'Reports', icon: FileText, path: '/reports', requiredPermission: 'reports.view' },
         { name: 'Direct Profile', icon: User, path: '/profile' },
+        { name: 'Alerts', icon: AlertTriangle, path: '/alerts' },
+        { name: 'Escalations', icon: Zap, path: '/escalations' },
         { name: 'Org Settings', icon: Settings, path: '/organization', requiredPermission: 'settings.manage' },
         {
             name: 'User Management',
