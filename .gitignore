@@ -63,3 +63,8 @@ backend/uploads/*
 
 # Brain/artifacts (local only)
 .gemini/
+
+# Allow IoT certificates
+!services/iot-service/src/certificates/*.pem
+!services/iot-service/src/certificates/*.key
+!services/iot-service/src/certificates/*.crt
