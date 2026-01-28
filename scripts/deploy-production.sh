@@ -37,12 +37,24 @@ sleep 10
 echo "Configuring TimescaleDB..."
 docker compose -f $COMPOSE_FILE exec -T postgres sh -c "grep -q \"shared_preload_libraries = 'timescaledb'\" /var/lib/postgresql/data/pgdata/postgresql.conf || (echo \"shared_preload_libraries = 'timescaledb'\" >> /var/lib/postgresql/data/pgdata/postgresql.conf && echo 'Configuration updated, restarting...' && exit 10)" || docker compose -f $COMPOSE_FILE restart postgres
 
-# Wait for restart if needed
-sleep 5
+# Wait for database to be ready (Robust Check)
+echo "Waiting for database to be fully ready..."
+MAX_RETRIES=30
+count=0
+until docker compose -f $COMPOSE_FILE exec -T postgres psql -U sustainpro -d sustainpro -c "SELECT 1" > /dev/null 2>&1; do
+  echo -n "."
+  sleep 2
+  count=$((count+1))
+  if [ $count -ge $MAX_RETRIES ]; then
+    echo "Error: Database took too long to start."
+    exit 1
+  fi
+done
+echo "Database is ready."
 
-# Enable Extension and Hypertable
-echo "Enabling Hypertable and UUID..."
-docker compose -f $COMPOSE_FILE exec -T postgres psql -U sustainpro -d sustainpro -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE; SELECT create_hypertable('sps_telemetry', 'recorded_at', migrate_data => true, if_not_exists => true);" || echo -e "${RED}Warning: Hypertable setup failed (might already exist), continuing...${NC}"
+# Enable Extensions (Mandatory)
+echo "Enabling UUID and TimescaleDB extensions..."
+docker compose -f $COMPOSE_FILE exec -T postgres psql -U sustainpro -d sustainpro -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE; SELECT create_hypertable('sps_telemetry', 'recorded_at', migrate_data => true, if_not_exists => true);"
 
 echo -e "${YELLOW}Step 5/6: Running database sync and seed...${NC}"
 # Use db:deploy:prod which runs: prisma generate + db push + seed (compiled)
