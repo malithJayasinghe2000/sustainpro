@@ -9,6 +9,7 @@ import { setupSwagger } from '@sustainpro/shared-swagger';
 import notificationRoutes from './routes/notification.routes';
 import escalationRoutes from './routes/escalation.routes';
 import alertRoutes from './routes/alert.routes';
+import emailRoutes from './routes/email.routes';
 
 const logger = createLogger({ service: 'notification-service' });
 
@@ -59,6 +60,7 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/escalations', escalationRoutes);
 app.use('/api/v1/alerts', alertRoutes);
+app.use('/api/v1/email', emailRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

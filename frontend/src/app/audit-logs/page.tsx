@@ -573,7 +573,7 @@ export default function AuditLogsPage() {
                                             selectedLog.status === 'SUCCESS' ? 'text-emerald-600' :
                                                 selectedLog.status === 'FAILURE' ? 'text-rose-600' : 'text-amber-600'
                                         )}>
-                                            {getStatusBadge(selectedLog.status).icon && (
+                                            {getStatusBadge(selectedLog.status).icon !== undefined && (
                                                 <span><CheckCircle2 className="w-4 h-4" /></span>
                                             )}
                                             {selectedLog.status}

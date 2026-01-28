@@ -53,7 +53,7 @@ export async function getPasswordPolicies(): Promise<PasswordPolicy> {
         if (response.data?.success && response.data?.policies) {
             cachedPolicies = response.data.policies;
             cacheTime = Date.now();
-            return cachedPolicies;
+            return cachedPolicies as PasswordPolicy;
         }
     } catch (error) {
         console.warn('Failed to fetch password policies, using defaults');

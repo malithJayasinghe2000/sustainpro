@@ -2,10 +2,10 @@ import express from 'express';
 import path from 'path';
 import os from 'os';
 import { config } from './config';
-import { 
-    authenticateToken, 
-    errorHandler, 
-    notFoundHandler, 
+import {
+    authenticateToken,
+    errorHandler,
+    notFoundHandler,
     requireRole,
     setApiSecurityConfigFetcher,
     setMaintenanceSettingsFetcher,
@@ -33,6 +33,7 @@ import auditLogRoutes from './routes/audit-log.routes';
 import systemNotificationRoutes from './routes/system-notification.routes';
 import alertRuleRoutes from './routes/alert-rule.routes';
 import escalationPolicyRoutes from './routes/escalation-policy.routes';
+import escalationRoutes from './routes/escalation.routes';
 import alertRoutes from './routes/alert.routes';
 import taskRoutes from './routes/task.routes';
 import { getS3Status, isS3Configured } from './storage/s3';
@@ -157,6 +158,7 @@ app.use('/api/v1/audit-logs', authenticateToken, auditLogRoutes);
 app.use('/api/v1/notifications', authenticateToken, systemNotificationRoutes);
 app.use('/api/v1/alert-rules', authenticateToken, alertRuleRoutes);
 app.use('/api/v1/escalation-policies', authenticateToken, escalationPolicyRoutes);
+app.use('/api/v1/escalations', authenticateToken, escalationRoutes);
 app.use('/api/v1/alerts', authenticateToken, alertRoutes);
 app.use('/api/v1/tasks', authenticateToken, taskRoutes);
 
@@ -172,7 +174,7 @@ app.get('/api/v1/admin/storage-status', authenticateToken, requireRole('SUPER_AD
             data: {
                 provider: s3Status.configured ? 's3' : 'local',
                 s3: s3Status,
-                message: s3Status.configured 
+                message: s3Status.configured
                     ? (s3Status.connected ? 'S3 storage is active and connected' : `S3 configured but not connected: ${s3Status.error}`)
                     : 'Using local storage (S3 not configured)',
             },

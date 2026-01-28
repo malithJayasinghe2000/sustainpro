@@ -26,7 +26,22 @@ import {
     X,
     FileUp,
     ExternalLink,
+    Building2,
+    Calendar,
+    Layers,
+    Settings,
+    Smartphone,
+    Download
 } from 'lucide-react';
+import { RichSelect } from '@/components/ui/RichSelect';
+import {
+    organizationsApi,
+    eventsApi,
+    departmentsApi,
+    departmentServicesApi,
+    uploadApi,
+    getImageUrl,
+} from '@/lib/api';
 import toast, { Toaster } from 'react-hot-toast';
 
 interface Pagination {
@@ -110,6 +125,199 @@ export default function EscalationsPage() {
         return roles.some((r: any) => ['ORG_ADMIN', 'EVENT_MANAGER', 'DEPT_HEAD'].includes(r.role));
     };
 
+    const [isExporting, setIsExporting] = useState(false);
+
+    // Cascading Filter States
+    const [selectedOrg, setSelectedOrg] = useState<string>('ALL');
+    const [selectedEvent, setSelectedEvent] = useState<string>('ALL');
+    const [selectedDept, setSelectedDept] = useState<string>('ALL');
+    const [selectedService, setSelectedService] = useState<string>('ALL');
+    const [selectedDevice, setSelectedDevice] = useState<string>('ALL');
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
+
+    // Options States
+    const [orgOptions, setOrgOptions] = useState<{ value: string; label: string }[]>([]);
+    const [eventOptions, setEventOptions] = useState<{ value: string; label: string }[]>([]);
+    const [deptOptions, setDeptOptions] = useState<{ value: string; label: string }[]>([]);
+    const [serviceOptions, setServiceOptions] = useState<{ value: string; label: string }[]>([]);
+    const [deviceOptions, setDeviceOptions] = useState<{ value: string; label: string }[]>([]);
+
+    // Loading States for Dropdowns
+    const [loadingOrgs, setLoadingOrgs] = useState(false);
+    const [loadingEvents, setLoadingEvents] = useState(false);
+    const [loadingDepts, setLoadingDepts] = useState(false);
+    const [loadingServices, setLoadingServices] = useState(false);
+    const [loadingDevices, setLoadingDevices] = useState(false);
+
+    // Initial Load & Role Restrictions
+    useEffect(() => {
+        const loadInitialData = async () => {
+            if (!user) return;
+
+            setLoadingOrgs(true);
+            try {
+                // Determine restrictions based on role
+                let restrictedOrgId: string | undefined;
+                let restrictedEventId: string | undefined;
+
+                if (!isSuperAdmin) {
+                    const orgAdminRole = user.roles.find(r => r.role === 'ORG_ADMIN');
+                    const eventManagerRole = user.roles.find(r => r.role === 'EVENT_MANAGER');
+
+                    if (orgAdminRole?.org_id) {
+                        restrictedOrgId = orgAdminRole.org_id;
+                    } else if (eventManagerRole) {
+                        if (eventManagerRole.org_id) restrictedOrgId = eventManagerRole.org_id;
+                        if (eventManagerRole.event_id) restrictedEventId = eventManagerRole.event_id;
+                    } else if (user.organization_id) {
+                        restrictedOrgId = user.organization_id;
+                    }
+                }
+
+                // Fetch Organizations
+                let orgsData = [];
+                if (isSuperAdmin) {
+                    const response = await organizationsApi.getAll({ limit: 100 });
+                    orgsData = response.data || [];
+                } else if (restrictedOrgId) {
+                    const org = await organizationsApi.getById(restrictedOrgId);
+                    if (org && org.data) orgsData = [org.data];
+                    else if (org) orgsData = [org];
+                }
+
+                setOrgOptions([
+                    { value: 'ALL', label: 'All Organizations' },
+                    ...orgsData.map((o: any) => ({ value: o.id, label: o.name }))
+                ]);
+
+                // Apply restrictions
+                if (restrictedOrgId) setSelectedOrg(restrictedOrgId);
+                if (restrictedEventId) setSelectedEvent(restrictedEventId);
+
+            } catch (err) {
+                console.error("Failed to load initial filter data", err);
+            } finally {
+                setLoadingOrgs(false);
+            }
+        };
+
+        loadInitialData();
+    }, [user, isSuperAdmin]);
+
+    // Cascade 1: Org -> Events
+    useEffect(() => {
+        const loadEvents = async () => {
+            if (selectedOrg === 'ALL') {
+                setEventOptions([]);
+                setEventOptions([{ value: 'ALL', label: 'All Events' }]); // default
+                if (selectedEvent !== 'ALL') setSelectedEvent('ALL');
+                return;
+            }
+
+            setLoadingEvents(true);
+            try {
+                const data = await eventsApi.getByOrg(selectedOrg);
+                setEventOptions([
+                    { value: 'ALL', label: 'All Events' },
+                    ...(Array.isArray(data) ? data : []).map((e: any) => ({ value: e.id, label: e.name }))
+                ]);
+            } catch (err) {
+                console.error(err);
+                setEventOptions([{ value: 'ALL', label: 'All Events' }]);
+            } finally {
+                setLoadingEvents(false);
+            }
+        };
+        loadEvents();
+    }, [selectedOrg]);
+
+    // Cascade 2: Event -> Departments
+    useEffect(() => {
+        const loadDepts = async () => {
+            if (selectedEvent === 'ALL') {
+                setDeptOptions([{ value: 'ALL', label: 'All Departments' }]);
+                if (selectedDept !== 'ALL') setSelectedDept('ALL');
+                return;
+            }
+
+            setLoadingDepts(true);
+            try {
+                const data = await departmentsApi.getByEvent(selectedEvent);
+                setDeptOptions([
+                    { value: 'ALL', label: 'All Departments' },
+                    ...(Array.isArray(data) ? data : []).map((d: any) => ({ value: d.id, label: d.name }))
+                ]);
+            } catch (err) {
+                console.error(err);
+                setDeptOptions([{ value: 'ALL', label: 'All Departments' }]);
+            } finally {
+                setLoadingDepts(false);
+            }
+        };
+        loadDepts();
+    }, [selectedEvent]);
+
+    // Cascade 3: Department -> Services
+    useEffect(() => {
+        const loadServices = async () => {
+            if (selectedDept === 'ALL') {
+                setServiceOptions([{ value: 'ALL', label: 'All Services' }]);
+                if (selectedService !== 'ALL') setSelectedService('ALL');
+                return;
+            }
+
+            setLoadingServices(true);
+            try {
+                const response = await departmentsApi.getServices(selectedDept);
+                const services = response.data || [];
+                setServiceOptions([
+                    { value: 'ALL', label: 'All Services' },
+                    ...services.map((s: any) => ({
+                        value: s.id,
+                        label: s.service_template?.name || s.name || 'Unnamed Service'
+                    }))
+                ]);
+            } catch (err) {
+                console.error(err);
+                setServiceOptions([{ value: 'ALL', label: 'All Services' }]);
+            } finally {
+                setLoadingServices(false);
+            }
+        };
+        loadServices();
+    }, [selectedDept]);
+
+    // Cascade 4: Service -> Devices
+    useEffect(() => {
+        const loadDevices = async () => {
+            if (selectedService === 'ALL') {
+                setDeviceOptions([{ value: 'ALL', label: 'All Devices' }]);
+                if (selectedDevice !== 'ALL') setSelectedDevice('ALL');
+                return;
+            }
+
+            setLoadingDevices(true);
+            try {
+                const response = await departmentServicesApi.getDevices(selectedService, { limit: 100 });
+                const devices = response.data || [];
+                setDeviceOptions([
+                    { value: 'ALL', label: 'All Devices' },
+                    ...devices.map((d: any) => ({
+                        value: d.id.toString(),
+                        label: d.name
+                    }))
+                ]);
+            } catch (err) {
+                console.error(err);
+                setDeviceOptions([{ value: 'ALL', label: 'All Devices' }]);
+            } finally {
+                setLoadingDevices(false);
+            }
+        };
+        loadDevices();
+    }, [selectedService]);
+
     const fetchEscalations = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -120,12 +328,16 @@ export default function EscalationsPage() {
                 limit: pagination.limit,
             };
 
-            if (statusFilter) {
-                params.status = statusFilter;
-            }
-            if (severityFilter) {
-                params.severity = severityFilter;
-            }
+            if (statusFilter) params.status = statusFilter;
+            if (severityFilter) params.severity = severityFilter;
+            if (selectedOrg !== 'ALL') params.organization_id = selectedOrg;
+            if (selectedEvent !== 'ALL') params.event_id = selectedEvent;
+            if (selectedDept !== 'ALL') params.department_id = selectedDept;
+            if (selectedService !== 'ALL') params.service_id = selectedService;
+            if (selectedDevice !== 'ALL') params.device_id = selectedDevice;
+            if (startDate) params.from_date = startDate;
+            if (endDate) params.to_date = endDate;
+
 
             let response;
             if (viewMode === 'my') {
@@ -147,7 +359,7 @@ export default function EscalationsPage() {
         } finally {
             setLoading(false);
         }
-    }, [pagination.page, pagination.limit, statusFilter, severityFilter, viewMode]);
+    }, [pagination.page, pagination.limit, statusFilter, severityFilter, viewMode, selectedOrg, selectedEvent, selectedDept, selectedService, selectedDevice, startDate, endDate]);
 
     useEffect(() => {
         fetchEscalations();
@@ -156,7 +368,64 @@ export default function EscalationsPage() {
     // Reset page when filters change
     useEffect(() => {
         setPagination(prev => ({ ...prev, page: 1 }));
-    }, [statusFilter, severityFilter, viewMode]);
+    }, [statusFilter, severityFilter, viewMode, selectedOrg, selectedEvent, selectedDept, selectedService, selectedDevice, startDate, endDate]);
+
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            const params: any = {
+                page: 1, limit: 10000
+            };
+            if (statusFilter) params.status = statusFilter;
+            if (severityFilter) params.severity = severityFilter;
+            if (selectedOrg !== 'ALL') params.organization_id = selectedOrg;
+            if (selectedEvent !== 'ALL') params.event_id = selectedEvent;
+            if (selectedDept !== 'ALL') params.department_id = selectedDept;
+            if (selectedService !== 'ALL') params.service_id = selectedService;
+            if (selectedDevice !== 'ALL') params.device_id = selectedDevice;
+            if (startDate) params.from_date = startDate;
+            if (endDate) params.to_date = endDate;
+
+            const response = await escalationsApi.getAll(params);
+
+            if (response.success && response.data.length > 0) {
+                const headers = ['ID', 'Escalated At', 'Severity', 'Status', 'Reason', 'Message', 'Assigned To', 'Organization', 'Event'];
+                const csvContent = [
+                    headers.join(','),
+                    ...response.data.map((esc: any) => [
+                        esc.id,
+                        `"${new Date(esc.escalated_at).toLocaleString()}"`,
+                        esc.severity,
+                        esc.status,
+                        `"${esc.reason || ''}"`,
+                        `"${esc.sps_alerts?.message?.replace(/"/g, '""') || ''}"`,
+                        `"${esc.assigned_user?.full_name || ''}"`,
+                        `"${esc.sps_organizations?.name || ''}"`,
+                        `"${esc.sps_events?.name || ''}"`
+                    ].join(','))
+                ].join('\n');
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `escalations_export_${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                toast.success('Export downloaded successfully');
+            } else {
+                toast.error('No data to export');
+            }
+
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to export data');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const handleAcknowledge = async (escalationId: string) => {
         setActionLoading(escalationId);
@@ -209,27 +478,24 @@ export default function EscalationsPage() {
 
         setUploadingFile(true);
         try {
-            // For now, we'll use a simple approach - in production you'd upload to S3/cloud storage
-            // This creates a data URL for demonstration - replace with actual upload logic
             const file = files[0];
-            const formData = new FormData();
-            formData.append('file', file);
 
-            // TODO: Replace with actual upload endpoint
-            // const response = await fetch('/api/v1/upload', { method: 'POST', body: formData });
-            // const data = await response.json();
-            // setEvidenceUrls(prev => [...prev, data.url]);
+            // Upload to backend (S3 or local fallback)
+            const response = await uploadApi.uploadImage(file);
 
-            // For now, create a preview URL (temporary)
-            const url = URL.createObjectURL(file);
-            toast.success(`File "${file.name}" ready for upload`);
+            // The API returns the full URL or relative path
+            const fullUrl = getImageUrl(response.url);
 
-            // In a real implementation, you'd get the URL from the server
-            // For demo, we'll add a placeholder message
-            toast.error('File upload requires backend endpoint. Add URL manually for now.');
+            if (fullUrl) {
+                setEvidenceUrls(prev => [...prev, fullUrl]);
+                toast.success('File uploaded successfully');
+            } else {
+                throw new Error('Invalid response from server');
+            }
 
         } catch (err: any) {
-            toast.error('Failed to upload file');
+            console.error('Upload failed:', err);
+            toast.error(err.response?.data?.message || err.message || 'Failed to upload file');
         } finally {
             setUploadingFile(false);
             if (fileInputRef.current) {
@@ -261,9 +527,22 @@ export default function EscalationsPage() {
     const clearFilters = () => {
         setStatusFilter('');
         setSeverityFilter('');
+        if (isSuperAdmin) setSelectedOrg('ALL');
+        if (user && !user.roles.some(r => r.role === 'EVENT_MANAGER')) setSelectedEvent('ALL');
+        setSelectedDept('ALL');
+        setSelectedService('ALL');
+        setSelectedDevice('ALL');
+        setStartDate('');
+        setEndDate('');
     };
 
-    const hasActiveFilters = statusFilter || severityFilter;
+    const hasActiveFilters = statusFilter || severityFilter || selectedOrg !== 'ALL' || selectedEvent !== 'ALL' || selectedDept !== 'ALL' || selectedService !== 'ALL' || selectedDevice !== 'ALL' || startDate || endDate;
+
+    const canChangeOrg = isSuperAdmin;
+    const canChangeEvent = isSuperAdmin || (user?.roles.some(r => r.role === 'ORG_ADMIN') && selectedOrg !== 'ALL');
+    const canChangeDept = selectedEvent !== 'ALL';
+    const canChangeService = selectedDept !== 'ALL';
+    const canChangeDevice = selectedService !== 'ALL';
 
     return (
         <DashboardLayout>
@@ -307,49 +586,84 @@ export default function EscalationsPage() {
                                 </button>
                             </div>
                         )}
-                        <button
-                            onClick={() => setShowFilters(!showFilters)}
-                            className={cn("btn-secondary", showFilters && "bg-muted")}
-                        >
-                            <Filter className="w-4 h-4" />
-                            Filters
-                        </button>
-                        <button
-                            onClick={() => fetchEscalations()}
-                            disabled={loading}
-                            className="btn-primary"
-                        >
-                            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-                            Refresh
-                        </button>
                     </div>
                 </div>
 
-                {/* Filters */}
-                {showFilters && (
-                    <div className="bg-card border border-border rounded-xl p-4">
-                        <div className="flex flex-wrap gap-4 items-end">
-                            <div className="min-w-[160px]">
+                {/* Filters Container */}
+                <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+                    {/* Row 1: Primary Hierarchical Filters */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <RichSelect
+                            label="Organization"
+                            value={selectedOrg}
+                            onChange={setSelectedOrg}
+                            options={orgOptions}
+                            icon={Building2}
+                            disabled={!canChangeOrg || loadingOrgs}
+                            placeholder={loadingOrgs ? "Loading..." : "Select Organization"}
+                        />
+                        <RichSelect
+                            label="Event"
+                            value={selectedEvent}
+                            onChange={setSelectedEvent}
+                            options={eventOptions}
+                            icon={Calendar}
+                            disabled={!canChangeEvent || loadingEvents || selectedOrg === 'ALL'}
+                            placeholder={loadingEvents ? "Loading..." : "Select Event"}
+                        />
+                        <RichSelect
+                            label="Department"
+                            value={selectedDept}
+                            onChange={setSelectedDept}
+                            options={deptOptions}
+                            icon={Layers}
+                            disabled={!canChangeDept || loadingDepts}
+                            placeholder={loadingDepts ? "Loading..." : "Select Department"}
+                        />
+                        <RichSelect
+                            label="Service"
+                            value={selectedService}
+                            onChange={setSelectedService}
+                            options={serviceOptions}
+                            icon={Settings}
+                            disabled={!canChangeService || loadingServices}
+                            placeholder={loadingServices ? "Loading..." : "Select Service"}
+                        />
+                        <RichSelect
+                            label="Device"
+                            value={selectedDevice}
+                            onChange={setSelectedDevice}
+                            options={deviceOptions}
+                            icon={Smartphone}
+                            disabled={!canChangeDevice || loadingDevices}
+                            placeholder={loadingDevices ? "Loading..." : "Select Device"}
+                        />
+                    </div>
+
+                    {/* Row 2: Status, Severity, Dates & Actions */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end border-t border-border/50 pt-4">
+
+                        {/* Status & Severity */}
+                        <div className="lg:col-span-3 grid grid-cols-2 gap-4">
+                            <div>
                                 <label className="text-xs text-muted-foreground uppercase font-medium mb-1 block">Status</label>
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20"
+                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 h-[42px]"
                                 >
                                     <option value="">All Status</option>
                                     <option value="OPEN">Open</option>
                                     <option value="ACKNOWLEDGED">Acknowledged</option>
                                     <option value="RESOLVED">Resolved</option>
-                                    <option value="OPEN,ACKNOWLEDGED">Active</option>
                                 </select>
                             </div>
-
-                            <div className="min-w-[160px]">
+                            <div>
                                 <label className="text-xs text-muted-foreground uppercase font-medium mb-1 block">Severity</label>
                                 <select
                                     value={severityFilter}
                                     onChange={(e) => setSeverityFilter(e.target.value)}
-                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20"
+                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 h-[42px]"
                                 >
                                     <option value="">All Severities</option>
                                     <option value="CRITICAL">Critical</option>
@@ -358,23 +672,57 @@ export default function EscalationsPage() {
                                     <option value="LOW">Low</option>
                                 </select>
                             </div>
+                        </div>
 
-                            <div className="flex items-center gap-3 ml-auto">
-                                <span className="text-sm text-muted-foreground">
-                                    {pagination.total.toLocaleString()} escalations found
-                                </span>
-                                {hasActiveFilters && (
-                                    <button
-                                        onClick={clearFilters}
-                                        className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-                                    >
-                                        Clear Filters
-                                    </button>
-                                )}
+                        {/* Date Range */}
+                        <div className="lg:col-span-4 flex items-center gap-2">
+                            <div className="flex-1">
+                                <label className="text-xs text-muted-foreground uppercase font-medium mb-1 block">From</label>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 h-[42px]"
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <label className="text-xs text-muted-foreground uppercase font-medium mb-1 block">To</label>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 h-[42px]"
+                                />
                             </div>
                         </div>
+
+                        {/* Actions */}
+                        <div className="lg:col-span-5 flex items-center justify-end gap-3 pb-0.5">
+                            <span className="text-sm text-muted-foreground mr-auto lg:mr-0 hidden lg:inline-block">
+                                {pagination.total.toLocaleString()} escalations
+                            </span>
+
+                            <button
+                                onClick={handleExport}
+                                disabled={isExporting}
+                                className="btn-secondary h-[42px]"
+                                title="Export CSV"
+                            >
+                                <Download className={cn("w-4 h-4", isExporting && "animate-spin")} />
+                                <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export'}</span>
+                            </button>
+
+                            {hasActiveFilters && (
+                                <button
+                                    onClick={clearFilters}
+                                    className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors h-[42px]"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
                     </div>
-                )}
+                </div>
 
                 {/* Error */}
                 {error && (

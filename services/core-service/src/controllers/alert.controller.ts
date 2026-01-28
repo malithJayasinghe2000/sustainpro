@@ -513,13 +513,24 @@ export async function getStats(req: Request, res: Response) {
 }
 
 /**
- * Escalate an alert
+ * Escalate an alert manually
+ * Only SuperAdmin, OrgAdmin, EventManager, ServiceSupervisor can manually escalate
  */
 export async function escalate(req: Request, res: Response) {
     try {
         const { id } = req.params;
-        const { escalation_level, assign_to } = req.body;
+        const { escalation_level, assign_to, reason } = req.body;
         const user = (req as any).user;
+        const primaryRole = getPrimaryRole(user);
+
+        // Role check - only specific roles can manually escalate
+        const allowedRoles = ['SUPER_ADMIN', 'ORG_ADMIN', 'EVENT_MANAGER', 'SERVICE_SUPERVISOR'];
+        if (!allowedRoles.includes(primaryRole)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Only SuperAdmin, OrgAdmin, EventManager, or ServiceSupervisor can manually escalate alerts',
+            });
+        }
 
         const existingAlert = await alertRepository.findById(id);
 
@@ -545,24 +556,227 @@ export async function escalate(req: Request, res: Response) {
             });
         }
 
+        // Validate assign_to user exists if provided
+        if (assign_to) {
+            const { getPrismaClient } = require('@sustainpro/shared-database');
+            const prisma = getPrismaClient();
+
+            const targetUser = await prisma.sps_users.findUnique({
+                where: { id: assign_to },
+                select: { id: true, full_name: true, email: true, organization_id: true },
+            });
+
+            if (!targetUser) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Target user not found',
+                });
+            }
+
+            // Create escalation record
+            await prisma.sps_escalations.create({
+                data: {
+                    organization_id: existingAlert.organization_id,
+                    event_id: existingAlert.event_id || null,
+                    department_id: existingAlert.department_id || null,
+                    service_id: existingAlert.service_id || null,
+                    alert_id: id,
+                    reason: reason || 'MANUAL',
+                    severity: existingAlert.severity,
+                    status: 'OPEN',
+                    assigned_to: assign_to,
+                    escalated_at: new Date(),
+                    metadata: {
+                        manual_escalation: true,
+                        escalated_by: user.id,
+                        escalated_by_name: user.full_name || user.email,
+                        escalated_by_role: primaryRole,
+                        from_level: existingAlert.escalation_level || 0,
+                        to_level: escalation_level,
+                    },
+                    evidence_urls: [],
+                },
+            });
+
+            // Create system notification for target user
+            await prisma.sps_system_notifications.create({
+                data: {
+                    organization_id: existingAlert.organization_id,
+                    target_user_id: assign_to,
+                    type: 'CRITICAL',
+                    title: '🔺 Alert Manually Escalated to You',
+                    message: existingAlert.message || 'An alert has been manually escalated to you for immediate attention.',
+                    source: 'manual_escalation',
+                    source_id: id,
+                    action_url: `/alerts?id=${id}`,
+                    action_label: 'View Alert',
+                    metadata: {
+                        alert_id: id,
+                        escalation_level: escalation_level,
+                        escalated_by: user.id,
+                        escalated_by_name: user.full_name,
+                    },
+                },
+            });
+
+            logger.info('System notification created for manual escalation', {
+                alertId: id,
+                targetUserId: assign_to,
+            });
+        }
+
+        // Update alert with new escalation level and assignment
         const alert = await alertRepository.escalate(id, escalation_level, assign_to);
 
-        logger.info('Alert escalated', {
+        logger.info('Alert manually escalated', {
             alertId: id,
-            userId: user.id,
+            escalatedBy: user.id,
+            escalatedByRole: primaryRole,
             newLevel: escalation_level,
             assignedTo: assign_to,
+            reason: reason || 'MANUAL',
         });
 
         return res.json({
             success: true,
             data: alert,
+            message: 'Alert escalated successfully',
         });
     } catch (error: any) {
         logger.error('Failed to escalate alert', { error: error.message, id: req.params.id });
         return res.status(500).json({
             success: false,
             error: 'Failed to escalate alert',
+        });
+    }
+}
+
+/**
+ * Approve a resolved alert
+ * Only SuperAdmin, OrgAdmin, EventManager, DeptHead, ServiceSupervisor can approve
+ */
+export async function approveResolution(req: Request, res: Response) {
+    try {
+        const { id } = req.params;
+        const { approval_notes } = req.body;
+        const user = (req as any).user;
+        const primaryRole = getPrimaryRole(user);
+
+        // Role check - only specific roles can approve resolutions
+        const allowedRoles = ['SUPER_ADMIN', 'ORG_ADMIN', 'EVENT_MANAGER', 'DEPT_HEAD', 'SERVICE_SUPERVISOR'];
+        if (!allowedRoles.includes(primaryRole)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Only SuperAdmin, OrgAdmin, EventManager, DeptHead, or ServiceSupervisor can approve resolutions',
+            });
+        }
+
+        const existingAlert = await alertRepository.findById(id);
+
+        if (!existingAlert) {
+            return res.status(404).json({
+                success: false,
+                error: 'Alert not found',
+            });
+        }
+
+        // Check access
+        if (!hasAccessToAlert(user, existingAlert)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Access denied to this alert',
+            });
+        }
+
+        // Only resolved alerts can be approved
+        if (existingAlert.status !== 'RESOLVED') {
+            return res.status(400).json({
+                success: false,
+                error: `Only resolved alerts can be approved. Current status: ${existingAlert.status}`,
+            });
+        }
+
+        const { getPrismaClient } = require('@sustainpro/shared-database');
+        const prisma = getPrismaClient();
+
+        // Update alert with approval information
+        const updatedAlert = await prisma.sps_alerts.update({
+            where: { id },
+            data: {
+                status: 'VERIFIED',
+                metadata: {
+                    ...(existingAlert.metadata || {}),
+                    approved: true,
+                    approved_by: user.id,
+                    approved_by_name: user.full_name || user.email,
+                    approved_by_role: primaryRole,
+                    approved_at: new Date().toISOString(),
+                    approval_notes: approval_notes || null,
+                },
+            },
+        });
+
+        // Also approve any linked escalations
+        const linkedEscalations = await prisma.sps_escalations.findMany({
+            where: { alert_id: id },
+        });
+
+        if (linkedEscalations.length > 0) {
+            await prisma.sps_escalations.updateMany({
+                where: { alert_id: id },
+                data: {
+                    status: 'RESOLVED',
+                    resolved_at: new Date(),
+                    resolved_by: linkedEscalations[0].resolved_by || user.id,
+                    resolution_notes: approval_notes || 'Approved by supervisor',
+                },
+            });
+
+            logger.info('Linked escalations approved', {
+                alertId: id,
+                escalationCount: linkedEscalations.length,
+            });
+        }
+
+        // Create system notification for the resolver (if different from approver)
+        if (existingAlert.resolved_by && existingAlert.resolved_by !== user.id) {
+            await prisma.sps_system_notifications.create({
+                data: {
+                    organization_id: existingAlert.organization_id,
+                    target_user_id: existingAlert.resolved_by,
+                    type: 'INFO',
+                    title: '✅ Resolution Approved',
+                    message: `Your resolution for alert "${existingAlert.message}" has been approved by ${user.full_name || user.email}.`,
+                    source: 'approval',
+                    source_id: id,
+                    action_url: `/alerts?id=${id}`,
+                    action_label: 'View Alert',
+                    metadata: {
+                        alert_id: id,
+                        approved_by: user.id,
+                        approved_by_name: user.full_name,
+                    },
+                },
+            });
+        }
+
+        logger.info('Alert resolution approved', {
+            alertId: id,
+            approvedBy: user.id,
+            approvedByRole: primaryRole,
+            approvalNotes: approval_notes,
+        });
+
+        return res.json({
+            success: true,
+            data: updatedAlert,
+            message: 'Resolution approved successfully',
+        });
+    } catch (error: any) {
+        logger.error('Failed to approve resolution', { error: error.message, id: req.params.id });
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to approve resolution',
         });
     }
 }

@@ -52,6 +52,11 @@ export default function OrganizationDetailsPage() {
     // Delete Modal State
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deletePassword, setDeletePassword] = useState('');
+
+    // Create User Modal State
+    const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+    const [newUserForm, setNewUserForm] = useState({ email: '', full_name: '', password: '', role: 'ORG_ADMIN' });
+    const [isCreatingUser, setIsCreatingUser] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {

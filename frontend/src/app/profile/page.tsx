@@ -34,7 +34,7 @@ export default function ProfilePage() {
     const { isValid: isPasswordValid } = usePasswordValidation(newPassword);
 
     useEffect(() => {
-        setTwoFactorEnabled(user?.two_factor_enabled || false);
+        setTwoFactorEnabled((user as any)?.two_factor_enabled || false);
     }, [user]);
 
     const handleEnable2FA = async () => {

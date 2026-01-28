@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, ArrowUp, Users, Clock, Mail, Bell, MessageSquare } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, Users, Clock, Mail, Bell, MessageSquare, CheckCircle2, User, UserCog, Settings } from 'lucide-react';
 import { usersApi } from '@/lib/api';
+import { ROLE_LABELS, ROLES } from '@/lib/roles';
+import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
 
 // Types
 export type NotifyMethod = 'email' | 'sms' | 'push' | 'all';
@@ -11,34 +13,44 @@ export interface EscalationLevel {
     delayMinutes: number;
     autoAssignTo: string; // User ID
     notifyMethod: NotifyMethod;
+    filterRole?: string;
+}
+
+export interface UserRole {
+    role: string;
+    event_id?: string;
+    department_id?: string;
 }
 
 export interface OrgUser {
     id: string;
     full_name: string;
     email: string;
-    role?: string;
+    roles?: UserRole[];  // Users have an array of roles, not a single role
+    is_super_admin?: boolean;
 }
 
 interface EscalationPolicyStepProps {
     organizationId: string;
+    departmentId?: string;
+    eventId?: string;
     policies: EscalationLevel[];
     onPoliciesChange: (policies: EscalationLevel[]) => void;
 }
 
-const DELAY_OPTIONS = [
-    { value: 5, label: '5 minutes' },
-    { value: 10, label: '10 minutes' },
-    { value: 15, label: '15 minutes' },
-    { value: 30, label: '30 minutes' },
-    { value: 60, label: '1 hour' },
-    { value: 120, label: '2 hours' },
-    { value: 240, label: '4 hours' },
-    { value: 480, label: '8 hours' },
-    { value: 1440, label: '24 hours' },
+const DELAY_OPTIONS: RichSelectOption[] = [
+    { value: '5', label: '5 minutes' },
+    { value: '10', label: '10 minutes' },
+    { value: '15', label: '15 minutes' },
+    { value: '30', label: '30 minutes' },
+    { value: '60', label: '1 hour' },
+    { value: '120', label: '2 hours' },
+    { value: '240', label: '4 hours' },
+    { value: '480', label: '8 hours' },
+    { value: '1440', label: '24 hours' },
 ];
 
-const NOTIFY_METHOD_OPTIONS: { value: NotifyMethod; label: string; icon: typeof Mail }[] = [
+const NOTIFY_METHOD_OPTIONS: RichSelectOption[] = [
     { value: 'email', label: 'Email', icon: Mail },
     { value: 'push', label: 'Push Notification', icon: Bell },
     { value: 'sms', label: 'SMS', icon: MessageSquare },
@@ -50,6 +62,8 @@ const generateId = () => `esc_${Date.now()}_${Math.random().toString(36).substr(
 
 export default function EscalationPolicyStep({
     organizationId,
+    departmentId,
+    eventId,
     policies,
     onPoliciesChange
 }: EscalationPolicyStepProps) {
@@ -64,9 +78,9 @@ export default function EscalationPolicyStep({
             setIsLoading(true);
             try {
                 const response = await usersApi.getAll();
-                // Filter to users in this organization
-                const orgUsers = (response.data || []).filter((u: any) => 
-                    u.organization_id === organizationId && u.is_active !== false
+                // Filter to users in this organization OR Super Admins
+                const orgUsers = (response.data || []).filter((u: any) =>
+                    (u.organization_id === organizationId || u.is_super_admin) && u.is_active !== false
                 );
                 setUsers(orgUsers);
             } catch (error) {
@@ -80,6 +94,13 @@ export default function EscalationPolicyStep({
         fetchUsers();
     }, [organizationId]);
 
+    // Derived State: Role Options from Constant
+    const roleOptions: RichSelectOption[] = Object.entries(ROLE_LABELS).map(([value, label]) => ({
+        value,
+        label,
+        icon: UserCog
+    }));
+
     const addLevel = () => {
         const nextLevel = policies.length + 1;
         const newPolicy: EscalationLevel = {
@@ -88,6 +109,7 @@ export default function EscalationPolicyStep({
             delayMinutes: 15,
             autoAssignTo: '',
             notifyMethod: 'email',
+            filterRole: '',
         };
         onPoliciesChange([...policies, newPolicy]);
     };
@@ -95,6 +117,10 @@ export default function EscalationPolicyStep({
     const updatePolicy = (id: string, field: keyof EscalationLevel, value: any) => {
         const updated = policies.map(policy => {
             if (policy.id === id) {
+                // If filterRole changes, reset the assigned user to force re-selection (optional but UX friendly)
+                if (field === 'filterRole') {
+                    return { ...policy, [field]: value, autoAssignTo: '' };
+                }
                 return { ...policy, [field]: value };
             }
             return policy;
@@ -109,11 +135,6 @@ export default function EscalationPolicyStep({
         onPoliciesChange(renumbered);
     };
 
-    const getUserName = (userId: string) => {
-        const user = users.find(u => u.id === userId);
-        return user ? user.full_name : 'Select user...';
-    };
-
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
@@ -123,163 +144,135 @@ export default function EscalationPolicyStep({
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             {/* Header */}
             <div>
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                     <ArrowUp className="w-5 h-5 text-blue-500" />
-                    Escalation Policy Configuration
+                    Escalation Policy
                 </h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                    Define escalation levels to automatically notify and assign alerts if they are not acknowledged in time.
+                    Define a timeline of who gets notified if an alert is not acknowledged.
+                    Levels trigger sequentially if no action is taken.
                 </p>
             </div>
 
-            {/* Info Box */}
-            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                    <strong>How it works:</strong> When an alert is triggered, Level 1 is notified first. 
-                    If the alert is not acknowledged within the specified delay, it escalates to the next level.
-                    This continues until the alert is acknowledged or all levels have been exhausted.
-                </p>
-            </div>
+            {/* List of Cards (Replacing Timeline) */}
+            <div className="space-y-4">
+                {policies.map((policy, index) => {
+                    // Context-Aware User Filtering
+                    const filteredUsers = users.filter(u => {
+                        // If no role filter selected, show all org users
+                        if (!policy.filterRole) return true;
 
-            {/* Escalation Levels */}
-            {policies.length === 0 ? (
-                <div className="border border-dashed border-border rounded-lg p-8 text-center">
-                    <ArrowUp className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground mb-4">
-                        No escalation levels configured. Add levels to automatically escalate unacknowledged alerts.
-                    </p>
-                    <button
-                        onClick={addLevel}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Add Escalation Level
-                    </button>
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {policies.map((policy, index) => (
-                        <div 
-                            key={policy.id} 
-                            className="border border-border rounded-lg bg-card p-4"
-                        >
-                            <div className="grid grid-cols-12 gap-4 items-start">
-                                {/* Level Badge */}
-                                <div className="col-span-1">
-                                    <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center">
-                                        <span className="text-sm font-bold text-primary">{policy.level}</span>
-                                    </div>
+                        // 1. Check for Super Admin (special case - check is_super_admin flag)
+                        if (policy.filterRole === ROLES.SUPER_ADMIN) {
+                            return u.is_super_admin === true;
+                        }
+
+                        // 2. Check if user has the selected role in their roles array
+                        const userRoles = u.roles || [];
+                        const matchingRole = userRoles.find(r => r.role === policy.filterRole);
+
+                        if (!matchingRole) return false;
+
+                        // 3. Context Checks based on role type
+                        if (policy.filterRole === ROLES.EVENT_MANAGER) {
+                            // Event Manager must match eventId if available
+                            if (eventId && matchingRole.event_id && matchingRole.event_id !== eventId) {
+                                return false;
+                            }
+                        }
+                        if (policy.filterRole === ROLES.DEPT_HEAD) {
+                            // Dept Head must match departmentId if available
+                            if (departmentId && matchingRole.department_id && matchingRole.department_id !== departmentId) {
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    });
+
+                    const userOptions: RichSelectOption[] = filteredUsers.map(u => ({
+                        value: u.id,
+                        label: u.email ? `${u.full_name} (${u.email})` : u.full_name,
+                        icon: User
+                    }));
+
+                    return (
+                        <div key={policy.id} className="border border-border rounded-xl bg-card shadow-sm transition-all hover:shadow-md animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="p-4 flex items-start sm:items-center gap-4">
+                                {/* Number Circle aligned with content */}
+                                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold shrink-0 mt-1.5 sm:mt-0">
+                                    {policy.level}
                                 </div>
 
-                                {/* Auto Assign To */}
-                                <div className="col-span-4">
-                                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1">
-                                        <Users className="w-3 h-3" />
-                                        Assign To
-                                    </label>
-                                    <select
+                                {/* Main Content Area */}
+                                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <RichSelect
+                                        label="Filter by Role"
+                                        value={policy.filterRole || ''}
+                                        onChange={(val) => updatePolicy(policy.id, 'filterRole', val)}
+                                        options={roleOptions}
+                                        placeholder="All Roles"
+                                        icon={Settings}
+                                        className="min-w-[140px]"
+                                    />
+
+                                    <RichSelect
+                                        label="Assign To User"
                                         value={policy.autoAssignTo}
-                                        onChange={(e) => updatePolicy(policy.id, 'autoAssignTo', e.target.value)}
-                                        className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                    >
-                                        <option value="">Select user to assign...</option>
-                                        {users.map((user) => (
-                                            <option key={user.id} value={user.id}>
-                                                {user.full_name} ({user.email})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
+                                        onChange={(val) => updatePolicy(policy.id, 'autoAssignTo', val)}
+                                        options={userOptions}
+                                        placeholder="Select user..."
+                                        icon={Users}
+                                        className="min-w-[160px]"
+                                    />
 
-                                {/* Delay Before Escalation */}
-                                <div className="col-span-3">
-                                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        Escalate After
-                                    </label>
-                                    <select
-                                        value={policy.delayMinutes}
-                                        onChange={(e) => updatePolicy(policy.id, 'delayMinutes', parseInt(e.target.value))}
-                                        className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                    >
-                                        {DELAY_OPTIONS.map((opt) => (
-                                            <option key={opt.value} value={opt.value}>
-                                                {opt.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Notify Method */}
-                                <div className="col-span-3">
-                                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1">
-                                        <Bell className="w-3 h-3" />
-                                        Notify Via
-                                    </label>
-                                    <select
+                                    <RichSelect
+                                        label="Notify via"
                                         value={policy.notifyMethod}
-                                        onChange={(e) => updatePolicy(policy.id, 'notifyMethod', e.target.value as NotifyMethod)}
-                                        className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                    >
-                                        {NOTIFY_METHOD_OPTIONS.map((opt) => (
-                                            <option key={opt.value} value={opt.value}>
-                                                {opt.label}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={(val) => updatePolicy(policy.id, 'notifyMethod', val)}
+                                        options={NOTIFY_METHOD_OPTIONS}
+                                        placeholder="Select method..."
+                                        icon={Bell}
+                                    />
+
+                                    <div className="space-y-1">
+                                        <RichSelect
+                                            label="Escalate after"
+                                            value={policy.delayMinutes.toString()}
+                                            onChange={(val) => updatePolicy(policy.id, 'delayMinutes', parseInt(val))}
+                                            options={DELAY_OPTIONS}
+                                            placeholder="Time to wait..."
+                                            icon={Clock}
+                                        />
+                                    </div>
                                 </div>
 
                                 {/* Remove Button */}
-                                <div className="col-span-1 flex justify-end">
-                                    <button
-                                        onClick={() => removePolicy(policy.id)}
-                                        className="p-2 hover:bg-destructive/10 text-destructive rounded-md transition-colors"
-                                        title="Remove level"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => removePolicy(policy.id)}
+                                    className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors shrink-0 self-start sm:self-center"
+                                    title="Remove level"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
                             </div>
-
-                            {/* Escalation Arrow */}
-                            {index < policies.length - 1 && (
-                                <div className="flex justify-center mt-3 pt-3 border-t border-dashed border-border">
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <span>If not acknowledged within {policy.delayMinutes} min</span>
-                                        <ArrowUp className="w-4 h-4 rotate-180" />
-                                        <span>Escalate to Level {policy.level + 1}</span>
-                                    </div>
-                                </div>
-                            )}
                         </div>
-                    ))}
+                    );
+                })}
 
-                    {/* Add More Button */}
-                    <button
-                        onClick={addLevel}
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm bg-background border border-dashed border-border hover:bg-muted hover:border-primary/30 rounded-lg transition-colors"
-                    >
+                {/* Add Level Button - Matches Alert Step Style */}
+                <button
+                    onClick={addLevel}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-4 top-0 text-sm bg-background border border-dashed border-border hover:bg-muted/50 hover:border-primary/50 hover:text-primary rounded-xl transition-all group"
+                >
+                    <div className="w-8 h-8 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center transition-colors">
                         <Plus className="w-4 h-4" />
-                        Add Escalation Level {policies.length + 1}
-                    </button>
-                </div>
-            )}
-
-            {/* Notice */}
-            {policies.length > 0 && (
-                <p className="text-xs text-muted-foreground text-center">
-                    Escalation policies can be modified later from the service management panel.
-                </p>
-            )}
-
-            {/* Skip Notice */}
-            <div className="text-center pt-4 border-t border-border">
-                <p className="text-sm text-muted-foreground">
-                    Escalation policies are optional. You can skip this step and configure them later.
-                </p>
+                    </div>
+                    <span className="font-medium">Add Escalation Level {policies.length + 1}</span>
+                </button>
             </div>
         </div>
     );

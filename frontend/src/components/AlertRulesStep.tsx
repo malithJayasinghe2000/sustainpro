@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronUp, Clock, Activity, Bell, Mail, Webhook, ArrowUp } from 'lucide-react';
 import { servicesApi } from '@/lib/api';
+import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
+import { Input } from '@/components/ui/Input';
 
 // Types
 export type RuleOperator = '>' | '<' | '>=' | '<=' | '==' | '!=' | 'contains' | 'in';
@@ -35,45 +37,45 @@ interface AlertRulesStepProps {
     onRulesChange: (rules: AlertRuleRow[]) => void;
 }
 
-const RULE_OPERATORS: { value: RuleOperator; label: string }[] = [
-    { value: '>', label: '>' },
-    { value: '<', label: '<' },
-    { value: '>=', label: '>=' },
-    { value: '<=', label: '<=' },
-    { value: '==', label: '==' },
-    { value: '!=', label: '!=' },
-    { value: 'contains', label: 'contains' },
-    { value: 'in', label: 'in' },
+const RULE_OPERATORS_OPTIONS: RichSelectOption[] = [
+    { value: '>', label: 'Greater than (>)' },
+    { value: '<', label: 'Less than (<)' },
+    { value: '>=', label: 'Greater or equal (>=)' },
+    { value: '<=', label: 'Less or equal (<=)' },
+    { value: '==', label: 'Equals (==)' },
+    { value: '!=', label: 'Not equals (!=)' },
+    { value: 'contains', label: 'Contains' },
+    { value: 'in', label: 'In List' },
 ];
 
-const SEVERITY_OPTIONS: { value: Severity; label: string; color: string; bgColor: string; borderColor: string }[] = [
-    { value: 'CRITICAL', label: 'Critical', color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-200' },
-    { value: 'HIGH', label: 'High', color: 'text-orange-600', bgColor: 'bg-orange-50', borderColor: 'border-orange-200' },
-    { value: 'MEDIUM', label: 'Medium', color: 'text-yellow-600', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' },
-    { value: 'LOW', label: 'Low', color: 'text-blue-600', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
+const SEVERITY_OPTIONS: RichSelectOption[] = [
+    { value: 'CRITICAL', label: 'Critical' },
+    { value: 'HIGH', label: 'High' },
+    { value: 'MEDIUM', label: 'Medium' },
+    { value: 'LOW', label: 'Low' },
 ];
 
-const ACTION_OPTIONS: { value: ActionType; label: string }[] = [
-    { value: 'alert', label: 'System Alert' },
-    { value: 'notification', label: 'Push Notification' },
-    { value: 'email', label: 'Email' },
-    { value: 'escalate', label: 'Escalate' },
-    { value: 'webhook', label: 'Webhook' },
+const ACTION_OPTIONS: { value: ActionType; label: string; icon: any }[] = [
+    { value: 'alert', label: 'Create Alert', icon: AlertTriangle },
+    { value: 'notification', label: 'In-App Notification', icon: Bell },
+    { value: 'email', label: 'Email Notification', icon: Mail },
+    { value: 'escalate', label: 'Escalate', icon: ArrowUp },
+    { value: 'webhook', label: 'Webhook', icon: Webhook },
 ];
 
-const COOLDOWN_OPTIONS = [
-    { value: 60, label: '1 min' },
-    { value: 300, label: '5 min' },
-    { value: 600, label: '10 min' },
-    { value: 900, label: '15 min' },
-    { value: 1800, label: '30 min' },
-    { value: 3600, label: '1 hour' },
-    { value: 7200, label: '2 hours' },
-    { value: 21600, label: '6 hours' },
-    { value: 86400, label: '24 hours' },
+const COOLDOWN_OPTIONS: RichSelectOption[] = [
+    { value: '60', label: '1 minute' },
+    { value: '300', label: '5 minutes' },
+    { value: '600', label: '10 minutes' },
+    { value: '900', label: '15 minutes' },
+    { value: '1800', label: '30 minutes' },
+    { value: '3600', label: '1 hour' },
+    { value: '7200', label: '2 hours' },
+    { value: '21600', label: '6 hours' },
+    { value: '86400', label: '24 hours' },
 ];
 
-const AGGREGATION_OPTIONS: { value: AggregationType; label: string }[] = [
+const AGGREGATION_OPTIONS: RichSelectOption[] = [
     { value: 'none', label: 'None (Instant)' },
     { value: 'avg', label: 'Average' },
     { value: 'sum', label: 'Sum' },
@@ -82,14 +84,14 @@ const AGGREGATION_OPTIONS: { value: AggregationType; label: string }[] = [
     { value: 'count', label: 'Count' },
 ];
 
-const TIME_WINDOW_OPTIONS = [
-    { value: 0, label: 'Instant' },
-    { value: 1, label: '1 min' },
-    { value: 5, label: '5 min' },
-    { value: 10, label: '10 min' },
-    { value: 15, label: '15 min' },
-    { value: 30, label: '30 min' },
-    { value: 60, label: '1 hour' },
+const TIME_WINDOW_OPTIONS: RichSelectOption[] = [
+    { value: '0', label: 'Instant' },
+    { value: '1', label: '1 minute' },
+    { value: '5', label: '5 minutes' },
+    { value: '10', label: '10 minutes' },
+    { value: '15', label: '15 minutes' },
+    { value: '30', label: '30 minutes' },
+    { value: '60', label: '1 hour' },
 ];
 
 // Helper to generate unique ID
@@ -189,8 +191,8 @@ export default function AlertRulesStep({ serviceTemplateId, rules, onRulesChange
             actions: ['alert'],
         };
         onRulesChange([...rules, newRule]);
-        // Auto-expand new rule to show all fields
-        setExpandedRules(prev => new Set([...prev, ruleId]));
+        // Auto-expand ONLY the new rule, collapsing others
+        setExpandedRules(new Set([ruleId]));
     };
 
     const updateRule = (id: string, field: keyof AlertRuleRow, value: any) => {
@@ -230,10 +232,6 @@ export default function AlertRulesStep({ serviceTemplateId, rules, onRulesChange
         });
     };
 
-    const getSeverityStyle = (severity: Severity) => {
-        return SEVERITY_OPTIONS.find(s => s.value === severity) || SEVERITY_OPTIONS[2];
-    };
-
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
@@ -242,8 +240,14 @@ export default function AlertRulesStep({ serviceTemplateId, rules, onRulesChange
         );
     }
 
+    const parameterOptions = parameters.map(p => ({
+        value: p.key,
+        label: p.name + (p.unit ? ` (${p.unit})` : ''),
+        icon: Activity
+    }));
+
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             {/* Header */}
             <div>
                 <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -257,117 +261,73 @@ export default function AlertRulesStep({ serviceTemplateId, rules, onRulesChange
 
             {/* Rules List */}
             {rules.length === 0 ? (
-                <div className="border border-dashed border-border rounded-lg p-8 text-center">
-                    <AlertTriangle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground mb-4">
-                        No alert rules configured. Click the button below to add your first rule.
+                <div className="border border-dashed border-border rounded-lg p-12 text-center bg-muted/5">
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                        <AlertTriangle className="w-8 h-8 text-muted-foreground/50" />
+                    </div>
+                    <h3 className="text-lg font-medium mb-1">No alert rules configured</h3>
+                    <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+                        Create rules to automatically monitor device data and trigger alerts when thresholds are breached.
                     </p>
                     <button
                         onClick={addRule}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-all shadow-sm font-medium"
                     >
                         <Plus className="w-4 h-4" />
-                        Add Alert Rule
+                        Add First Rule
                     </button>
                 </div>
             ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                     {rules.map((rule, index) => {
-                        const severityStyle = getSeverityStyle(rule.severity);
                         const isExpanded = expandedRules.has(rule.id);
 
                         return (
-                            <div key={rule.id} className="border border-border rounded-lg bg-card overflow-hidden">
-                                {/* Row 1: Main fields */}
-                                <div className="p-4 grid grid-cols-12 gap-3 items-start">
-                                    {/* Rule # Badge */}
-                                    <div className="col-span-1 flex items-center">
-                                        <span className="w-7 h-7 flex items-center justify-center bg-muted rounded-full text-xs font-medium">
-                                            {index + 1}
-                                        </span>
+                            <div key={rule.id} className="border border-border rounded-xl bg-card shadow-sm transition-all hover:shadow-md">
+                                {/* Rule Header / Summary Row */}
+                                <div className="p-4 flex items-center gap-4">
+                                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold shrink-0">
+                                        {index + 1}
                                     </div>
 
-                                    {/* Rule Name */}
-                                    <div className="col-span-3">
-                                        <label className="text-xs text-muted-foreground block mb-1">Rule Name</label>
-                                        <input
-                                            type="text"
-                                            value={rule.name}
-                                            onChange={(e) => updateRule(rule.id, 'name', e.target.value)}
-                                            className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                            placeholder="Rule name"
-                                        />
-                                    </div>
-
-                                    {/* Parameter */}
-                                    <div className="col-span-2">
-                                        <label className="text-xs text-muted-foreground block mb-1">Parameter</label>
-                                        <select
-                                            value={rule.metric}
-                                            onChange={(e) => updateRule(rule.id, 'metric', e.target.value)}
-                                            className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                        >
-                                            {parameters.map((param) => (
-                                                <option key={param.key} value={param.key}>
-                                                    {param.name} {param.unit && `(${param.unit})`}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Condition (Operator + Threshold) */}
-                                    <div className="col-span-2">
-                                        <label className="text-xs text-muted-foreground block mb-1">Condition</label>
-                                        <div className="flex gap-1">
-                                            <select
-                                                value={rule.operator}
-                                                onChange={(e) => updateRule(rule.id, 'operator', e.target.value as RuleOperator)}
-                                                className="w-16 px-1 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary font-mono"
-                                            >
-                                                {RULE_OPERATORS.map((op) => (
-                                                    <option key={op.value} value={op.value}>
-                                                        {op.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <input
-                                                type="text"
-                                                value={rule.threshold}
-                                                onChange={(e) => updateRule(rule.id, 'threshold', e.target.value)}
-                                                placeholder="Value"
-                                                className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                            />
+                                    <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <p className="text-xs text-muted-foreground mb-0.5">Rule Name</p>
+                                            <div className="font-medium text-sm truncate">{rule.name}</div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-muted-foreground mb-0.5">Condition</p>
+                                            <div className="text-sm flex items-center gap-1.5 truncate">
+                                                <span className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">{rule.metric}</span>
+                                                <span className="font-mono font-bold text-primary">{rule.operator}</span>
+                                                <span className="font-mono">{rule.threshold || '...'}</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-muted-foreground mb-0.5">Severity</p>
+                                            <div className="flex">
+                                                <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${rule.severity === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' :
+                                                    rule.severity === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                                        rule.severity === 'MEDIUM' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                            'bg-blue-50 text-blue-700 border-blue-200'
+                                                    }`}>
+                                                    {rule.severity}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Severity */}
-                                    <div className="col-span-2">
-                                        <label className="text-xs text-muted-foreground block mb-1">Severity</label>
-                                        <select
-                                            value={rule.severity}
-                                            onChange={(e) => updateRule(rule.id, 'severity', e.target.value as Severity)}
-                                            className={`w-full px-2 py-1.5 text-sm border rounded focus:ring-1 focus:ring-primary/20 ${severityStyle.borderColor} ${severityStyle.bgColor} ${severityStyle.color} font-medium`}
-                                        >
-                                            {SEVERITY_OPTIONS.map((sev) => (
-                                                <option key={sev.value} value={sev.value}>
-                                                    {sev.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="col-span-2 flex items-end gap-2">
+                                    <div className="flex items-center gap-2 shrink-0">
                                         <button
                                             onClick={() => toggleRuleExpanded(rule.id)}
-                                            className="p-1.5 hover:bg-muted text-muted-foreground rounded transition-colors"
-                                            title={isExpanded ? "Hide advanced options" : "Show advanced options"}
+                                            className={`p-2 rounded-lg transition-colors ${isExpanded ? 'bg-muted text-foreground' : 'hover:bg-muted text-muted-foreground'
+                                                }`}
                                         >
                                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                         </button>
                                         <button
                                             onClick={() => removeRule(rule.id)}
-                                            className="p-1.5 hover:bg-destructive/10 text-destructive rounded transition-colors"
+                                            className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
                                             title="Remove rule"
                                         >
                                             <Trash2 className="w-4 h-4" />
@@ -375,95 +335,131 @@ export default function AlertRulesStep({ serviceTemplateId, rules, onRulesChange
                                     </div>
                                 </div>
 
-                                {/* Row 2: Advanced fields (expandable) */}
+                                {/* Expanded Configuration */}
                                 {isExpanded && (
-                                    <div className="px-4 pb-4 pt-0 border-t border-border bg-muted/20">
-                                        <div className="grid grid-cols-12 gap-3 pt-3">
-                                            {/* Spacer for alignment */}
-                                            <div className="col-span-1"></div>
-
-                                            {/* Description */}
-                                            <div className="col-span-5">
-                                                <label className="text-xs text-muted-foreground block mb-1">Description</label>
-                                                <input
-                                                    type="text"
-                                                    value={rule.description || ''}
-                                                    onChange={(e) => updateRule(rule.id, 'description', e.target.value)}
-                                                    className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                                    placeholder="Brief description of this rule..."
+                                    <div className="px-6 pb-6 pt-4 border-t border-border/50 bg-muted/20">
+                                        <div className="space-y-6">
+                                            {/* Primary Configuration - Natural Language Style */}
+                                            <div className="space-y-4">
+                                                <Input
+                                                    label="Rule Name"
+                                                    value={rule.name}
+                                                    onChange={(e) => updateRule(rule.id, 'name', e.target.value)}
+                                                    placeholder="e.g. High Temperature Alert"
+                                                    className="font-medium"
                                                 />
+
+                                                <div className="bg-card p-4 rounded-xl border border-border shadow-sm space-y-4">
+                                                    <h4 className="text-sm font-medium text-muted-foreground mb-2 uppercase tracking-wider text-xs">Condition Logic</h4>
+
+                                                    <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+                                                        <div className="w-full md:w-1/3">
+                                                            <RichSelect
+                                                                value={rule.metric}
+                                                                onChange={(val) => updateRule(rule.id, 'metric', val)}
+                                                                options={parameterOptions}
+                                                                placeholder="Parameter"
+                                                                icon={Activity}
+                                                            />
+                                                        </div>
+                                                        <div className="w-full md:w-1/4">
+                                                            <RichSelect
+                                                                value={rule.operator}
+                                                                onChange={(val) => updateRule(rule.id, 'operator', val)}
+                                                                options={RULE_OPERATORS_OPTIONS}
+                                                                placeholder="Operator"
+                                                            />
+                                                        </div>
+                                                        <div className="w-full md:flex-1">
+                                                            <Input
+                                                                value={rule.threshold}
+                                                                onChange={(e) => updateRule(rule.id, 'threshold', e.target.value)}
+                                                                placeholder="Value"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <RichSelect
+                                                        label="Severity Level"
+                                                        value={rule.severity}
+                                                        onChange={(val) => updateRule(rule.id, 'severity', val)}
+                                                        options={SEVERITY_OPTIONS}
+                                                        icon={AlertTriangle}
+                                                    />
+
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-sm font-medium text-foreground/80 leading-none">Notifications & Actions</label>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {ACTION_OPTIONS.map((action) => {
+                                                                const isSelected = rule.actions.includes(action.value);
+                                                                return (
+                                                                    <button
+                                                                        key={action.value}
+                                                                        onClick={() => {
+                                                                            const newActions = isSelected
+                                                                                ? rule.actions.filter(a => a !== action.value)
+                                                                                : [...rule.actions, action.value];
+                                                                            updateRule(rule.id, 'actions', newActions);
+                                                                        }}
+                                                                        className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all ${isSelected
+                                                                            ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/20'
+                                                                            : 'bg-background border border-border text-muted-foreground hover:border-primary/50 hover:bg-muted'
+                                                                            }`}
+                                                                    >
+                                                                        <action.icon className="w-3.5 h-3.5" />
+                                                                        {action.label}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
 
-                                            {/* Aggregation */}
-                                            <div className="col-span-2">
-                                                <label className="text-xs text-muted-foreground block mb-1">Aggregation</label>
-                                                <select
-                                                    value={rule.aggregation || 'none'}
-                                                    onChange={(e) => updateRule(rule.id, 'aggregation', e.target.value as AggregationType)}
-                                                    className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                                >
-                                                    {AGGREGATION_OPTIONS.map((agg) => (
-                                                        <option key={agg.value} value={agg.value}>
-                                                            {agg.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
+                                            {/* Advanced Settings Toggle */}
+                                            <details className="group" open>
+                                                <summary className="flex items-center gap-2 text-sm font-medium text-muted-foreground cursor-pointer hover:text-primary transition-colors select-none py-2">
+                                                    <ChevronDown className="w-4 h-4 transition-transform group-open:rotate-180" />
+                                                    Advanced Settings (Aggregation, Time Window, Cooldown)
+                                                </summary>
 
-                                            {/* Time Window */}
-                                            <div className="col-span-2">
-                                                <label className="text-xs text-muted-foreground block mb-1">Time Window</label>
-                                                <select
-                                                    value={rule.timeWindow || 0}
-                                                    onChange={(e) => updateRule(rule.id, 'timeWindow', parseInt(e.target.value))}
-                                                    className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                                    disabled={rule.aggregation === 'none'}
-                                                >
-                                                    {TIME_WINDOW_OPTIONS.map((tw) => (
-                                                        <option key={tw.value} value={tw.value}>
-                                                            {tw.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
+                                                <div className="pt-4 pl-4 border-l-2 border-border/50 ml-2 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                        <RichSelect
+                                                            label="Aggregation"
+                                                            value={rule.aggregation}
+                                                            onChange={(val) => updateRule(rule.id, 'aggregation', val)}
+                                                            options={AGGREGATION_OPTIONS}
+                                                            menuPlacement="top"
+                                                        />
+                                                        <RichSelect
+                                                            label="Time Window"
+                                                            value={rule.timeWindow.toString()}
+                                                            onChange={(val) => updateRule(rule.id, 'timeWindow', parseInt(val))}
+                                                            options={TIME_WINDOW_OPTIONS}
+                                                            menuPlacement="top"
+                                                            error={rule.aggregation !== 'none' && rule.timeWindow === 0 ? "Required" : undefined}
+                                                        />
+                                                        <RichSelect
+                                                            label="Cooldown Period"
+                                                            value={rule.cooldownSeconds.toString()}
+                                                            onChange={(val) => updateRule(rule.id, 'cooldownSeconds', parseInt(val))}
+                                                            options={COOLDOWN_OPTIONS}
+                                                            menuPlacement="top"
+                                                            icon={Clock}
+                                                        />
+                                                    </div>
 
-                                            {/* Actions column spacer */}
-                                            <div className="col-span-2"></div>
-
-                                            {/* Second row within expanded section */}
-                                            <div className="col-span-1"></div>
-
-                                            {/* Cooldown */}
-                                            <div className="col-span-2">
-                                                <label className="text-xs text-muted-foreground block mb-1">Cooldown</label>
-                                                <select
-                                                    value={rule.cooldownSeconds || 300}
-                                                    onChange={(e) => updateRule(rule.id, 'cooldownSeconds', parseInt(e.target.value))}
-                                                    className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                                >
-                                                    {COOLDOWN_OPTIONS.map((cd) => (
-                                                        <option key={cd.value} value={cd.value}>
-                                                            {cd.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            {/* Action Type */}
-                                            <div className="col-span-2">
-                                                <label className="text-xs text-muted-foreground block mb-1">Action</label>
-                                                <select
-                                                    value={(rule.actions && rule.actions[0]) || 'alert'}
-                                                    onChange={(e) => updateRule(rule.id, 'actions', [e.target.value as ActionType])}
-                                                    className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background focus:ring-1 focus:ring-primary/20 focus:border-primary"
-                                                >
-                                                    {ACTION_OPTIONS.map((action) => (
-                                                        <option key={action.value} value={action.value}>
-                                                            {action.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
+                                                    <Input
+                                                        label="Description (Optional)"
+                                                        value={rule.description}
+                                                        onChange={(e) => updateRule(rule.id, 'description', e.target.value)}
+                                                        placeholder="Detailed reason for this alert rule..."
+                                                    />
+                                                </div>
+                                            </details>
                                         </div>
                                     </div>
                                 )}
@@ -474,19 +470,14 @@ export default function AlertRulesStep({ serviceTemplateId, rules, onRulesChange
                     {/* Add Button */}
                     <button
                         onClick={addRule}
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm bg-background border border-dashed border-border hover:bg-muted hover:border-primary/30 rounded-lg transition-colors"
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-4 top-0 text-sm bg-background border border-dashed border-border hover:bg-muted/50 hover:border-primary/50 hover:text-primary rounded-xl transition-all group"
                     >
-                        <Plus className="w-4 h-4" />
-                        Add Another Rule
+                        <div className="w-8 h-8 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+                            <Plus className="w-4 h-4" />
+                        </div>
+                        <span className="font-medium">Add Another Rule</span>
                     </button>
                 </div>
-            )}
-
-            {/* Optional Notice */}
-            {rules.length > 0 && (
-                <p className="text-xs text-muted-foreground text-center">
-                    Click the expand button on each rule to configure advanced options. Rules can be modified later from the service management panel.
-                </p>
             )}
         </div>
     );

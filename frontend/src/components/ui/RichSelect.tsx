@@ -20,6 +20,8 @@ interface RichSelectProps {
     icon?: React.ElementType;
     className?: string;
     searchable?: boolean;
+    menuPlacement?: 'top' | 'bottom';
+    disabled?: boolean;
 }
 
 export function RichSelect({
@@ -32,6 +34,8 @@ export function RichSelect({
     icon: Icon,
     className = '',
     searchable = false,
+    menuPlacement = 'bottom',
+    disabled = false,
 }: RichSelectProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -74,7 +78,7 @@ export function RichSelect({
     };
 
     return (
-        <div className="w-full space-y-1.5">
+        <div className={`w-full space-y-1.5 ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
             {label && (
                 <label className="text-sm font-medium text-foreground/80 leading-none">
                     {label}
@@ -83,8 +87,9 @@ export function RichSelect({
             <div className={`relative ${className}`} ref={containerRef}>
                 <button
                     type="button"
-                    onClick={() => setIsOpen(!isOpen)}
-                    className={`w-full h-full flex items-center justify-between px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${isOpen ? 'ring-2 ring-primary/20 border-primary' : 'hover:border-primary/50'} ${error ? 'border-destructive' : ''}
+                    onClick={() => !disabled && setIsOpen(!isOpen)}
+                    disabled={disabled}
+                    className={`w-full h-full flex items-center justify-between px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${isOpen ? 'ring-2 ring-primary/20 border-primary' : 'hover:border-primary/50'} ${error ? 'border-destructive' : ''} ${disabled ? 'cursor-not-allowed bg-muted' : ''}
                         }`}
                 >
                     <div className="flex items-center gap-2 truncate">
@@ -114,7 +119,8 @@ export function RichSelect({
 
                 {/* Dropdown Menu */}
                 {isOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                    <div className={`absolute z-50 w-full bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100 overflow-hidden ${menuPlacement === 'top' ? 'bottom-full mb-1' : 'mt-1'
+                        }`}>
                         {/* Search Input */}
                         {searchable && (
                             <div className="p-2 border-b border-border">

@@ -6,7 +6,7 @@ const prisma = getPrismaClient();
 // TYPE DEFINITIONS
 // =============================================
 
-export type AlertStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED' | 'EXPIRED';
+export type AlertStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED' | 'EXPIRED' | 'VERIFIED';
 export type AlertSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface Alert {
@@ -126,6 +126,7 @@ export interface AlertStats {
     active: number;
     acknowledged: number;
     resolved: number;
+    verified: number;
     expired: number;
     by_severity: {
         critical: number;
@@ -501,11 +502,12 @@ export class AlertRepository {
             whereClause.auto_assigned_to = filters.assigned_to;
         }
 
-        const [total, active, acknowledged, resolved, expired, critical, high, medium, low] = await Promise.all([
+        const [total, active, acknowledged, resolved, verified, expired, critical, high, medium, low] = await Promise.all([
             prisma.sps_alerts.count({ where: whereClause }),
             prisma.sps_alerts.count({ where: { ...whereClause, status: 'ACTIVE' } }),
             prisma.sps_alerts.count({ where: { ...whereClause, status: 'ACKNOWLEDGED' } }),
             prisma.sps_alerts.count({ where: { ...whereClause, status: 'RESOLVED' } }),
+            prisma.sps_alerts.count({ where: { ...whereClause, status: 'VERIFIED' } }),
             prisma.sps_alerts.count({ where: { ...whereClause, status: 'EXPIRED' } }),
             prisma.sps_alerts.count({ where: { ...whereClause, severity: 'CRITICAL' } }),
             prisma.sps_alerts.count({ where: { ...whereClause, severity: 'HIGH' } }),
@@ -518,6 +520,7 @@ export class AlertRepository {
             active,
             acknowledged,
             resolved,
+            verified, // Return verified count
             expired,
             by_severity: {
                 critical,

@@ -57,8 +57,8 @@ echo "Enabling UUID and TimescaleDB extensions..."
 docker compose -f $COMPOSE_FILE exec -T postgres psql -U sustainpro -d sustainpro -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
 
 echo -e "${YELLOW}Step 5/6: Running database sync and seed...${NC}"
-# Use db:deploy:prod which runs: prisma generate + db push + seed (compiled)
-docker compose -f $COMPOSE_FILE run --rm core-service sh -c "cd /app/packages/shared-database && npm run db:deploy:prod" || (echo -e "${RED}Warning: Database deploy failed!${NC}" && exit 1)
+# Use prisma db push to sync schema + seed (uses upsert so existing data is preserved)
+docker compose -f $COMPOSE_FILE run --rm core-service sh -c "cd /app/packages/shared-database && npm run db:deploy:prod" || (echo -e "${RED}Warning: Database sync failed!${NC}" && exit 1)
 
 echo -e "${YELLOW}Step 5b: Configuring Hypertable (Post-Prisma)...${NC}"
 docker compose -f $COMPOSE_FILE exec -T postgres psql -U sustainpro -d sustainpro -c "SELECT create_hypertable('sps_telemetry', 'recorded_at', migrate_data => true, if_not_exists => true);" || echo -e "${RED}Warning: Hypertable setup failed, check if table exists.${NC}"

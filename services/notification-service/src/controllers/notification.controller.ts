@@ -117,7 +117,7 @@ export const queueEmail = async (req: Request, res: Response, next: NextFunction
         } else {
             // Fallback to direct send if RabbitMQ is not available
             logger.warn('RabbitMQ not available, falling back to direct send');
-            
+
             // Forward to direct send
             req.body = { to, ...data, template: type, templateData: data };
             return sendDirectEmail(req, res, next);
@@ -242,6 +242,57 @@ export const getStatus = async (req: Request, res: Response): Promise<void> => {
             uptime: process.uptime(),
         },
     });
+};
+
+/**
+ * POST /api/v1/email/alert
+ * Send alert email notification (called by IoT service)
+ */
+export const sendAlertEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { to, alertId, severity, message, deviceCode, ruleName } = req.body;
+
+        if (!to || !alertId || !severity || !message) {
+            res.status(400).json({
+                success: false,
+                error: 'Missing required fields: to, alertId, severity, message',
+            });
+            return;
+        }
+
+        // Send to multiple recipients if array
+        const recipients = Array.isArray(to) ? to : [to];
+
+        const results = await Promise.all(recipients.map(email =>
+            emailService.sendAlertEmail({
+                to: email,
+                alertId,
+                severity,
+                message,
+                deviceCode: deviceCode || 'Unknown',
+                ruleName: ruleName || 'Alert',
+            })
+        ));
+
+        const allSuccess = results.every(r => r.success);
+        const successCount = results.filter(r => r.success).length;
+
+        if (allSuccess) {
+            res.json({
+                success: true,
+                message: `Alert email(s) sent successfully`,
+                sentCount: successCount,
+            });
+        } else {
+            res.status(207).json({
+                success: false,
+                message: `Partial success: ${successCount}/${recipients.length} emails sent`,
+                errors: results.filter(r => !r.success).map(r => r.error),
+            });
+        }
+    } catch (error) {
+        next(error);
+    }
 };
 
 /**

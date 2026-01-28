@@ -23,7 +23,24 @@ import {
     Eye,
     XCircle,
     Check,
+    ArrowUp,
+    ThumbsUp,
+    Download,
+    Calendar,
+    Building2,
+    Layers,
+    Smartphone,
+    Globe,
+    Settings,
 } from 'lucide-react';
+import { RichSelect } from '@/components/ui/RichSelect';
+import {
+    organizationsApi,
+    eventsApi,
+    departmentsApi,
+    departmentServicesApi,
+} from '@/lib/api';
+import toast from 'react-hot-toast';
 
 interface Alert {
     id: string;
@@ -155,6 +172,212 @@ export default function AlertsPage() {
     const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
     const isSuperAdmin = user?.is_super_admin;
+    const [isExporting, setIsExporting] = useState(false);
+
+    // Cascading Filter States
+    const [selectedOrg, setSelectedOrg] = useState<string>('ALL');
+    const [selectedEvent, setSelectedEvent] = useState<string>('ALL');
+    const [selectedDept, setSelectedDept] = useState<string>('ALL');
+    const [selectedService, setSelectedService] = useState<string>('ALL');
+    const [selectedDevice, setSelectedDevice] = useState<string>('ALL');
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
+
+    // Options States
+    const [orgOptions, setOrgOptions] = useState<{ value: string; label: string }[]>([]);
+    const [eventOptions, setEventOptions] = useState<{ value: string; label: string }[]>([]);
+    const [deptOptions, setDeptOptions] = useState<{ value: string; label: string }[]>([]);
+    const [serviceOptions, setServiceOptions] = useState<{ value: string; label: string }[]>([]);
+    const [deviceOptions, setDeviceOptions] = useState<{ value: string; label: string }[]>([]);
+
+    // Loading States for Dropdowns
+    const [loadingOrgs, setLoadingOrgs] = useState(false);
+    const [loadingEvents, setLoadingEvents] = useState(false);
+    const [loadingDepts, setLoadingDepts] = useState(false);
+    const [loadingServices, setLoadingServices] = useState(false);
+    const [loadingDevices, setLoadingDevices] = useState(false);
+
+    // Initial Load & Role Restrictions
+    useEffect(() => {
+        const loadInitialData = async () => {
+            if (!user) return;
+
+            setLoadingOrgs(true);
+            try {
+                // Determine restrictions based on role
+                let restrictedOrgId: string | undefined;
+                let restrictedEventId: string | undefined;
+
+                if (!isSuperAdmin) {
+                    const orgAdminRole = user.roles.find(r => r.role === 'ORG_ADMIN');
+                    const eventManagerRole = user.roles.find(r => r.role === 'EVENT_MANAGER');
+
+                    if (orgAdminRole?.org_id) {
+                        restrictedOrgId = orgAdminRole.org_id;
+                    } else if (eventManagerRole) {
+                        if (eventManagerRole.org_id) restrictedOrgId = eventManagerRole.org_id;
+                        if (eventManagerRole.event_id) restrictedEventId = eventManagerRole.event_id;
+                    } else if (user.organization_id) {
+                        restrictedOrgId = user.organization_id;
+                    }
+                }
+
+                // Fetch Organizations (if super admin or need to populate list)
+                // Even restricted users might want to see the "read-only" selected option
+                let orgsData = [];
+                if (isSuperAdmin) {
+                    const response = await organizationsApi.getAll({ limit: 100 });
+                    orgsData = response.data || [];
+                } else if (restrictedOrgId) {
+                    // Fetch just the one org to display nicely
+                    const org = await organizationsApi.getById(restrictedOrgId);
+                    if (org && org.data) orgsData = [org.data];
+                    else if (org) orgsData = [org]; // Handle inconsistent API return
+                }
+
+                setOrgOptions([
+                    { value: 'ALL', label: 'All Organizations' },
+                    ...orgsData.map((o: any) => ({ value: o.id, label: o.name }))
+                ]);
+
+                // Apply restrictions
+                if (restrictedOrgId) setSelectedOrg(restrictedOrgId);
+                if (restrictedEventId) setSelectedEvent(restrictedEventId);
+
+            } catch (err) {
+                console.error("Failed to load initial filter data", err);
+            } finally {
+                setLoadingOrgs(false);
+            }
+        };
+
+        loadInitialData();
+    }, [user, isSuperAdmin]);
+
+    // Cascade 1: Org -> Events
+    useEffect(() => {
+        const loadEvents = async () => {
+            if (selectedOrg === 'ALL') {
+                setEventOptions([]);
+                setEventOptions([{ value: 'ALL', label: 'All Events' }]); // default
+                if (selectedEvent !== 'ALL') setSelectedEvent('ALL');
+                return;
+            }
+
+            setLoadingEvents(true);
+            try {
+                const data = await eventsApi.getByOrg(selectedOrg);
+                setEventOptions([
+                    { value: 'ALL', label: 'All Events' },
+                    ...(Array.isArray(data) ? data : []).map((e: any) => ({ value: e.id, label: e.name }))
+                ]);
+
+                // If current selected event is not in new list (and not ALL), reset it
+                // Exception: If it was set by role restriction in initial load, it SHOULD be in the list
+                // We don't force reset here immediately if it matches logic
+            } catch (err) {
+                console.error(err);
+                setEventOptions([{ value: 'ALL', label: 'All Events' }]);
+            } finally {
+                setLoadingEvents(false);
+            }
+        };
+        loadEvents();
+    }, [selectedOrg]);
+
+    // Cascade 2: Event -> Departments
+    useEffect(() => {
+        const loadDepts = async () => {
+            // Reset downstream if upstream changes
+            if (selectedEvent === 'ALL') {
+                setDeptOptions([{ value: 'ALL', label: 'All Departments' }]);
+                if (selectedDept !== 'ALL') setSelectedDept('ALL');
+                return;
+            }
+
+            setLoadingDepts(true);
+            try {
+                const data = await departmentsApi.getByEvent(selectedEvent);
+                setDeptOptions([
+                    { value: 'ALL', label: 'All Departments' },
+                    ...(Array.isArray(data) ? data : []).map((d: any) => ({ value: d.id, label: d.name }))
+                ]);
+            } catch (err) {
+                console.error(err);
+                setDeptOptions([{ value: 'ALL', label: 'All Departments' }]);
+            } finally {
+                setLoadingDepts(false);
+            }
+        };
+        loadDepts();
+    }, [selectedEvent]);
+
+    // Cascade 3: Department -> Services
+    useEffect(() => {
+        const loadServices = async () => {
+            if (selectedDept === 'ALL') {
+                setServiceOptions([{ value: 'ALL', label: 'All Services' }]);
+                if (selectedService !== 'ALL') setSelectedService('ALL');
+                return;
+            }
+
+            setLoadingServices(true);
+            try {
+                // Note: departmentsApi.getServices returns object structure
+                const response = await departmentsApi.getServices(selectedDept);
+                // response.data is likely the array of services (through service_templates)
+                // Need to check API structure carefully. Usually returns data: Array
+                const services = response.data || [];
+
+                setServiceOptions([
+                    { value: 'ALL', label: 'All Services' },
+                    ...services.map((s: any) => ({
+                        value: s.id,
+                        label: s.service_template?.name || s.name || 'Unnamed Service'
+                    }))
+                ]);
+            } catch (err) {
+                console.error(err);
+                setServiceOptions([{ value: 'ALL', label: 'All Services' }]);
+            } finally {
+                setLoadingServices(false);
+            }
+        };
+        loadServices();
+    }, [selectedDept]);
+
+    // Cascade 4: Service -> Devices
+    useEffect(() => {
+        const loadDevices = async () => {
+            if (selectedService === 'ALL') {
+                setDeviceOptions([{ value: 'ALL', label: 'All Devices' }]);
+                if (selectedDevice !== 'ALL') setSelectedDevice('ALL');
+                return;
+            }
+
+            setLoadingDevices(true);
+            try {
+                // departmentServicesApi.getDevices
+                const response = await departmentServicesApi.getDevices(selectedService, { limit: 100 });
+                const devices = response.data || [];
+
+                setDeviceOptions([
+                    { value: 'ALL', label: 'All Devices' },
+                    ...devices.map((d: any) => ({
+                        value: d.id.toString(), // Ensure string for select
+                        label: d.name
+                    }))
+                ]);
+            } catch (err) {
+                console.error(err);
+                setDeviceOptions([{ value: 'ALL', label: 'All Devices' }]);
+            } finally {
+                setLoadingDevices(false);
+            }
+        };
+        loadDevices();
+    }, [selectedService]);
+
 
     const fetchAlerts = useCallback(async () => {
         setLoading(true);
@@ -166,17 +389,22 @@ export default function AlertsPage() {
                 limit: pagination.limit,
             };
 
-            if (statusFilter) {
-                params.status = statusFilter;
-            }
-            if (severityFilter) {
-                params.severity = severityFilter;
-            }
+            if (statusFilter) params.status = statusFilter;
+            if (severityFilter) params.severity = severityFilter;
+
+            // New Filters
+            if (selectedOrg !== 'ALL') params.organization_id = selectedOrg;
+            if (selectedEvent !== 'ALL') params.event_id = selectedEvent;
+            if (selectedDept !== 'ALL') params.department_id = selectedDept;
+            if (selectedService !== 'ALL') params.service_id = selectedService;
+            if (selectedDevice !== 'ALL') params.device_id = selectedDevice;
+            if (startDate) params.from_date = startDate;
+            if (endDate) params.to_date = endDate;
 
             const response = await alertsApi.getAll(params);
 
             if (response.success) {
-                setAlerts(response.data);
+                setAlerts(response.data as unknown as Alert[]);
                 setPagination((prev) => ({
                     ...prev,
                     total: response.pagination?.total || 0,
@@ -188,16 +416,76 @@ export default function AlertsPage() {
         } finally {
             setLoading(false);
         }
-    }, [pagination.page, pagination.limit, statusFilter, severityFilter]);
+    }, [pagination.page, pagination.limit, statusFilter, severityFilter, selectedOrg, selectedEvent, selectedDept, selectedService, selectedDevice, startDate, endDate]);
 
     useEffect(() => {
         fetchAlerts();
     }, [fetchAlerts]);
 
-    // Reset page when filters change
+    // Reset page when filters change (include new filters)
     useEffect(() => {
         setPagination(prev => ({ ...prev, page: 1 }));
-    }, [statusFilter, severityFilter]);
+    }, [statusFilter, severityFilter, selectedOrg, selectedEvent, selectedDept, selectedService, selectedDevice, startDate, endDate]);
+
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            // Fetch all matching data
+            const params: any = {
+                page: 1,
+                limit: 10000, // Large limit for export
+            };
+
+            if (statusFilter) params.status = statusFilter;
+            if (severityFilter) params.severity = severityFilter;
+            if (selectedOrg !== 'ALL') params.organization_id = selectedOrg;
+            if (selectedEvent !== 'ALL') params.event_id = selectedEvent;
+            if (selectedDept !== 'ALL') params.department_id = selectedDept;
+            if (selectedService !== 'ALL') params.service_id = selectedService;
+            if (selectedDevice !== 'ALL') params.device_id = selectedDevice;
+            if (startDate) params.from_date = startDate;
+            if (endDate) params.to_date = endDate;
+
+            const response = await alertsApi.getAll(params);
+
+            if (response.success && response.data.length > 0) {
+                const headers = ['ID', 'Time', 'Severity', 'Status', 'Message', 'Device', 'Organization', 'Event', 'Department'];
+                const csvContent = [
+                    headers.join(','),
+                    ...response.data.map((alert: any) => [
+                        alert.id,
+                        `"${new Date(alert.created_at).toLocaleString()}"`,
+                        alert.severity,
+                        alert.status,
+                        `"${alert.message?.replace(/"/g, '""') || ''}"`,
+                        `"${alert.device?.name || ''}"`,
+                        `"${alert.organization?.name || ''}"`,
+                        `"${alert.event?.name || ''}"`,
+                        `"${alert.department?.name || ''}"`
+                    ].join(','))
+                ].join('\n');
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `alerts_export_${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                toast.success('Export downloaded successfully');
+            } else {
+                toast.error('No data to export');
+            }
+
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to export data');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const handleAcknowledge = async (alertId: string) => {
         setActionLoading(alertId);
@@ -227,6 +515,52 @@ export default function AlertsPage() {
         }
     };
 
+    const handleEscalate = async (alertId: string, assignTo?: string) => {
+        setActionLoading(alertId);
+        try {
+            // Get current alert to determine next level
+            const currentAlert = alerts.find(a => a.id === alertId);
+            const nextLevel = (currentAlert?.escalation_level || 0) + 1;
+
+            const response = await alertsApi.escalate(alertId, nextLevel, assignTo);
+            if (response.success) {
+                fetchAlerts();
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to escalate alert');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleApprove = async (alertId: string) => {
+        setActionLoading(alertId);
+        try {
+            const response = await alertsApi.approve(alertId);
+            if (response.success) {
+                fetchAlerts();
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to approve resolution');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    // Check if user can escalate (SuperAdmin, OrgAdmin, EventManager, ServiceSupervisor)
+    const canEscalate = () => {
+        if (user?.is_super_admin) return true;
+        const roles = user?.roles || [];
+        return roles.some((r: any) => ['ORG_ADMIN', 'EVENT_MANAGER', 'SERVICE_SUPERVISOR'].includes(r.role));
+    };
+
+    // Check if user can approve (SuperAdmin, OrgAdmin, EventManager, DeptHead, ServiceSupervisor)
+    const canApprove = () => {
+        if (user?.is_super_admin) return true;
+        const roles = user?.roles || [];
+        return roles.some((r: any) => ['ORG_ADMIN', 'EVENT_MANAGER', 'DEPT_HEAD', 'SERVICE_SUPERVISOR'].includes(r.role));
+    };
+
     const getRoleDescription = () => {
         if (user?.is_super_admin) return 'Viewing all alerts across the system';
         const roles = user?.roles || [];
@@ -240,9 +574,30 @@ export default function AlertsPage() {
     const clearFilters = () => {
         setStatusFilter('');
         setSeverityFilter('');
+        // Don't clear role-locked filters
+        if (isSuperAdmin) setSelectedOrg('ALL');
+        if (user && !user.roles.some(r => r.role === 'EVENT_MANAGER')) setSelectedEvent('ALL');
+        setSelectedDept('ALL');
+        setSelectedService('ALL');
+        setSelectedDevice('ALL');
+        setStartDate('');
+        setEndDate('');
     };
 
-    const hasActiveFilters = statusFilter || severityFilter;
+    const hasActiveFilters = statusFilter || severityFilter || selectedOrg !== 'ALL' || selectedEvent !== 'ALL' || selectedDept !== 'ALL' || selectedService !== 'ALL' || selectedDevice !== 'ALL' || startDate || endDate;
+
+    // Check if fields should be disabled based on hierarchy or loading
+    const isOrgDisabled = !isSuperAdmin; // Only SuperAdmin changes org, others are locked to their own
+    // Actually, we calculated restrictedOrgId. If the user can switch orgs (Super Admin), let them.
+    // If not, it is locked.
+    // My logic in loadInitialData handles pre-selection.
+    // We can use the presence of options > 1 to determine if disabled?
+    // Or just check role.
+    const canChangeOrg = isSuperAdmin;
+    const canChangeEvent = isSuperAdmin || (user?.roles.some(r => r.role === 'ORG_ADMIN') && selectedOrg !== 'ALL');
+    const canChangeDept = selectedEvent !== 'ALL';
+    const canChangeService = selectedDept !== 'ALL';
+    const canChangeDevice = selectedService !== 'ALL';
 
     return (
         <DashboardLayout>
@@ -257,77 +612,143 @@ export default function AlertsPage() {
                         <p className="page-header-subtext">{getRoleDescription()}</p>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setShowFilters(!showFilters)}
-                            className={cn("btn-secondary", showFilters && "bg-muted")}
-                        >
-                            <Filter className="w-4 h-4" />
-                            Filters
-                        </button>
-                        <button
-                            onClick={() => fetchAlerts()}
-                            disabled={loading}
-                            className="btn-primary"
-                        >
-                            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-                            Refresh
-                        </button>
-                    </div>
                 </div>
 
-                {/* Filters */}
-                {showFilters && (
-                    <div className="bg-card border border-border rounded-xl p-4">
-                        <div className="flex flex-wrap gap-4 items-end">
-                            <div className="min-w-[160px]">
+                {/* Filters Container */}
+                <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+                    {/* Row 1: Primary Hierarchical Filters */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <RichSelect
+                            label="Organization"
+                            value={selectedOrg}
+                            onChange={setSelectedOrg}
+                            options={orgOptions}
+                            icon={Building2}
+                            disabled={!canChangeOrg || loadingOrgs}
+                            placeholder={loadingOrgs ? "Loading..." : "Select Organization"}
+                        />
+                        <RichSelect
+                            label="Event"
+                            value={selectedEvent}
+                            onChange={setSelectedEvent}
+                            options={eventOptions}
+                            icon={Calendar}
+                            disabled={!canChangeEvent || loadingEvents || selectedOrg === 'ALL'}
+                            placeholder={loadingEvents ? "Loading..." : "Select Event"}
+                        />
+                        <RichSelect
+                            label="Department"
+                            value={selectedDept}
+                            onChange={setSelectedDept}
+                            options={deptOptions}
+                            icon={Layers}
+                            disabled={!canChangeDept || loadingDepts}
+                            placeholder={loadingDepts ? "Loading..." : "Select Department"}
+                        />
+                        <RichSelect
+                            label="Service"
+                            value={selectedService}
+                            onChange={setSelectedService}
+                            options={serviceOptions}
+                            icon={Settings}
+                            disabled={!canChangeService || loadingServices}
+                            placeholder={loadingServices ? "Loading..." : "Select Service"}
+                        />
+                        <RichSelect
+                            label="Device"
+                            value={selectedDevice}
+                            onChange={setSelectedDevice}
+                            options={deviceOptions}
+                            icon={Smartphone}
+                            disabled={!canChangeDevice || loadingDevices}
+                            placeholder={loadingDevices ? "Loading..." : "Select Device"}
+                        />
+                    </div>
+
+                    {/* Row 2: Status, Severity, Dates & Actions */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end border-t border-border/50 pt-4">
+
+                        {/* Status & Severity */}
+                        <div className="lg:col-span-3 grid grid-cols-2 gap-4">
+                            <div>
                                 <label className="text-xs text-muted-foreground uppercase font-medium mb-1 block">Status</label>
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20"
+                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 h-[42px]"
                                 >
                                     <option value="">All Status</option>
                                     <option value="ACTIVE">Active</option>
                                     <option value="ACKNOWLEDGED">Acknowledged</option>
                                     <option value="RESOLVED">Resolved</option>
                                     <option value="EXPIRED">Expired</option>
-                                    <option value="ACTIVE,ACKNOWLEDGED">Active & Acknowledged</option>
                                 </select>
                             </div>
-
-                            <div className="min-w-[160px]">
+                            <div>
                                 <label className="text-xs text-muted-foreground uppercase font-medium mb-1 block">Severity</label>
                                 <select
                                     value={severityFilter}
                                     onChange={(e) => setSeverityFilter(e.target.value)}
-                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20"
+                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 h-[42px]"
                                 >
                                     <option value="">All Severities</option>
                                     <option value="CRITICAL">Critical</option>
                                     <option value="HIGH">High</option>
                                     <option value="MEDIUM">Medium</option>
                                     <option value="LOW">Low</option>
-                                    <option value="CRITICAL,HIGH">Critical & High</option>
                                 </select>
                             </div>
+                        </div>
 
-                            <div className="flex items-center gap-3 ml-auto">
-                                <span className="text-sm text-muted-foreground">
-                                    {pagination.total.toLocaleString()} alerts found
-                                </span>
-                                {hasActiveFilters && (
-                                    <button
-                                        onClick={clearFilters}
-                                        className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-                                    >
-                                        Clear Filters
-                                    </button>
-                                )}
+                        {/* Date Range */}
+                        <div className="lg:col-span-4 flex items-center gap-2">
+                            <div className="flex-1">
+                                <label className="text-xs text-muted-foreground uppercase font-medium mb-1 block">From</label>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 h-[42px]"
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <label className="text-xs text-muted-foreground uppercase font-medium mb-1 block">To</label>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-border/40 rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 h-[42px]"
+                                />
                             </div>
                         </div>
+
+                        {/* Actions */}
+                        <div className="lg:col-span-5 flex items-center justify-end gap-3 pb-0.5">
+                            <span className="text-sm text-muted-foreground mr-auto lg:mr-0 hidden lg:inline-block">
+                                {pagination.total.toLocaleString()} alerts
+                            </span>
+
+                            <button
+                                onClick={handleExport}
+                                disabled={isExporting}
+                                className="btn-secondary h-[42px]"
+                                title="Export CSV"
+                            >
+                                <Download className={cn("w-4 h-4", isExporting && "animate-spin")} />
+                                <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export'}</span>
+                            </button>
+
+                            {hasActiveFilters && (
+                                <button
+                                    onClick={clearFilters}
+                                    className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors h-[42px]"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
                     </div>
-                )}
+                </div>
 
                 {/* Error */}
                 {error && (
@@ -475,6 +896,38 @@ export default function AlertsPage() {
                                                                     <RefreshCw className="w-4 h-4 animate-spin" />
                                                                 ) : (
                                                                     <CheckCircle className="w-4 h-4" />
+                                                                )}
+                                                            </button>
+                                                        )}
+
+                                                        {/* Escalate button */}
+                                                        {(alert.status === 'ACTIVE' || alert.status === 'ACKNOWLEDGED') && canEscalate() && (
+                                                            <button
+                                                                onClick={() => handleEscalate(alert.id)}
+                                                                disabled={isLoading}
+                                                                className="p-1.5 text-orange-600 hover:bg-orange-500/10 rounded-md transition-all disabled:opacity-50"
+                                                                title="Escalate"
+                                                            >
+                                                                {isLoading ? (
+                                                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                                                ) : (
+                                                                    <ArrowUp className="w-4 h-4" />
+                                                                )}
+                                                            </button>
+                                                        )}
+
+                                                        {/* Approve button - for resolved alerts */}
+                                                        {alert.status === 'RESOLVED' && canApprove() && !alert.metadata?.approved && (
+                                                            <button
+                                                                onClick={() => handleApprove(alert.id)}
+                                                                disabled={isLoading}
+                                                                className="p-1.5 text-blue-600 hover:bg-blue-500/10 rounded-md transition-all disabled:opacity-50"
+                                                                title="Approve Resolution"
+                                                            >
+                                                                {isLoading ? (
+                                                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                                                ) : (
+                                                                    <ThumbsUp className="w-4 h-4" />
                                                                 )}
                                                             </button>
                                                         )}

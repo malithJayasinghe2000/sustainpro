@@ -111,7 +111,7 @@ export default function DepartmentUsers({ deptId, eventId, user, organizationId 
     };
 
     // Validating password for new user
-    const { isValid: isPasswordValid, checks } = usePasswordValidation(newUser.password);
+    const { isValid: isPasswordValid } = usePasswordValidation(newUser.password);
 
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
