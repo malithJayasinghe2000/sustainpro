@@ -1444,9 +1444,9 @@ export const alertsApi = {
     /**
      * Get all alerts with optional filters
      */
-    getAll: async (params?: { 
-        status?: string; 
-        severity?: string; 
+    getAll: async (params?: {
+        status?: string;
+        severity?: string;
         event_id?: string;
         department_id?: string;
         service_id?: string;
@@ -1487,8 +1487,8 @@ export const alertsApi = {
     /**
      * Escalate an alert
      */
-    escalate: async (id: string, escalation_level: number, assign_to?: string): Promise<{ success: boolean; data: Alert }> => {
-        const response = await apiClient.post(`/alerts/${id}/escalate`, { escalation_level, assign_to });
+    escalate: async (id: string, escalation_level: number, assign_to?: string, reason?: string): Promise<{ success: boolean; data: Alert; message: string }> => {
+        const response = await apiClient.post(`/alerts/${id}/escalate`, { escalation_level, assign_to, reason });
         return response.data;
     },
 
@@ -1520,6 +1520,14 @@ export const alertsApi = {
      */
     delete: async (id: string): Promise<{ success: boolean; message: string }> => {
         const response = await apiClient.delete(`/alerts/${id}`);
+        return response.data;
+    },
+
+    /**
+     * Approve a resolved alert
+     */
+    approve: async (id: string, approval_notes?: string): Promise<{ success: boolean; data: Alert; message: string }> => {
+        const response = await apiClient.post(`/alerts/${id}/approve`, { approval_notes });
         return response.data;
     },
 };

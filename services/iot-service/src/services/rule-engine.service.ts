@@ -645,17 +645,79 @@ class RuleEngineService {
         config?: Record<string, any>
     ): Promise<void> {
         try {
-            // Call notification service via HTTP (or use RabbitMQ queue)
-            // For now, log the intent
-            logger.info('Email notification queued', {
-                alertId: alert.id,
-                recipients: config?.recipients,
+            // Get recipients - either from config or auto-assigned user
+            let recipientEmails: string[] = [];
+
+            if (config?.recipients && Array.isArray(config.recipients)) {
+                recipientEmails = config.recipients;
+            } else if (alert.auto_assigned_to) {
+                // Get email of assigned user
+                const user = await prisma.sps_users.findUnique({
+                    where: { id: alert.auto_assigned_to },
+                    select: { email: true },
+                });
+                if (user?.email) {
+                    recipientEmails.push(user.email);
+                }
+            } else {
+                // Notify org admins
+                const adminAssignments = await prisma.sps_role_assignments.findMany({
+                    where: {
+                        role: 'ORG_ADMIN',
+                        OR: [
+                            { org_id: alertData.organization_id },
+                            {
+                                org_id: null,
+                                sps_users: { organization_id: alertData.organization_id }
+                            }
+                        ]
+                    },
+                    include: {
+                        sps_users: { select: { email: true } }
+                    }
+                });
+                recipientEmails = adminAssignments
+                    .map(a => a.sps_users?.email)
+                    .filter((email): email is string => !!email);
+            }
+
+            if (recipientEmails.length === 0) {
+                logger.warn('No email recipients found for alert notification', {
+                    alertId: alert.id,
+                });
+                return;
+            }
+
+            // Call notification-service via HTTP
+            const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5003';
+
+            const response = await fetch(`${notificationServiceUrl}/api/v1/email/alert`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: recipientEmails,
+                    alertId: alert.id,
+                    severity: alertData.severity,
+                    message: alertData.message,
+                    deviceCode: alertData.device_code,
+                    ruleName: alertData.rule_name,
+                }),
             });
 
-            // TODO: Integrate with notification-service via RabbitMQ or HTTP
-            // Example: publish to alert.notification queue
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Notification service responded with ${response.status}: ${errorText}`);
+            }
+
+            logger.info('📧 Email notification sent via notification-service', {
+                alertId: alert.id,
+                recipientCount: recipientEmails.length,
+            });
         } catch (err: any) {
-            logger.error('Failed to send email notification', { error: err.message });
+            logger.error('Failed to send email notification', {
+                alertId: alert.id,
+                error: err.message
+            });
         }
     }
 

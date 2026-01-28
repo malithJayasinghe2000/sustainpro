@@ -69,10 +69,11 @@ export default function SetupWizard({
 
     return (
         <div className={`page-padding max-w-[1600px] mx-auto py-6 ${className}`}>
-            {/* Standardized Header */}
-            <div className="flex flex-col gap-4 mb-8">
+
+            {/* Standardized Header - Sticky */}
+            <div className="sticky top-0 z-20 bg-background pt-6 pb-4 -mt-6 mb-8 px-6 -mx-6 border-b border-transparent transition-all data-[stuck=true]:border-border data-[stuck=true]:shadow-sm">
                 {/* Breadcrumb */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
                     {breadcrumbs.map((crumb, idx) => (
                         <div key={idx} className="flex items-center gap-2">
                             {idx > 0 && <span>/</span>}
@@ -119,7 +120,7 @@ export default function SetupWizard({
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 {/* Steps Sidebar (conditionally rendered) */}
                 {!hideSidebar && (
-                    <div className="hidden lg:block space-y-1">
+                    <div className="hidden lg:block space-y-1 sticky top-48 self-start">
                         {steps.map((step, idx) => {
                             const isActive = currentStep === idx;
                             const isCompleted = currentStep > idx;
@@ -162,7 +163,7 @@ export default function SetupWizard({
 
                         {/* Navigation Footer - Only show if onNext or onBack are provided */}
                         {(onNext || onBack) && (
-                            <div className="pt-6 mt-6 border-t border-border flex items-center gap-3">
+                            <div className="pt-6 mt-6 border-t border-border flex items-center gap-3 sticky bottom-0 bg-card z-10 -mx-8 px-8 -mb-8 pb-8 rounded-b-xl shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
                                 {onBack && (
                                     <button
                                         onClick={onBack}

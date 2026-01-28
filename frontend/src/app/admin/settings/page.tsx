@@ -1333,8 +1333,6 @@ export default function SystemSettingsPage() {
                         value={notificationSettings.quiet_hours_timezone}
                         onChange={(v: string) => setNotificationSettings({ ...notificationSettings, quiet_hours_timezone: v })}
                         options={timezoneOptions}
-                        searchable
-                        placeholder="Search timezones..."
                     />
                 </div>
                 <ToggleField
@@ -1409,8 +1407,8 @@ export default function SystemSettingsPage() {
         return (
             <DashboardLayout>
                 <div className="flex items-center justify-center py-20">
-                        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    </div>
+                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                </div>
             </DashboardLayout>
         );
     }

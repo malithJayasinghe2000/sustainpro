@@ -39,7 +39,7 @@ const router = Router();
  *           enum: [CRITICAL, HIGH, MEDIUM, LOW]
  *         status:
  *           type: string
- *           enum: [ACTIVE, ACKNOWLEDGED, RESOLVED, EXPIRED]
+ *           enum: [ACTIVE, ACKNOWLEDGED, RESOLVED, EXPIRED, VERIFIED]
  *         message:
  *           type: string
  *         value:
@@ -450,6 +450,60 @@ router.post('/:id/dismiss', alertController.dismiss);
  *         description: Access denied
  */
 router.post('/:id/escalate', alertController.escalate);
+
+/**
+ * @swagger
+ * /api/v1/alerts/{id}/approve:
+ *   post:
+ *     summary: Approve a resolved alert
+ *     description: |
+ *       Approve a resolved alert/escalation. Only these roles can approve:
+ *       - SUPER_ADMIN
+ *       - ORG_ADMIN
+ *       - EVENT_MANAGER
+ *       - DEPT_HEAD
+ *       - SERVICE_SUPERVISOR
+ *     tags: [Alerts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               approval_notes:
+ *                 type: string
+ *                 description: Optional notes about the approval
+ *     responses:
+ *       200:
+ *         description: Resolution approved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Alert'
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Alert is not in resolved status
+ *       404:
+ *         description: Alert not found
+ *       403:
+ *         description: Access denied - Insufficient role
+ */
+router.post('/:id/approve', alertController.approveResolution);
 
 /**
  * @swagger

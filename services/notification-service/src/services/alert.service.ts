@@ -166,9 +166,9 @@ class AlertService {
     private async createSystemNotification(alert: any, alertData: AlertData): Promise<void> {
         try {
             // Map alert severity to notification type
-            const notificationType = 
+            const notificationType =
                 alertData.severity === 'CRITICAL' ? 'CRITICAL' :
-                alertData.severity === 'HIGH' ? 'WARNING' : 'INFO';
+                    alertData.severity === 'HIGH' ? 'WARNING' : 'INFO';
 
             // Determine target user(s) for notification
             let targetUserIds: string[] = [];
@@ -189,22 +189,22 @@ class AlertService {
                             { org_id: null } // Global admins
                         ]
                     },
-                    include: { 
+                    include: {
                         sps_users: {
-                            select: { 
-                                id: true, 
+                            select: {
+                                id: true,
                                 organization_id: true,
-                                is_active: true 
+                                is_active: true
                             }
                         }
                     },
                     take: 10, // Limit to prevent too many notifications
                 });
-                
+
                 // Filter to active users in this organization
                 targetUserIds = adminAssignments
-                    .filter(a => 
-                        a.sps_users?.is_active && 
+                    .filter(a =>
+                        a.sps_users?.is_active &&
                         (a.sps_users?.organization_id === alertData.organization_id || !a.sps_users?.organization_id)
                     )
                     .map(a => a.user_id)
@@ -213,9 +213,9 @@ class AlertService {
 
             // If still no targets found, log warning and skip
             if (targetUserIds.length === 0) {
-                logger.warn('No target users found for system notification', { 
-                    alertId: alert.id, 
-                    organizationId: alertData.organization_id 
+                logger.warn('No target users found for system notification', {
+                    alertId: alert.id,
+                    organizationId: alertData.organization_id
                 });
                 return;
             }
@@ -339,7 +339,7 @@ class AlertService {
     }
 
     /**
-     * Send escalation notification
+     * Send escalation notification based on notify_method
      */
     private async sendEscalationNotification(alert: any, policy: EscalationPolicy): Promise<void> {
         try {
@@ -349,37 +349,66 @@ class AlertService {
                 return;
             }
 
-            await prisma.sps_system_notifications.create({
-                data: {
-                    organization_id: alert.organization_id,
-                    target_user_id: policy.auto_assign_to,
-                    type: 'CRITICAL',
-                    title: `Alert Escalated to Level ${policy.escalation_level}`,
-                    message: alert.message,
-                    metadata: {
-                        alert_id: alert.id,
-                        escalation_level: policy.escalation_level,
-                    },
-                },
+            const notifyMethod = (policy.notify_method || 'email').toLowerCase();
+            const user = await prisma.sps_users.findUnique({
+                where: { id: policy.auto_assign_to },
+                select: { email: true, full_name: true },
             });
 
-            // Send email if email is the notify method
-            if (policy.notify_method === 'EMAIL' && policy.auto_assign_to) {
-                const user = await prisma.sps_users.findUnique({
-                    where: { id: policy.auto_assign_to },
-                    select: { email: true, full_name: true },
-                });
-
-                if (user?.email) {
-                    await emailService.sendEscalationEmail({
-                        to: user.email,
-                        alertId: alert.id,
-                        escalationLevel: policy.escalation_level,
+            // Always create system notification (in-app) for push and all methods
+            if (notifyMethod === 'push' || notifyMethod === 'all') {
+                await prisma.sps_system_notifications.create({
+                    data: {
+                        organization_id: alert.organization_id,
+                        target_user_id: policy.auto_assign_to,
+                        type: 'CRITICAL',
+                        title: `🔺 Alert Escalated to Level ${policy.escalation_level}`,
                         message: alert.message,
-                        severity: alert.severity,
-                    });
-                }
+                        source: 'escalation',
+                        source_id: alert.id,
+                        action_url: `/alerts?id=${alert.id}`,
+                        action_label: 'View Alert',
+                        metadata: {
+                            alert_id: alert.id,
+                            escalation_level: policy.escalation_level,
+                            notify_method: notifyMethod,
+                        },
+                    },
+                });
+                logger.info('📱 Push notification created for escalation', {
+                    alertId: alert.id,
+                    userId: policy.auto_assign_to,
+                    level: policy.escalation_level,
+                });
             }
+
+            // Send email for email and all methods
+            if ((notifyMethod === 'email' || notifyMethod === 'all') && user?.email) {
+                await emailService.sendEscalationEmail({
+                    to: user.email,
+                    alertId: alert.id,
+                    escalationLevel: policy.escalation_level,
+                    message: alert.message,
+                    severity: alert.severity,
+                });
+                logger.info('📧 Email sent for escalation', {
+                    alertId: alert.id,
+                    to: user.email,
+                    level: policy.escalation_level,
+                });
+            }
+
+            // Handle SMS (log warning - no SMS service configured yet)
+            if (notifyMethod === 'sms' || notifyMethod === 'all') {
+                logger.warn('📱 SMS notification requested but SMS service not configured', {
+                    alertId: alert.id,
+                    userId: policy.auto_assign_to,
+                    level: policy.escalation_level,
+                });
+                // TODO: Integrate with Twilio or other SMS provider
+                // await smsService.sendEscalationSms({ ... });
+            }
+
         } catch (err: any) {
             logger.error('Failed to create escalation notification', { error: err.message });
         }

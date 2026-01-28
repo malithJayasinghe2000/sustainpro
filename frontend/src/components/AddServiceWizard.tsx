@@ -220,7 +220,7 @@ export default function AddServiceWizard({
                             service_id: newService.id,
                             event_id: eventId,
                             cooldown_seconds: rule.cooldownSeconds || 300,
-                            actions: rule.actions && rule.actions.length > 0 
+                            actions: rule.actions && rule.actions.length > 0
                                 ? rule.actions.map((a: ActionType) => ({ type: a as 'alert' | 'email' | 'webhook' | 'escalate' | 'notification', config: {} }))
                                 : [{ type: 'alert' as const, config: {} }],
                         }));
@@ -301,7 +301,7 @@ export default function AddServiceWizard({
                     />
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-3 min-h-[300px]">
+                <div className="space-y-3">
                     {templates.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground">Loading service templates...</div>
                     ) : availableTemplates.length === 0 ? (
@@ -481,6 +481,8 @@ export default function AddServiceWizard({
     const renderEscalationStep = () => (
         <EscalationPolicyStep
             organizationId={organizationId}
+            departmentId={departmentId}
+            eventId={eventId}
             policies={escalationPolicies}
             onPoliciesChange={setEscalationPolicies}
         />
@@ -544,22 +546,21 @@ export default function AddServiceWizard({
                 </h4>
                 {alertRules.length > 0 ? (
                     <div className="space-y-2">
-                        {alertRules.filter(r => r.metric && r.threshold).map((rule, index) => (
+                        {alertRules.map((rule, index) => (
                             <div key={rule.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-medium text-muted-foreground">#{index + 1}</span>
-                                    <span className="text-sm">{rule.name}</span>
+                                    <span className="text-sm">{rule.name || 'Unnamed Rule'}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <code className="text-xs px-1.5 py-0.5 bg-muted rounded">
-                                        {rule.metric} {rule.operator} {rule.threshold}
+                                        {rule.metric || 'Metric'} {rule.operator} {rule.threshold || 'Value'}
                                     </code>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                        rule.severity === 'CRITICAL' ? 'bg-red-500/10 text-red-600' :
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${rule.severity === 'CRITICAL' ? 'bg-red-500/10 text-red-600' :
                                         rule.severity === 'HIGH' ? 'bg-orange-500/10 text-orange-600' :
-                                        rule.severity === 'MEDIUM' ? 'bg-yellow-500/10 text-yellow-600' :
-                                        'bg-blue-500/10 text-blue-600'
-                                    }`}>
+                                            rule.severity === 'MEDIUM' ? 'bg-yellow-500/10 text-yellow-600' :
+                                                'bg-blue-500/10 text-blue-600'
+                                        }`}>
                                         {rule.severity}
                                     </span>
                                 </div>
@@ -579,7 +580,7 @@ export default function AddServiceWizard({
                 </h4>
                 {escalationPolicies.length > 0 ? (
                     <div className="space-y-2">
-                        {escalationPolicies.filter(p => p.autoAssignTo).map((policy) => (
+                        {escalationPolicies.map((policy) => (
                             <div key={policy.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
                                 <div className="flex items-center gap-2">
                                     <span className="w-6 h-6 rounded-full bg-primary/10 border border-primary flex items-center justify-center text-xs font-bold text-primary">
@@ -612,7 +613,7 @@ export default function AddServiceWizard({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl bg-background">
+            <div className="w-full max-w-7xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl bg-background">
                 <SetupWizard
                     title="Add Service"
                     description={`Add a new service to ${departmentName}`}
@@ -625,7 +626,7 @@ export default function AddServiceWizard({
                     isLastStep={currentStep === STEPS.length - 1}
                     isLoading={isLoading}
                     hideSidebar={false}
-                    className="p-6! max-w-none!"
+                    className="!p-6 !max-w-none"
                 >
                     {currentStep === 0 && renderTemplateStep()}
                     {currentStep === 1 && renderSupervisorStep()}
