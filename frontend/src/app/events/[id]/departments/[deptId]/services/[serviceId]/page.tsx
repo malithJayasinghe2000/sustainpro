@@ -29,7 +29,9 @@ import {
     UserPlus,
     Search,
     X,
-    Check
+    Check,
+    FileText,
+    Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { systemNotificationsApi } from '@/lib/api';
@@ -82,6 +84,11 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     });
     const [selectedRole, setSelectedRole] = useState('');
     const [isSubmittingUser, setIsSubmittingUser] = useState(false);
+
+    // Report State
+    const [reportStartDate, setReportStartDate] = useState('');
+    const [reportEndDate, setReportEndDate] = useState('');
+    const [reportDeviceId, setReportDeviceId] = useState('');
 
     const { isValid: isPasswordValid } = usePasswordValidation(newUserForm.password);
 
@@ -483,6 +490,45 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
     };
 
 
+    const handleGenerateReport = async () => {
+        if (!reportStartDate || !reportEndDate) {
+            toast.error('Please select a date range');
+            return;
+        }
+
+        try {
+            const loadingToast = toast.loading('Generating report...');
+
+            // Call API to get blob
+            // We use the configured apiClient which handles Auth automatically
+            const response = await import('@/lib/api').then(m => m.default.get(`/department-services/${serviceId}/report`, {
+                params: {
+                    start_date: new Date(reportStartDate).toISOString(),
+                    end_date: new Date(reportEndDate).toISOString(),
+                    device_id: reportDeviceId || undefined
+                },
+                responseType: 'blob'
+            }));
+
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `service_report_${serviceId}_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            toast.dismiss(loadingToast);
+            toast.success('Report generated successfully');
+        } catch (error) {
+            console.error('Report generation failed:', error);
+            toast.error('Failed to generate report');
+        }
+    };
+
+
 
 
 
@@ -536,6 +582,56 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                 {/* Content: Dashboard */}
                 {currentView === 'dashboard' && (
                     <div className="space-y-6">
+
+                        {/* Report Generation Section */}
+                        {canConfigure && (
+                            <div className="bg-card border border-border rounded-xl p-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <FileText className="w-5 h-5 text-primary" />
+                                    <h3 className="font-semibold">Generate Reports</h3>
+                                </div>
+                                <div className="flex flex-wrap gap-4 items-end">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-muted-foreground">Device (Optional)</label>
+                                        <select
+                                            className="px-3 py-2 bg-background border border-border rounded-lg text-sm min-w-[200px]"
+                                            value={reportDeviceId}
+                                            onChange={(e) => setReportDeviceId(e.target.value)}
+                                        >
+                                            <option value="">All Service Devices</option>
+                                            {assignedDevices.map((d: any) => (
+                                                <option key={d.id} value={d.id}>{d.name || d.device_code}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-muted-foreground">From</label>
+                                        <input
+                                            type="datetime-local"
+                                            className="px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                                            value={reportStartDate}
+                                            onChange={(e) => setReportStartDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-muted-foreground">To</label>
+                                        <input
+                                            type="datetime-local"
+                                            className="px-3 py-2 bg-background border border-border rounded-lg text-sm"
+                                            value={reportEndDate}
+                                            onChange={(e) => setReportEndDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleGenerateReport}
+                                        className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        Download CSV
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Service Dashboard - Dynamic Widgets */}
                         {serviceInstance.main_dashboard_layout?.widgets?.length > 0 ? (

@@ -933,66 +933,66 @@ async function main() {
     }
 
     // ==================================================================================
-    // 6. ROLE ASSIGNMENTS
+    // 6. ROLE ASSIGNMENTS (using upsert pattern to preserve existing assignments)
     // ==================================================================================
     console.log('👥 Seeding role assignments...');
 
-    // Clear existing role assignments for these users
-    await prisma.sps_role_assignments.deleteMany({
-        where: {
-            user_id: {
-                in: [
-                    '00000000-0000-0000-0000-000000000002',
-                    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-                    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-                    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-                ]
-            }
+    // Helper function to upsert role assignment
+    async function upsertRoleAssignment(data: {
+        user_id: string;
+        role: string;
+        org_id: string | null;
+        event_id: string | null;
+        dept_id: string | null;
+    }) {
+        const existing = await prisma.sps_role_assignments.findFirst({
+            where: {
+                user_id: data.user_id,
+                role: data.role,
+                org_id: data.org_id,
+                event_id: data.event_id,
+                dept_id: data.dept_id,
+            },
+        });
+        if (!existing) {
+            await prisma.sps_role_assignments.create({ data });
         }
-    });
+    }
 
     // Super Admin role
-    await prisma.sps_role_assignments.create({
-        data: {
-            user_id: '00000000-0000-0000-0000-000000000002',
-            role: 'SUPER_ADMIN',
-            org_id: null,
-            event_id: null,
-            dept_id: null,
-        },
+    await upsertRoleAssignment({
+        user_id: '00000000-0000-0000-0000-000000000002',
+        role: 'SUPER_ADMIN',
+        org_id: null,
+        event_id: null,
+        dept_id: null,
     });
 
     // Org Admin role for ACME admin
-    await prisma.sps_role_assignments.create({
-        data: {
-            user_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-            role: 'ORG_ADMIN',
-            org_id: '11111111-1111-1111-1111-111111111111',
-            event_id: null,
-            dept_id: null,
-        },
+    await upsertRoleAssignment({
+        user_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        role: 'ORG_ADMIN',
+        org_id: '11111111-1111-1111-1111-111111111111',
+        event_id: null,
+        dept_id: null,
     });
 
     // Manager role
-    await prisma.sps_role_assignments.create({
-        data: {
-            user_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-            role: 'EVENT_MANAGER',
-            org_id: '11111111-1111-1111-1111-111111111111',
-            event_id: null,
-            dept_id: null,
-        },
+    await upsertRoleAssignment({
+        user_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        role: 'EVENT_MANAGER',
+        org_id: '11111111-1111-1111-1111-111111111111',
+        event_id: null,
+        dept_id: null,
     });
 
     // Technician role (Operator user)
-    await prisma.sps_role_assignments.create({
-        data: {
-            user_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
-            role: 'TECHNICIAN',
-            org_id: '11111111-1111-1111-1111-111111111111',
-            event_id: null,
-            dept_id: null,
-        },
+    await upsertRoleAssignment({
+        user_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        role: 'TECHNICIAN',
+        org_id: '11111111-1111-1111-1111-111111111111',
+        event_id: null,
+        dept_id: null,
     });
 
     // ==================================================================================
@@ -1053,19 +1053,21 @@ async function main() {
         ],
     };
 
-    // Clear existing role permissions and insert new ones
+    // Upsert role permissions (preserves existing, only adds missing)
     for (const [role, permCodes] of Object.entries(rolePermissionMappings)) {
-        // Delete existing for this role
-        await prisma.sps_role_permissions.deleteMany({
-            where: { role }
-        });
-
-        // Insert new mappings
+        // Insert/update mappings using upsert
         for (const code of permCodes) {
             const permissionId = permissionMap.get(code);
             if (permissionId) {
-                await prisma.sps_role_permissions.create({
-                    data: {
+                await prisma.sps_role_permissions.upsert({
+                    where: {
+                        role_permission_id: {
+                            role,
+                            permission_id: permissionId,
+                        },
+                    },
+                    update: {}, // No update needed, just ensure it exists
+                    create: {
                         role,
                         permission_id: permissionId,
                     },
