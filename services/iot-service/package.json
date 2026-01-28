@@ -3,7 +3,6 @@
     "version": "1.0.0",
     "description": "SustainPro IoT Service - Telemetry & Real-time Streaming",
     "main": "dist/server.js",
-    "type": "module",
     "scripts": {
         "dev": "nodemon src/server.ts",
         "build": "tsc",
