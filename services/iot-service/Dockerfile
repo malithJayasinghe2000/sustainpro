@@ -100,4 +100,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:5002/health || exit 1
 
 # Start the service
-CMD ["node", "dist/server.js"]
+CMD ["node", "--experimental-specifier-resolution=node", "dist/server.js"]
