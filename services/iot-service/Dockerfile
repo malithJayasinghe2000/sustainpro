@@ -77,6 +77,9 @@ COPY --from=builder /app/packages/shared-swagger/dist ./packages/shared-swagger/
 COPY --from=builder /app/services/iot-service/package.json ./services/iot-service/
 COPY --from=builder /app/services/iot-service/dist ./services/iot-service/dist
 
+# Copy AWS IoT certificates (required for MQTT connection)
+COPY --from=builder /app/services/iot-service/src/certificates ./services/iot-service/dist/certificates
+
 # Install production dependencies only
 RUN npm ci --omit=dev
 
