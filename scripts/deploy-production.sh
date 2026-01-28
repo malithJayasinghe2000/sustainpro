@@ -41,8 +41,8 @@ docker compose -f $COMPOSE_FILE exec -T postgres sh -c "grep -q \"shared_preload
 sleep 5
 
 # Enable Extension and Hypertable
-echo "Enabling Hypertable..."
-docker compose -f $COMPOSE_FILE exec -T postgres psql -U sustainpro -d sustainpro -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE; SELECT create_hypertable('sps_telemetry', 'recorded_at', migrate_data => true, if_not_exists => true);" || echo -e "${RED}Warning: Hypertable setup failed (might already exist), continuing...${NC}"
+echo "Enabling Hypertable and UUID..."
+docker compose -f $COMPOSE_FILE exec -T postgres psql -U sustainpro -d sustainpro -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE; SELECT create_hypertable('sps_telemetry', 'recorded_at', migrate_data => true, if_not_exists => true);" || echo -e "${RED}Warning: Hypertable setup failed (might already exist), continuing...${NC}"
 
 echo -e "${YELLOW}Step 5/6: Running database sync and seed...${NC}"
 # Use db:deploy:prod which runs: prisma generate + db push + seed (compiled)
