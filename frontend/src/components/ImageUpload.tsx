@@ -18,8 +18,8 @@ const getFullImageUrl = (url: string | null | undefined): string | null => {
     }
 
     // Get API base URL from environment and strip /api/v1 suffix if present
-    // NEXT_PUBLIC_API_URL is typically http://localhost:8080/api/v1
-    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1')
+    // NEXT_PUBLIC_API_URL is typically http://localhost:8088/api/v1
+    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8088/api/v1')
         .replace(/\/api\/v1\/?$/, ''); // Remove /api/v1 suffix to get base host
 
     // Prepend base URL to relative paths

@@ -2,7 +2,7 @@ import { io, Socket } from 'socket.io-client';
 
 // Socket.IO URL - connects through API Gateway
 // Gateway routes /socket.io/* to IoT Service
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8080';
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8088';
 
 let socket: Socket;
 

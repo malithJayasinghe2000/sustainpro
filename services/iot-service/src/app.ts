@@ -22,6 +22,7 @@ import simulationRoutes from './routes/simulation.routes';
 const logger = createLogger({ service: 'iot-service' });
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Setup dynamic middleware fetchers
 setApiSecurityConfigFetcher(async () => {

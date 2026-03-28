@@ -25,6 +25,7 @@ import rolesRoutes from './routes/roles.routes';
 const logger = createLogger({ service: 'auth-service' });
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Setup dynamic middleware fetchers
 setApiSecurityConfigFetcher(async () => {

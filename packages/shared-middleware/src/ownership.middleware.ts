@@ -239,9 +239,10 @@ export function requireOwnership(
                 throw new UnauthorizedError('Authentication required');
             }
 
-            const resourceId = getResourceId 
+            const rawId = getResourceId 
                 ? getResourceId(req) 
                 : req.params.id || req.params.eventId || req.params.departmentId || req.params.deviceId || req.params.userId;
+            const resourceId = rawId ? String(rawId) : undefined;
 
             if (!resourceId) {
                 throw new NotFoundError('Resource ID not provided');
@@ -293,9 +294,10 @@ export function requireOwnershipOrPermission(
                 return next();
             }
 
-            const resourceId = getResourceId 
+            const rawId = getResourceId 
                 ? getResourceId(req) 
                 : req.params.id || req.params.eventId || req.params.departmentId || req.params.deviceId || req.params.userId;
+            const resourceId = rawId ? String(rawId) : undefined;
 
             if (!resourceId) {
                 throw new NotFoundError('Resource ID not provided');

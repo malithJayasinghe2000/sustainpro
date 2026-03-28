@@ -27,13 +27,14 @@
         "db:seed": "npm run prisma:seed --workspace=@sustainpro/shared-database"
     },
     "devDependencies": {
+        "@types/express-serve-static-core": "^5.0.7",
         "turbo": "^2.3.0",
         "typescript": "^5.7.0"
     },
     "engines": {
-        "node": ">=20.0.0"
+        "node": ">=24.0.0"
     },
-    "packageManager": "npm@10.0.0",
+    "packageManager": "npm@11.0.0",
     "dependencies": {
         "argon2": "^0.44.0",
         "pg": "^8.16.3"

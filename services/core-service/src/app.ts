@@ -41,6 +41,7 @@ import { getS3Status, isS3Configured } from './storage/s3';
 const logger = createLogger({ service: 'core-service' });
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Setup dynamic middleware fetchers
 setApiSecurityConfigFetcher(async () => {

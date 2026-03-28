@@ -14,6 +14,7 @@ import emailRoutes from './routes/email.routes';
 const logger = createLogger({ service: 'notification-service' });
 
 const app = express();
+app.set('trust proxy', 1);
 
 // CORS configuration
 app.use(cors({

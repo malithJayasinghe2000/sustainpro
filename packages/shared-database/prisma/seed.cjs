@@ -724,7 +724,51 @@ async function main() {
     { name: "View Departments", code: "departments.view", description: "View departments", category: "departments" },
     { name: "Create Departments", code: "departments.create", description: "Create departments", category: "departments" },
     { name: "Update Departments", code: "departments.update", description: "Update departments", category: "departments" },
-    { name: "Delete Departments", code: "departments.delete", description: "Delete departments", category: "departments" }
+    { name: "Delete Departments", code: "departments.delete", description: "Delete departments", category: "departments" },
+    // Alert permissions (8 total)
+    { name: "View Alerts", code: "alerts.view", description: "View alerts", category: "alerts" },
+    { name: "Create Alerts", code: "alerts.create", description: "Create alerts", category: "alerts" },
+    { name: "Update Alerts", code: "alerts.update", description: "Update alerts", category: "alerts" },
+    { name: "Delete Alerts", code: "alerts.delete", description: "Delete alerts", category: "alerts" },
+    { name: "Acknowledge Alerts", code: "alerts.acknowledge", description: "Acknowledge alerts", category: "alerts" },
+    { name: "Resolve Alerts", code: "alerts.resolve", description: "Resolve alerts", category: "alerts" },
+    { name: "Dismiss Alerts", code: "alerts.dismiss", description: "Dismiss alerts without resolving", category: "alerts" },
+    { name: "View Alert Stats", code: "alerts.stats", description: "View alert statistics", category: "alerts" },
+    // Alert Rule permissions (6 total)
+    { name: "View Alert Rules", code: "rules.view", description: "View alert rules", category: "rules" },
+    { name: "Create Alert Rules", code: "rules.create", description: "Create alert rules", category: "rules" },
+    { name: "Update Alert Rules", code: "rules.update", description: "Update alert rules", category: "rules" },
+    { name: "Delete Alert Rules", code: "rules.delete", description: "Delete alert rules", category: "rules" },
+    { name: "Toggle Alert Rules", code: "rules.toggle", description: "Toggle alert rule active/inactive", category: "rules" },
+    { name: "Test Alert Rules", code: "rules.test", description: "Test alert rules with sample data", category: "rules" },
+    // Escalation permissions (10 total)
+    { name: "View Escalations", code: "escalations.view", description: "View escalations", category: "escalations" },
+    { name: "Create Escalations", code: "escalations.create", description: "Create escalations", category: "escalations" },
+    { name: "Update Escalations", code: "escalations.update", description: "Update escalations", category: "escalations" },
+    { name: "Delete Escalations", code: "escalations.delete", description: "Delete escalations", category: "escalations" },
+    { name: "Acknowledge Escalations", code: "escalations.acknowledge", description: "Acknowledge escalations", category: "escalations" },
+    { name: "Resolve Escalations", code: "escalations.resolve", description: "Resolve escalations", category: "escalations" },
+    { name: "Assign Escalations", code: "escalations.assign", description: "Assign escalations to users", category: "escalations" },
+    { name: "Create Task from Escalation", code: "escalations.create_task", description: "Create task from escalation", category: "escalations" },
+    { name: "View Escalation KPIs", code: "escalations.kpi_read", description: "View escalation KPI metrics", category: "escalations" },
+    { name: "View Escalation Aging", code: "escalations.aging_read", description: "View escalation aging reports", category: "escalations" },
+    // Escalation Policy permissions (4 total)
+    { name: "View Escalation Policies", code: "escalation_policies.view", description: "View escalation policies", category: "escalation_policies" },
+    { name: "Create Escalation Policies", code: "escalation_policies.create", description: "Create escalation policies", category: "escalation_policies" },
+    { name: "Update Escalation Policies", code: "escalation_policies.update", description: "Update escalation policies", category: "escalation_policies" },
+    { name: "Delete Escalation Policies", code: "escalation_policies.delete", description: "Delete escalation policies", category: "escalation_policies" },
+    // Task permissions (11 total)
+    { name: "View Tasks", code: "tasks.view", description: "View tasks", category: "tasks" },
+    { name: "Create Tasks", code: "tasks.create", description: "Create tasks", category: "tasks" },
+    { name: "Update Tasks", code: "tasks.update", description: "Update tasks", category: "tasks" },
+    { name: "Delete Tasks", code: "tasks.delete", description: "Delete tasks", category: "tasks" },
+    { name: "Assign Tasks", code: "tasks.assign", description: "Assign tasks to users", category: "tasks" },
+    { name: "Start Tasks", code: "tasks.start", description: "Start working on a task", category: "tasks" },
+    { name: "Complete Tasks", code: "tasks.complete", description: "Mark tasks as complete", category: "tasks" },
+    { name: "Cancel Tasks", code: "tasks.cancel", description: "Cancel tasks", category: "tasks" },
+    { name: "Upload Task Evidence", code: "tasks.evidence_upload", description: "Upload evidence files to tasks", category: "tasks" },
+    { name: "View Task Evidence", code: "tasks.evidence_view", description: "View task evidence files", category: "tasks" },
+    { name: "Delete Task Evidence", code: "tasks.evidence_delete", description: "Delete task evidence files", category: "tasks" }
   ];
   for (const perm of permissions) {
     await prisma.sps_permissions.upsert({
@@ -831,53 +875,47 @@ async function main() {
     });
   }
   console.log("\u{1F465} Seeding role assignments...");
-  await prisma.sps_role_assignments.deleteMany({
-    where: {
-      user_id: {
-        in: [
-          "00000000-0000-0000-0000-000000000002",
-          "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-          "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-          "cccccccc-cccc-cccc-cccc-cccccccccccc"
-        ]
+  async function upsertRoleAssignment(data) {
+    const existing = await prisma.sps_role_assignments.findFirst({
+      where: {
+        user_id: data.user_id,
+        role: data.role,
+        org_id: data.org_id,
+        event_id: data.event_id,
+        dept_id: data.dept_id
       }
+    });
+    if (!existing) {
+      await prisma.sps_role_assignments.create({ data });
     }
+  }
+  await upsertRoleAssignment({
+    user_id: "00000000-0000-0000-0000-000000000002",
+    role: "SUPER_ADMIN",
+    org_id: null,
+    event_id: null,
+    dept_id: null
   });
-  await prisma.sps_role_assignments.create({
-    data: {
-      user_id: "00000000-0000-0000-0000-000000000002",
-      role: "SUPER_ADMIN",
-      org_id: null,
-      event_id: null,
-      dept_id: null
-    }
+  await upsertRoleAssignment({
+    user_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    role: "ORG_ADMIN",
+    org_id: "11111111-1111-1111-1111-111111111111",
+    event_id: null,
+    dept_id: null
   });
-  await prisma.sps_role_assignments.create({
-    data: {
-      user_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-      role: "ORG_ADMIN",
-      org_id: "11111111-1111-1111-1111-111111111111",
-      event_id: null,
-      dept_id: null
-    }
+  await upsertRoleAssignment({
+    user_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    role: "EVENT_MANAGER",
+    org_id: "11111111-1111-1111-1111-111111111111",
+    event_id: null,
+    dept_id: null
   });
-  await prisma.sps_role_assignments.create({
-    data: {
-      user_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-      role: "EVENT_MANAGER",
-      org_id: "11111111-1111-1111-1111-111111111111",
-      event_id: null,
-      dept_id: null
-    }
-  });
-  await prisma.sps_role_assignments.create({
-    data: {
-      user_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-      role: "TECHNICIAN",
-      org_id: "11111111-1111-1111-1111-111111111111",
-      event_id: null,
-      dept_id: null
-    }
+  await upsertRoleAssignment({
+    user_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    role: "TECHNICIAN",
+    org_id: "11111111-1111-1111-1111-111111111111",
+    event_id: null,
+    dept_id: null
   });
   console.log("\u{1F517} Seeding role permissions...");
   const allPermissions = await prisma.sps_permissions.findMany();
@@ -938,11 +976,18 @@ async function main() {
       "dashboard.view",
       "events.view",
       "devices.view",
+      "devices.manage",
       "reports.view",
       "telemetry.view",
       "services.view",
       "departments.view",
-      "departments.update"
+      "departments.update",
+      "services.create",
+      "services.update",
+      "services.delete",
+      "services.assign",
+      "users.view",
+      "users.manage"
     ],
     "SERVICE_SUPERVISOR": [
       "dashboard.view",
@@ -993,14 +1038,19 @@ async function main() {
     ]
   };
   for (const [role, permCodes] of Object.entries(rolePermissionMappings)) {
-    await prisma.sps_role_permissions.deleteMany({
-      where: { role }
-    });
     for (const code of permCodes) {
       const permissionId = permissionMap.get(code);
       if (permissionId) {
-        await prisma.sps_role_permissions.create({
-          data: {
+        await prisma.sps_role_permissions.upsert({
+          where: {
+            role_permission_id: {
+              role,
+              permission_id: permissionId
+            }
+          },
+          update: {},
+          // No update needed, just ensure it exists
+          create: {
             role,
             permission_id: permissionId
           }
