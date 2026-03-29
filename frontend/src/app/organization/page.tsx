@@ -331,11 +331,11 @@ export default function MyOrganizationPage() {
                                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
                                 </div>
                                 <div className="px-6 pb-6 -mt-10 relative">
-                                    <div className="w-20 h-20 bg-white rounded-xl shadow-lg flex items-center justify-center p-2 mb-4 border border-border">
+                                    <div className="w-20 h-20 bg-card rounded-xl shadow-lg flex items-center justify-center p-2 mb-4 border border-border">
                                         {org.logo_url ? (
                                             <img src={getImageUrl(org.logo_url) || ''} className="w-full h-full object-contain" alt="Logo" />
                                         ) : (
-                                            <span className="text-2xl font-bold text-gray-900">{org.name.charAt(0)}</span>
+                                            <span className="text-2xl font-bold text-foreground">{org.name.charAt(0)}</span>
                                         )}
                                     </div>
                                     <h3 className="font-bold text-lg">{org.name}</h3>

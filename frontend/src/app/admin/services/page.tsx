@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Layers, Activity, Users, Globe, Lock, MoreVertical, Edit, Trash2, ArrowRight, LayoutTemplate } from 'lucide-react';
+import { Plus, Search, Layers, Activity, Users, Globe, Lock, MoreVertical, Edit, Trash2, ArrowRight, LayoutTemplate, Eye } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { servicesApi } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import StatsCard from '@/components/StatsCard';
 import toast from 'react-hot-toast';
+import Image from 'next/image';
 
 interface ServiceTemplate {
     id: string;
@@ -25,6 +26,11 @@ export default function ServicesPage() {
     const [services, setServices] = useState<ServiceTemplate[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    
+    // Delete modal state
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deletingService, setDeletingService] = useState<ServiceTemplate | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         // Strict Super Admin Access
@@ -50,8 +56,7 @@ export default function ServicesPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this service template? This cannot be undone.')) return;
-
+        setIsDeleting(true);
         try {
             await servicesApi.delete(id);
             toast.success('Service deleted successfully');
@@ -59,7 +64,16 @@ export default function ServicesPage() {
         } catch (error) {
             console.error('Delete error:', error);
             toast.error('Failed to delete service');
+        } finally {
+            setIsDeleting(false);
+            setShowDeleteModal(false);
+            setDeletingService(null);
         }
+    };
+
+    const confirmDelete = (service: ServiceTemplate) => {
+        setDeletingService(service);
+        setShowDeleteModal(true);
     };
 
     const filteredServices = services.filter(service =>
@@ -122,6 +136,14 @@ export default function ServicesPage() {
                         <div key={service.id} className="group relative bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl hover:translate-y-[-2px] transition-all min-h-[300px] flex flex-col">
                             {/* Header Banner */}
                             <div className="h-24 relative overflow-hidden bg-gradient-to-br from-primary/80 via-primary/60 to-primary/40">
+                                {service.image_url && (
+                                    <Image
+                                        src={service.image_url}
+                                        alt={service.name}
+                                        fill
+                                        className="object-cover opacity-30"
+                                    />
+                                )}
                                 <div className="absolute inset-0 bg-[url('/noise.png')] opacity-20 mix-blend-soft-light"></div>
                                 <div className="absolute top-4 right-4 bg-background/20 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[10px] font-medium text-white uppercase tracking-wider">
                                     {service.scope}
@@ -130,8 +152,18 @@ export default function ServicesPage() {
 
                             {/* Icon */}
                             <div className="absolute top-12 left-6">
-                                <div className="w-16 h-16 rounded-xl bg-card shadow-lg p-3 flex items-center justify-center border border-border group-hover:scale-105 transition-transform">
-                                    <Layers className="w-8 h-8 text-primary" />
+                                <div className="w-16 h-16 rounded-xl bg-card shadow-lg overflow-hidden flex items-center justify-center border border-border group-hover:scale-105 transition-transform">
+                                    {service.image_url ? (
+                                        <Image
+                                            src={service.image_url}
+                                            alt={service.name}
+                                            width={64}
+                                            height={64}
+                                            className="object-cover w-full h-full"
+                                        />
+                                    ) : (
+                                        <Layers className="w-8 h-8 text-primary" />
+                                    )}
                                 </div>
                             </div>
 
@@ -168,6 +200,13 @@ export default function ServicesPage() {
                                             Dashboard
                                         </button>
                                         <button
+                                            onClick={() => router.push(`/admin/services/${service.id}/view`)}
+                                            className="p-2 hover:bg-muted rounded-md text-muted-foreground hover:text-primary transition-colors"
+                                            title="View Details"
+                                        >
+                                            <Eye className="w-4 h-4" />
+                                        </button>
+                                        <button
                                             onClick={() => router.push(`/admin/services/${service.id}/edit`)}
                                             className="p-2 hover:bg-muted rounded-md text-muted-foreground hover:text-primary transition-colors"
                                             title="Edit"
@@ -175,7 +214,7 @@ export default function ServicesPage() {
                                             <Edit className="w-4 h-4" />
                                         </button>
                                         <button
-                                            onClick={() => handleDelete(service.id)}
+                                            onClick={() => confirmDelete(service)}
                                             className="p-2 hover:bg-muted rounded-md text-muted-foreground hover:text-destructive transition-colors"
                                             title="Delete"
                                         >
@@ -183,7 +222,7 @@ export default function ServicesPage() {
                                         </button>
                                     </div>
                                     <button
-                                        onClick={() => router.push(`/admin/services/${service.id}/edit`)}
+                                        onClick={() => router.push(`/admin/services/${service.id}/view`)}
                                         className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                                     >
                                         Details <ArrowRight className="w-3 h-3" />
@@ -193,6 +232,52 @@ export default function ServicesPage() {
                         </div>
                     ))}
                 </div>
+
+                {/* Delete Confirmation Modal */}
+                {showDeleteModal && deletingService && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center">
+                        <div
+                            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                            onClick={() => { setShowDeleteModal(false); setDeletingService(null); }}
+                        />
+                        <div className="relative w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                                    <Trash2 className="w-5 h-5 text-destructive" />
+                                </div>
+                                <h2 className="text-lg font-bold">Delete Service</h2>
+                            </div>
+
+                            <p className="text-sm text-muted-foreground mb-6">
+                                Are you sure you want to delete <strong>{deletingService.name}</strong>? 
+                                This action cannot be undone.
+                            </p>
+
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => { setShowDeleteModal(false); setDeletingService(null); }}
+                                    className="flex-1 px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(deletingService.id)}
+                                    disabled={isDeleting}
+                                    className="flex-1 px-4 py-2 bg-destructive text-white rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {isDeleting ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        'Delete'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </DashboardLayout>
     );

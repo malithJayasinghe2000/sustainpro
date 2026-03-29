@@ -62,8 +62,8 @@ export default function EditServicePage({ params }: { params: Promise<{ id: stri
 
             setName(service.name);
             setDescription(service.description || '');
-            setScope(service.scope);
-            setIsPublic(service.is_public_dashboard_supported);
+            setScope(service.scope || 'GLOBAL');
+            setIsPublic(Boolean(service.is_public_dashboard_supported));
 
             // Map backend device models to form state
             // Backend returns: { device_model_id, role, min_count }
@@ -115,17 +115,15 @@ export default function EditServicePage({ params }: { params: Promise<{ id: stri
                 description,
                 scope,
                 is_public_dashboard_supported: isPublic,
-                config: {}, // Preserve existing config if needed, or update. PUT usually merges or overwrites.
-                // NOTE: existing PUT implementation in backend updates specific fields.
-                // device_models handling in backend for PUT?
-                // Let's check backend PUT implementation. 
-                // It does NOT update device_models currently!
-                // I need to check backend again.
+                // Include device_models for update - backend supports this
+                device_models: serviceDeviceModels.map(m => ({
+                    device_model_id: m.id,
+                    role: m.role || 'primary',
+                    min_devices: m.min_count || 1,
+                    max_devices: 10,
+                    is_required: true
+                }))
             });
-
-            // Wait, the backend PUT logic I recently touched ONLY updates: name, description, scope, config, dashboard_template.
-            // It does NOT update device_models association in sps_service_device_models!
-            // I need to fix backend if I want to edit device models.
 
             toast.success('Service updated successfully!');
             router.push('/admin/services');
@@ -165,6 +163,7 @@ export default function EditServicePage({ params }: { params: Promise<{ id: stri
                 onBack={handleBack}
                 isLastStep={currentStep === steps.length - 1}
                 isLoading={isLoading}
+                submitLabel="Update"
                 onCancel={() => router.push('/admin/services')}
             >
                 {/* Step 1: Profile */}
@@ -207,7 +206,7 @@ export default function EditServicePage({ params }: { params: Promise<{ id: stri
                         <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border">
                             <input
                                 type="checkbox"
-                                checked={isPublic}
+                                checked={isPublic === true}
                                 onChange={(e) => setIsPublic(e.target.checked)}
                                 className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
                             />
@@ -222,9 +221,6 @@ export default function EditServicePage({ params }: { params: Promise<{ id: stri
                 {/* Step 2: Device Models */}
                 {currentStep === 1 && (
                     <div className="space-y-6">
-                        <div className="p-4 bg-amber-500/10 text-amber-600 rounded-lg flex items-center gap-2 text-sm">
-                            <span>⚠️ Updating device models is not yet supported in the backend. Changes here will not be saved.</span>
-                        </div>
                         <div className="flex items-center justify-between">
                             <p className="text-sm text-muted-foreground">Select the device models required for this service.</p>
                         </div>

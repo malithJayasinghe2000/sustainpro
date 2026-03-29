@@ -381,7 +381,7 @@ function NewUserPageContent() {
             <h2 className="header-section">Account Information</h2>
 
             <div>
-                <label className="label-compact">Full Name</label>
+                <label className="label-compact">Full Name *</label>
                 <div className="relative">
                     <User className="icon-input" />
                     <input
@@ -395,7 +395,7 @@ function NewUserPageContent() {
             </div>
 
             <div>
-                <label className="label-compact">Email Address</label>
+                <label className="label-compact">Email Address *</label>
                 <div className="relative">
                     <Mail className="icon-input" />
                     <input
@@ -410,7 +410,7 @@ function NewUserPageContent() {
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="label-compact">Password</label>
+                    <label className="label-compact">Password *</label>
                     <div className="relative">
                         <Lock className="icon-input" />
                         <input
@@ -423,7 +423,7 @@ function NewUserPageContent() {
                     </div>
                 </div>
                 <div>
-                    <label className="label-compact">Confirm Password</label>
+                    <label className="label-compact">Confirm Password *</label>
                     <div className="relative">
                         <Lock className="icon-input" />
                         <input
@@ -479,8 +479,77 @@ function NewUserPageContent() {
     };
 
     const nextStep = () => {
-        // Validation logic per step could go here
-        if (currentStep === 0 && !formData.role) return setError("Please select a role");
+        const errors: string[] = [];
+
+        if (currentStep === 0) {
+            if (!formData.role) {
+                setError("Please select a role");
+                return;
+            }
+        }
+
+        if (currentStep === 1) {
+            // Validate context based on role
+            const role = formData.role;
+            
+            // Super admins always need an organization selected
+            if (currentUser?.is_super_admin && !formData.organization_id) {
+                setError("Please select an organization");
+                return;
+            }
+
+            // Roles that require event selection
+            if (['EVENT_MANAGER', 'DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(role) && !formData.event_id) {
+                setError("Please select an event");
+                return;
+            }
+
+            // Roles that require department selection
+            if (['DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(role) && !formData.dept_id) {
+                setError("Please select a department");
+                return;
+            }
+
+            // Roles that require service selection
+            if (['SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(role) && !formData.service_id) {
+                setError("Please select a service");
+                return;
+            }
+        }
+
+        if (currentStep === 2) {
+            // Validate account details
+            if (!formData.full_name?.trim()) {
+                setError("Full name is required");
+                return;
+            }
+
+            if (!formData.email?.trim()) {
+                setError("Email address is required");
+                return;
+            }
+
+            // Email format validation
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                setError("Please enter a valid email address");
+                return;
+            }
+
+            if (!formData.password) {
+                setError("Password is required");
+                return;
+            }
+
+            if (!isPasswordValid) {
+                setError("Password does not meet requirements");
+                return;
+            }
+
+            if (formData.password !== formData.confirmPassword) {
+                setError("Passwords do not match");
+                return;
+            }
+        }
 
         setError('');
         setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1));
@@ -518,7 +587,7 @@ function NewUserPageContent() {
             >
                 {/* Error Banner */}
                 {error && (
-                    <div className="absolute top-4 left-4 right-4 bg-red-500/10 border border-red-500/20 text-red-600 px-4 py-3 rounded-lg flex items-center gap-2 text-sm animate-in slide-in-from-top-2 z-10">
+                    <div className="absolute top-4 left-4 right-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg flex items-center gap-2 text-sm animate-in slide-in-from-top-2 z-10">
                         <AlertCircle className="w-4 h-4" />
                         {error}
                     </div>

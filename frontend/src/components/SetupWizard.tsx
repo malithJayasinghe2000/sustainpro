@@ -22,6 +22,7 @@ interface SetupWizardProps {
     onBack?: () => void;
     nextLabel?: string;
     backLabel?: string;
+    submitLabel?: string;
     isLastStep?: boolean;
     isLoading?: boolean;
 
@@ -49,6 +50,7 @@ export default function SetupWizard({
     onBack,
     nextLabel = 'Next Step',
     backLabel = 'Back',
+    submitLabel = 'Create',
     isLastStep = false,
     isLoading = false,
     onCancel,
@@ -179,7 +181,7 @@ export default function SetupWizard({
                                         disabled={isLoading}
                                         className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
-                                        {isLoading ? 'Processing...' : isLastStep ? 'Create' : nextLabel}
+                                        {isLoading ? 'Processing...' : isLastStep ? submitLabel : nextLabel}
                                     </button>
                                 )}
                             </div>

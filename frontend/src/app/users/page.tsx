@@ -403,7 +403,7 @@ export default function UsersPage() {
                             {/* Roles List */}
                             <div className="relative pt-4 pb-4 pl-8">
                                 {/* Vertical connection line from Org to Roles */}
-                                <div className="absolute left-[20px] top-0 bottom-0 w-[2px] bg-gray-300" />
+                                <div className="absolute left-[20px] top-0 bottom-0 w-[2px] bg-border" />
 
                                 {org.roles.map(([role, users], roleIndex, roleArr) => {
                                     const isLastRole = roleIndex === roleArr.length - 1;
@@ -420,7 +420,7 @@ export default function UsersPage() {
                                     return (
                                         <div key={role} className="relative mb-3 last:mb-0">
                                             {/* Horizontal connector from main vertical line to role */}
-                                            <div className="absolute left-[-12px] top-[18px] w-3 h-[2px] bg-gray-300" />
+                                            <div className="absolute left-[-12px] top-[18px] w-3 h-[2px] bg-border" />
                                             {/* Cover bottom vertical for last role */}
                                             {isLastRole && <div className="absolute left-[-12px] top-[20px] bottom-0 w-[2px] bg-background" />}
 
@@ -436,14 +436,14 @@ export default function UsersPage() {
 
                                                 <div className="relative pl-8 pt-2 pb-2">
                                                     {/* Vertical connection line from Role to Users */}
-                                                    <div className="absolute left-[12px] top-0 bottom-0 w-[2px] bg-gray-300" />
+                                                    <div className="absolute left-[12px] top-0 bottom-0 w-[2px] bg-border" />
 
                                                     {users.map((user, userIndex, userArr) => {
                                                         const isLastUser = userIndex === userArr.length - 1;
                                                         return (
                                                             <div key={user.id} className="relative mb-2 last:mb-0">
                                                                 {/* Horizontal connector from role line to user */}
-                                                                <div className="absolute left-[-20px] top-[26px] w-5 h-[2px] bg-gray-300" />
+                                                                <div className="absolute left-[-20px] top-[26px] w-5 h-[2px] bg-border" />
                                                                 {/* Cover bottom vertical for last user */}
                                                                 {isLastUser && <div className="absolute left-[-20px] top-[28px] bottom-0 w-[2px] bg-background" />}
 

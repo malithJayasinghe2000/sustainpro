@@ -74,6 +74,25 @@ export default function NewServicePage() {
     };
 
     const handleNext = () => {
+        // Validation per step
+        if (currentStep === 0) {
+            if (!name?.trim()) {
+                toast.error('Service name is required');
+                return;
+            }
+            if (!scope) {
+                toast.error('Please select a service scope');
+                return;
+            }
+        }
+
+        if (currentStep === 1) {
+            if (serviceDeviceModels.length === 0) {
+                toast.error('Please select at least one device model');
+                return;
+            }
+        }
+
         if (currentStep < steps.length - 1) setCurrentStep(prev => prev + 1);
         else handleSubmit();
     };
@@ -190,7 +209,14 @@ export default function NewServicePage() {
             }
         } catch (error: any) {
             console.error('❌ SERVICE CREATION ERROR:', error);
-            toast.error(error.response?.data?.error || 'Failed to create service');
+            const errorMessage = error.response?.data?.error || 'Failed to create service';
+            
+            // Check for unique constraint violation
+            if (errorMessage.includes('Unique constraint failed') && errorMessage.includes('name')) {
+                toast.error(`A service with the name "${name}" already exists. Please choose a different name.`);
+            } else {
+                toast.error(errorMessage);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -265,7 +291,7 @@ export default function NewServicePage() {
                         </div>
 
                         <Input
-                            label="Service Name"
+                            label="Service Name *"
                             placeholder="e.g. Water Wall Monitor V2"
                             value={name}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}

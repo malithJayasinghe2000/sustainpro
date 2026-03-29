@@ -58,6 +58,9 @@ export default function OrganizationDetailsPage() {
     const [newUserForm, setNewUserForm] = useState({ email: '', full_name: '', password: '', role: 'ORG_ADMIN' });
     const [isCreatingUser, setIsCreatingUser] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    
+    // User Actions Dropdown State
+    const [userActionsOpen, setUserActionsOpen] = useState<string | null>(null);
 
     useEffect(() => {
         if (params.id) {
@@ -499,9 +502,60 @@ export default function OrganizationDetailsPage() {
                                                     {new Date(user.created_at).toLocaleDateString()}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                                        <MoreVertical className="w-4 h-4" />
-                                                    </Button>
+                                                    <div className="relative">
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            className="h-8 w-8 p-0"
+                                                            onClick={() => setUserActionsOpen(userActionsOpen === user.id ? null : user.id)}
+                                                        >
+                                                            <MoreVertical className="w-4 h-4" />
+                                                        </Button>
+                                                        {userActionsOpen === user.id && (
+                                                            <>
+                                                                <div 
+                                                                    className="fixed inset-0 z-40" 
+                                                                    onClick={() => setUserActionsOpen(null)}
+                                                                />
+                                                                <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-lg shadow-lg z-50 py-1">
+                                                                    <button
+                                                                        onClick={() => { router.push(`/users/${user.id}`); setUserActionsOpen(null); }}
+                                                                        className="w-full px-4 py-2 text-left text-sm hover:bg-muted flex items-center gap-2"
+                                                                    >
+                                                                        <Users className="w-4 h-4" />
+                                                                        View Profile
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { router.push(`/users/${user.id}/edit`); setUserActionsOpen(null); }}
+                                                                        className="w-full px-4 py-2 text-left text-sm hover:bg-muted flex items-center gap-2"
+                                                                    >
+                                                                        <Edit className="w-4 h-4" />
+                                                                        Edit User
+                                                                    </button>
+                                                                    <div className="border-t border-border my-1" />
+                                                                    <button
+                                                                        onClick={() => { 
+                                                                            toast.info('User status toggle coming soon');
+                                                                            setUserActionsOpen(null); 
+                                                                        }}
+                                                                        className="w-full px-4 py-2 text-left text-sm hover:bg-muted flex items-center gap-2"
+                                                                    >
+                                                                        {user.is_active ? (
+                                                                            <>
+                                                                                <XCircle className="w-4 h-4" />
+                                                                                Deactivate
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <CheckCircle className="w-4 h-4" />
+                                                                                Activate
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}

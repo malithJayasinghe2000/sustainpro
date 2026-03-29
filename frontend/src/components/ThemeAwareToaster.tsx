@@ -13,12 +13,19 @@ export default function ThemeAwareToaster() {
             expand={true}
             theme={theme as 'light' | 'dark'}
             toastOptions={{
-                className: 'font-sans',
+                className: 'font-sans !z-[9999]',
                 style: {
                     border: '1px solid hsl(var(--border))',
+                    background: 'hsl(var(--card))',
+                    color: 'hsl(var(--foreground))',
+                    zIndex: 9999,
                 },
                 duration: 4000,
             }}
+            style={{
+                zIndex: 9999,
+            }}
+            offset={80}
         />
     );
 }

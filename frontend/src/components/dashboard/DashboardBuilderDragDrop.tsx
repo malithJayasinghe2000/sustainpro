@@ -11,7 +11,7 @@ import 'react-grid-layout/css/styles.css';
 interface DashboardBuilderDragDropProps {
     availableParameters: { key: string; name: string; unit?: string; data_type: string }[];
     initialTemplate?: DashboardTemplate;
-    onSave: (template: DashboardTemplate) => void;
+    onSave: (template: DashboardTemplate) => void | Promise<void>;
     onCancel?: () => void;
     onChange?: () => void; // Called when widgets are modified
 }
@@ -31,6 +31,8 @@ export default function DashboardBuilderDragDrop({
     const [previewMode, setPreviewMode] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [canvasPadding, setCanvasPadding] = useState(24);
+    const [hasLocalChanges, setHasLocalChanges] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // --- Helpers for Deep Search/Update ---
 
@@ -84,16 +86,19 @@ export default function DashboardBuilderDragDrop({
         };
 
         setWidgets([...widgets, newWidget]);
+        setHasLocalChanges(true);
         onChange?.(); // Track changes
     };
 
     const updateWidget = (id: string, updates: Partial<WidgetConfig>) => {
         setWidgets(updateWidgetDeep(widgets, id, updates));
+        setHasLocalChanges(true);
         onChange?.(); // Track changes
     };
 
     const deleteWidget = (id: string) => {
         setWidgets(deleteWidgetDeep(widgets, id));
+        setHasLocalChanges(true);
         if (selectedWidgetId === id) {
             setSelectedWidgetId(null);
             setShowSettings(false);
@@ -107,6 +112,8 @@ export default function DashboardBuilderDragDrop({
         const { widget, parentId: oldParentId } = found;
 
         if (oldParentId === newParentId) return; // No change
+        
+        setHasLocalChanges(true);
 
         // 1. Remove from old location
         let newWidgets = deleteWidgetDeep(widgets, widgetId);
@@ -175,12 +182,19 @@ export default function DashboardBuilderDragDrop({
         });
         // Only trigger onChange if positions actually changed
         if (hasChanged) {
+            setHasLocalChanges(true);
             onChange?.();
         }
     };
 
-    const handleSave = () => {
-        onSave({ widgets });
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await onSave({ widgets });
+            setHasLocalChanges(false);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const openSettings = (widgetId: string) => {
@@ -254,10 +268,15 @@ export default function DashboardBuilderDragDrop({
                     </button>
                     <button
                         onClick={handleSave}
-                        className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm flex items-center gap-2 hover:bg-primary/90"
+                        disabled={!hasLocalChanges || isSaving}
+                        className={`px-4 py-1.5 rounded-lg text-sm flex items-center gap-2 transition-all ${
+                            hasLocalChanges && !isSaving
+                                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                                : 'bg-muted text-muted-foreground cursor-not-allowed'
+                        }`}
                     >
                         <Save className="w-4 h-4" />
-                        Save
+                        {isSaving ? 'Saving...' : hasLocalChanges ? 'Save' : 'Saved'}
                     </button>
                 </div>
             </div>
