@@ -161,6 +161,8 @@ export default function AddDepartmentWizard({
     const handleCreate = async () => {
         if (!selectedTemplate) return;
 
+        let createdDeptId: string | null = null;
+
         try {
             setIsLoading(true);
 
@@ -177,6 +179,7 @@ export default function AddDepartmentWizard({
             };
 
             const newDept = await departmentsApi.create(deptData);
+            createdDeptId = newDept.id;
             console.log('[Department Wizard] Created department:', newDept);
 
             // 2. Create User (Department Head) if requested
@@ -188,12 +191,7 @@ export default function AddDepartmentWizard({
                         full_name: userData.full_name,
                         organization_id: organizationId,
                         role: 'DEPT_HEAD', // Matches backend role code in sps_roles table
-                        // We might need to link this user to the department immediately
-                        // The User API might need 'department_id' or 'role_assignments'
-                        // Assuming standard structure based on Event Manager creation in events/new/page.tsx
                         department_id: newDept.id, // Explicit linking if API supports it
-                        // If API creates user but doesn't handle dept link, we might need a separate call.
-                        // But let's assume 'department_id' works or role assignment handles it.
                     };
 
                     console.log('[Department Wizard] Creating head user:', userPayload);
@@ -210,8 +208,20 @@ export default function AddDepartmentWizard({
                     toast.success("Department Head account created and credentials sent.");
                 } catch (userError: any) {
                     console.error("User creation failed:", userError);
-                    toast.error(`Department created, but user creation failed: ${userError.message}`);
-                    // We don't stop here, we still return success for the department
+                    
+                    // ROLLBACK: Delete the created department since user creation failed
+                    if (createdDeptId) {
+                        try {
+                            await departmentsApi.delete(createdDeptId);
+                            console.log('[Department Wizard] Rolled back department creation due to user failure');
+                        } catch (deleteError) {
+                            console.error('[Department Wizard] Failed to rollback department:', deleteError);
+                        }
+                    }
+                    
+                    toast.error(`Department Head creation failed: ${userError.response?.data?.error || userError.message}. Department creation was cancelled.`);
+                    setIsLoading(false);
+                    return; // Stop here, don't call onSuccess
                 }
             }
 

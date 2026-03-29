@@ -78,8 +78,11 @@ export default function Navbar() {
             const response = await systemNotificationsApi.getAll({ limit: 10 });
             setNotifications(response.data);
             setUnreadCount(response.meta.unread_count);
-        } catch (error) {
-            console.error('Failed to fetch notifications:', error);
+        } catch (error: any) {
+            // Silently handle rate limiting (429) and permission errors (403)
+            if (error?.response?.status !== 429 && error?.response?.status !== 403) {
+                console.error('Failed to fetch notifications:', error);
+            }
         } finally {
             setNotificationsLoading(false);
         }
@@ -90,13 +93,22 @@ export default function Navbar() {
         // Don't fetch if user is not authenticated yet
         if (!user) return;
         
+        // Only fetch for users who have escalation permissions
+        const hasEscalationAccess = user.is_super_admin || 
+            user.permissions?.includes('escalations.view') || 
+            user.permissions?.includes('escalations.manage');
+        if (!hasEscalationAccess) return;
+        
         try {
             const response = await escalationsApi.getPendingCount();
             if (response.success) {
                 setEscalationCount(response.data.count);
             }
-        } catch (error) {
-            console.error('Failed to fetch escalation count:', error);
+        } catch (error: any) {
+            // Silently handle rate limiting (429) and permission errors (403)
+            if (error?.response?.status !== 429 && error?.response?.status !== 403) {
+                console.error('Failed to fetch escalation count:', error);
+            }
         }
     }, [user]);
 

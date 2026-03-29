@@ -146,7 +146,7 @@ export default function NewEventPage() {
         const errors: Record<string, string> = {};
 
         if (currentStep === 0) {
-            if (!formData.name) errors.name = "Event Name is required";
+            if (!formData.name?.trim()) errors.name = "Event Name is required";
             if (!formData.organization_id) errors.organization_id = "Organization is required";
             if (!formData.start_date) errors.start_date = "Start date is required";
             if (!formData.end_date) errors.end_date = "End date is required";
@@ -158,25 +158,49 @@ export default function NewEventPage() {
                 if (end < start) {
                     errors.end_date = "End date cannot be before start date";
                 }
+                // Check that start date is not in the past
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                if (start < now) {
+                    errors.start_date = "Start date cannot be in the past";
+                }
             }
         }
 
-        if (currentStep === 2 && createManager) {
-            if (!managerData.full_name) errors.full_name = "Full name is required";
-            if (!managerData.email) {
-                errors.email = "Email is required";
-            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(managerData.email)) {
-                errors.email = "Invalid email format";
-            }
-            if (!managerData.password) errors.password = "Password is required";
-            if (!isPasswordValid) errors.password = "Password does not meet requirements";
-            if (managerData.password && managerData.password !== managerData.confirmPassword) {
-                errors.confirmPassword = "Passwords do not match";
+        // Step 1 (Location) - Location is optional but validate coordinates if location is entered
+        if (currentStep === 1) {
+            // Location is optional, no strict validation needed
+            // If you want to require location, uncomment below:
+            // if (!formData.location?.trim()) errors.location = "Location is required";
+        }
+
+        if (currentStep === 2) {
+            if (createManager) {
+                // Creating new manager - validate all fields
+                if (!managerData.full_name?.trim()) errors.full_name = "Full name is required";
+                if (!managerData.email?.trim()) {
+                    errors.email = "Email is required";
+                } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(managerData.email)) {
+                    errors.email = "Invalid email format";
+                }
+                if (!managerData.password) errors.password = "Password is required";
+                else if (!isPasswordValid) errors.password = "Password does not meet requirements";
+                if (managerData.password && managerData.password !== managerData.confirmPassword) {
+                    errors.confirmPassword = "Passwords do not match";
+                }
+            } else {
+                // Selecting existing manager - validate selection
+                if (!existingManagerId) {
+                    errors.existingManager = "Please select an existing manager";
+                }
             }
         }
 
         if (Object.keys(errors).length > 0) {
             setFieldErrors(errors);
+            // Show toast for better visibility
+            const firstError = Object.values(errors)[0];
+            toast.error('Validation Error', { description: firstError });
             return;
         }
 
@@ -190,6 +214,8 @@ export default function NewEventPage() {
     };
 
     const handleSubmit = async () => {
+        let createdEventId: string | null = null;
+        
         try {
             setIsLoading(true);
             setFieldErrors({});
@@ -208,10 +234,10 @@ export default function NewEventPage() {
 
             // 2. Create Event
             const createdEvent = await eventsApi.create(eventPayload);
-            const newEventId = createdEvent?.id;
+            createdEventId = createdEvent?.id;
 
             // console.log('[Event Create] Created event:', createdEvent);
-            // console.log('[Event Create] New Event ID:', newEventId);
+            // console.log('[Event Create] New Event ID:', createdEventId);
 
             // 3. Create NEW Manager (only if requested)
             if (createManager && managerData.email) {
@@ -222,19 +248,30 @@ export default function NewEventPage() {
                         full_name: managerData.full_name,
                         organization_id: formData.organization_id,
                         role: 'EVENT_MANAGER',
-                        event_id: newEventId // Link to the new event
+                        event_id: createdEventId // Link to the new event
                     };
                     //console.log('[Event Create] Creating manager with payload:', managerPayload);
 
                     await usersApi.create(managerPayload);
                 } catch (userError: any) {
                     console.error("User creation failed:", userError);
-                    const errorMsg = `Event created, but manager creation failed: ${userError.response?.data?.error || userError.message}`;
+                    
+                    // ROLLBACK: Delete the created event since manager creation failed
+                    if (createdEventId) {
+                        try {
+                            await eventsApi.delete(createdEventId);
+                            console.log('[Event Create] Rolled back event creation due to manager failure');
+                        } catch (deleteError) {
+                            console.error('[Event Create] Failed to rollback event:', deleteError);
+                        }
+                    }
+                    
+                    const errorMsg = `Manager creation failed: ${userError.response?.data?.error || userError.message}. Event creation was cancelled.`;
                     setFieldErrors(prev => ({
                         ...prev,
                         submit: errorMsg
                     }));
-                    toast.error('Manager Creation Failed', { description: errorMsg });
+                    toast.error('Creation Failed', { description: errorMsg });
                     setIsLoading(false);
                     return; // Stop here, don't redirect
                 }
@@ -267,7 +304,7 @@ export default function NewEventPage() {
                 <div className="space-y-4">
                     {currentUser?.is_super_admin && (
                         <RichSelect
-                            label="Organization"
+                            label="Organization *"
                             value={formData.organization_id}
                             onChange={val => { setFormData({ ...formData, organization_id: val }); setFieldErrors(prev => ({ ...prev, organization_id: '' })); }}
                             options={[
@@ -450,7 +487,14 @@ export default function NewEventPage() {
                             />
                         </div>
 
-                        <div className="bg-white border border-border rounded-lg overflow-hidden shadow-sm">
+                        {fieldErrors.existingManager && (
+                            <div className="bg-red-500/10 border border-red-500/20 text-red-600 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4" />
+                                {fieldErrors.existingManager}
+                            </div>
+                        )}
+
+                        <div className="bg-card dark:bg-card border border-border rounded-lg overflow-hidden shadow-sm">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-muted/50 text-muted-foreground font-medium">
                                     <tr>
@@ -474,12 +518,12 @@ export default function NewEventPage() {
                                                 </td>
                                                 <td className="p-3">
                                                     {m.is_active ? (
-                                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-700">
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-700 dark:text-green-400">
                                                             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                                                             Active ({m.active_event_count})
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-700">
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400">
                                                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                                             Inactive
                                                         </span>
@@ -488,7 +532,7 @@ export default function NewEventPage() {
                                                 <td className="p-3 text-right">
                                                     <button
                                                         type="button"
-                                                        onClick={() => setExistingManagerId(m.id)}
+                                                        onClick={() => { setExistingManagerId(m.id); setFieldErrors(prev => ({ ...prev, existingManager: '' })); }}
                                                         className={`px-3 py-1.5 rounded text-xs font-medium transition-colors border ${existingManagerId === m.id
                                                             ? 'bg-primary text-primary-foreground border-primary'
                                                             : 'bg-background hover:bg-muted border-border text-foreground'
@@ -517,7 +561,7 @@ export default function NewEventPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in fade-in duration-300">
                     <div className="lg:col-span-3 space-y-5">
                         <Input
-                            label="Manager Full Name"
+                            label="Manager Full Name *"
                             placeholder="e.g. Sarah Connor"
                             value={managerData.full_name}
                             onChange={e => { setManagerData({ ...managerData, full_name: e.target.value }); setFieldErrors(prev => ({ ...prev, full_name: '' })); }}
@@ -525,7 +569,7 @@ export default function NewEventPage() {
                             icon={User}
                         />
                         <Input
-                            label="Email Address"
+                            label="Email Address *"
                             type="email"
                             placeholder="sarah@event-org.com"
                             value={managerData.email}
@@ -535,7 +579,7 @@ export default function NewEventPage() {
                         />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <PasswordInput
-                                label="Password"
+                                label="Password *"
                                 value={managerData.password}
                                 onChange={(value) => {
                                     setManagerData({ ...managerData, password: value });
@@ -667,7 +711,7 @@ export default function NewEventPage() {
                                         </div>
                                     </div>
                                     <div className="pt-6 border-t border-border/50">
-                                        <div className="flex items-center gap-2 text-xs text-green-600 font-semibold bg-green-50/50 p-3 rounded-lg border border-green-100/50">
+                                        <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 font-semibold bg-green-500/10 p-3 rounded-lg border border-green-500/20">
                                             <CheckCircle2 className="w-4 h-4" />
                                             Security credentials configured
                                         </div>
@@ -687,7 +731,7 @@ export default function NewEventPage() {
             </div>
 
             {fieldErrors.submit && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-600 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
                     <X className="w-4 h-4" />
                     {fieldErrors.submit}
                 </div>

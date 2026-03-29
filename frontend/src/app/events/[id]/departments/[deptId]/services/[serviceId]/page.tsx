@@ -31,7 +31,8 @@ import {
     X,
     Check,
     FileText,
-    Download
+    Download,
+    Globe
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { systemNotificationsApi } from '@/lib/api';
@@ -277,8 +278,45 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
             console.log('🔍 DEBUG: main_dashboard_layout:', instanceData?.main_dashboard_layout);
             console.log('🔍 DEBUG: widgets:', instanceData?.main_dashboard_layout?.widgets);
 
-            setAssignedDevices(Array.isArray(devicesData) ? devicesData : (devicesData?.data || []));
+            const devices = Array.isArray(devicesData) ? devicesData : (devicesData?.data || []);
+            setAssignedDevices(devices);
             setAvailableDevices(Array.isArray(allDevicesData) ? allDevicesData : (allDevicesData?.data || []));
+
+            // Initialize aggregatedData from existing device metadata
+            // This ensures dashboard shows data even before live telemetry arrives
+            if (devices.length > 0) {
+                const initialAggregated: Record<string, any> = {};
+                let hasOnlineDevice = false;
+                let latestSeen: string | null = null;
+
+                devices.forEach((device: any) => {
+                    if (device.metadata && typeof device.metadata === 'object') {
+                        // Merge all device metadata into aggregated data
+                        Object.entries(device.metadata).forEach(([key, value]) => {
+                            // For numeric values, we could aggregate them
+                            // For simplicity, take the latest value (last device wins)
+                            initialAggregated[key] = value;
+                        });
+                    }
+                    
+                    // Track status and last seen
+                    if (device.status === 'ONLINE') {
+                        hasOnlineDevice = true;
+                    }
+                    if (device.last_seen && (!latestSeen || new Date(device.last_seen) > new Date(latestSeen))) {
+                        latestSeen = device.last_seen;
+                    }
+                });
+
+                // Set status based on whether any device is online
+                initialAggregated.status = hasOnlineDevice ? 'ONLINE' : 'OFFLINE';
+                if (latestSeen) {
+                    initialAggregated.last_seen = latestSeen;
+                }
+
+                console.log('🔍 DEBUG: Initial aggregated data from devices:', initialAggregated);
+                setAggregatedData(initialAggregated);
+            }
 
             // Filter users to only show those with roles in this service
             const allUsers = usersResponse?.data || (Array.isArray(usersResponse) ? usersResponse : []);
@@ -550,14 +588,31 @@ export default function ServiceInstancePage({ params }: ServiceInstancePageProps
                     </div>
 
                     {/* Service Header */}
-                    <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <Layers className="w-7 h-7 text-primary" />
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center">
+                                <Layers className="w-7 h-7 text-primary" />
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold">{serviceInstance.service_name}</h1>
+                                <p className="text-sm text-muted-foreground">{serviceInstance.service_description || 'Service instance'}</p>
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="text-2xl font-bold">{serviceInstance.service_name}</h1>
-                            <p className="text-sm text-muted-foreground">{serviceInstance.service_description || 'Service instance'}</p>
-                        </div>
+                        {/* Public Dashboard Button - shown if service supports public dashboard */}
+                        {serviceInstance.has_public_dashboard && (
+                            <button
+                                onClick={() => {
+                                    // Generate public dashboard link
+                                    const publicUrl = `${window.location.origin}/public/service/${serviceId}`;
+                                    navigator.clipboard.writeText(publicUrl);
+                                    toast.success('Public dashboard link copied to clipboard!');
+                                }}
+                                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 rounded-lg text-sm font-medium transition-colors border border-emerald-500/20"
+                            >
+                                <Globe className="w-4 h-4" />
+                                Copy Public Link
+                            </button>
+                        )}
                     </div>
                 </div>
 

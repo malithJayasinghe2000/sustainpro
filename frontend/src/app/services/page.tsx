@@ -145,9 +145,9 @@ export default function MyServicesPage() {
                                                     {service.event_name || 'Unknown Event'}
                                                 </div>
                                                 {service.event_status && (
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${service.event_status === 'ACTIVE' || service.event_status === 'RUNNING' ? 'bg-green-500/10 text-green-600 border-green-200' :
-                                                            service.event_status === 'PLANNING' ? 'bg-blue-500/10 text-blue-600 border-blue-200' :
-                                                                'bg-gray-100 text-gray-600 border-gray-200'
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${service.event_status === 'ACTIVE' || service.event_status === 'RUNNING' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' :
+                                                            service.event_status === 'PLANNING' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
+                                                                'bg-muted text-muted-foreground border-border'
                                                         }`}>
                                                         {service.event_status}
                                                     </span>

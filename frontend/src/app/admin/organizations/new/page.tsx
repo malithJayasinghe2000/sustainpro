@@ -97,22 +97,33 @@ export default function NewOrganizationPage() {
         const errors: Record<string, string> = {};
 
         if (currentStep === 0) {
-            if (!newOrg.name) errors.name = "Organization name is required";
+            if (!newOrg.name?.trim()) errors.name = "Organization name is required";
+            // Validate website URL format if provided
+            if (newOrg.website && !/^https?:\/\/.+/.test(newOrg.website)) {
+                errors.website = "Website must be a valid URL (e.g., https://example.com)";
+            }
         }
 
         if (currentStep === 3) { // Organization Admin Setup
-            if (!newOrg.admin_full_name.trim()) errors.admin_full_name = 'Admin full name is required';
-            if (!newOrg.contact_email.trim()) errors.contact_email = 'Admin email is required';
+            if (!newOrg.admin_full_name?.trim()) errors.admin_full_name = 'Admin full name is required';
+            if (!newOrg.contact_email?.trim()) {
+                errors.contact_email = 'Admin email is required';
+            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newOrg.contact_email)) {
+                errors.contact_email = 'Please enter a valid email address';
+            }
             if (!newOrg.admin_password) errors.admin_password = 'Password is required';
-            if (!isPasswordValid) errors.admin_password = 'Password does not meet requirements';
+            else if (!isPasswordValid) errors.admin_password = 'Password does not meet requirements';
             if (!newOrg.admin_password_confirm) errors.admin_password_confirm = 'Please confirm password';
-            if (newOrg.admin_password !== newOrg.admin_password_confirm) {
+            else if (newOrg.admin_password !== newOrg.admin_password_confirm) {
                 errors.admin_password_confirm = 'Passwords do not match';
             }
         }
 
         if (Object.keys(errors).length > 0) {
             setFieldErrors(errors);
+            // Show toast for better visibility
+            const firstError = Object.values(errors)[0];
+            toast.error('Validation Error', { description: firstError });
             return;
         }
 
@@ -226,7 +237,8 @@ export default function NewOrganizationPage() {
                     label="Corporate Website"
                     placeholder="https://acme.com"
                     value={newOrg.website}
-                    onChange={e => setNewOrg({ ...newOrg, website: e.target.value })}
+                    onChange={e => { setNewOrg({ ...newOrg, website: e.target.value }); setFieldErrors(prev => ({ ...prev, website: '' })); }}
+                    error={fieldErrors.website}
                     icon={Globe}
                 />
                 <div className="md:col-span-2">
@@ -589,7 +601,7 @@ export default function NewOrganizationPage() {
                             </div>
 
                             <div className="pt-6 border-t border-border/50">
-                                <div className="flex items-center gap-2 text-xs text-green-600 font-semibold bg-green-50/50 p-3 rounded-lg border border-green-100/50">
+                                <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 font-semibold bg-green-500/10 p-3 rounded-lg border border-green-500/20">
                                     <CheckCircle2 className="w-4 h-4" />
                                     Security credentials successfully configured
                                 </div>

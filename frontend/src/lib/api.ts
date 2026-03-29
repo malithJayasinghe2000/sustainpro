@@ -647,6 +647,11 @@ export const departmentsApi = {
         return response.data;
     },
 
+    delete: async (id: string) => {
+        const response = await apiClient.delete(`/departments/${id}`);
+        return response.data;
+    },
+
     getMyDepartments: async () => {
         const response = await apiClient.get('/departments/my/departments');
         return response.data.data;
@@ -784,10 +789,8 @@ export const eventsApi = {
         const response = await apiClient.post(`/events/${id}/request-delete`);
         return response.data;
     },
-    delete: async (id: string, adminPassword: string) => {
-        const response = await apiClient.delete(`/events/${id}`, {
-            data: { adminPassword }
-        });
+    delete: async (id: string) => {
+        const response = await apiClient.delete(`/events/${id}`);
         return response.data;
     }
 };

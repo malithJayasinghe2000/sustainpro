@@ -112,7 +112,7 @@ export default function EventsPage() {
                 total: totalCount || allEvents.length,
                 active: allEvents.filter((e: any) => e.status === 'ACTIVE').length,
                 planning: allEvents.filter((e: any) => e.status === 'PLANNING').length,
-                archived: allEvents.filter((e: any) => e.status === 'ARCHIVED').length,
+                archived: allEvents.filter((e: any) => e.status === 'END').length,
             });
         } catch (err) {
             console.error(err);
@@ -250,9 +250,9 @@ export default function EventsPage() {
                         intent="primary"
                     />
                     <StatsCard
-                        title="Archived"
+                        title="Ended Events"
                         value={stats.archived}
-                        subtext="Past events"
+                        subtext="Completed events"
                         icon={Archive}
                         intent="warning"
                     />

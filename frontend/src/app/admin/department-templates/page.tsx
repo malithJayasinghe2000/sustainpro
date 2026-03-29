@@ -47,6 +47,11 @@ export default function DepartmentTemplatesPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState<DepartmentTemplate | null>(null);
+    
+    // Delete confirmation state
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deletingTemplate, setDeletingTemplate] = useState<DepartmentTemplate | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -109,15 +114,23 @@ export default function DepartmentTemplatesPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this template?')) return;
-
+        setIsDeleting(true);
         try {
             await departmentTemplatesApi.delete(id);
             toast.success('Template deleted successfully');
             fetchTemplates();
         } catch (error: any) {
             toast.error(error.response?.data?.error || 'Failed to delete template');
+        } finally {
+            setIsDeleting(false);
+            setShowDeleteModal(false);
+            setDeletingTemplate(null);
         }
+    };
+
+    const confirmDelete = (template: DepartmentTemplate) => {
+        setDeletingTemplate(template);
+        setShowDeleteModal(true);
     };
 
     const openCreateModal = () => {
@@ -183,7 +196,7 @@ export default function DepartmentTemplatesPage() {
                                             <Edit className="w-4 h-4 text-muted-foreground" />
                                         </button>
                                         <button
-                                            onClick={() => handleDelete(template.id)}
+                                            onClick={() => confirmDelete(template)}
                                             className="p-1.5 hover:bg-destructive/10 rounded transition-colors"
                                         >
                                             <Trash2 className="w-4 h-4 text-destructive" />
@@ -292,6 +305,52 @@ export default function DepartmentTemplatesPage() {
                                 className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                             >
                                 {editingTemplate ? 'Update' : 'Create'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteModal && deletingTemplate && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        onClick={() => { setShowDeleteModal(false); setDeletingTemplate(null); }}
+                    />
+                    <div className="relative w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                                <Trash2 className="w-5 h-5 text-destructive" />
+                            </div>
+                            <h2 className="text-lg font-bold">Delete Template</h2>
+                        </div>
+
+                        <p className="text-sm text-muted-foreground mb-6">
+                            Are you sure you want to delete <strong>{deletingTemplate.name}</strong>? 
+                            This action cannot be undone.
+                        </p>
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => { setShowDeleteModal(false); setDeletingTemplate(null); }}
+                                className="flex-1 px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleDelete(deletingTemplate.id)}
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-2 bg-destructive text-white rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isDeleting ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    'Delete'
+                                )}
                             </button>
                         </div>
                     </div>

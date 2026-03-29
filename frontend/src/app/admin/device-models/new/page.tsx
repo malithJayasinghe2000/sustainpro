@@ -92,6 +92,46 @@ export default function NewDeviceModelPage() {
     ];
 
     const handleNext = () => {
+        // Validation per step
+        if (currentStep === 0) {
+            if (!modelId?.trim()) {
+                toast.error('Model ID is required');
+                return;
+            }
+            // Validate Model ID format (alphanumeric and underscores only)
+            if (!/^[A-Za-z0-9_-]+$/.test(modelId)) {
+                toast.error('Model ID can only contain letters, numbers, underscores, and hyphens');
+                return;
+            }
+            if (!modelName?.trim()) {
+                toast.error('Display Name is required');
+                return;
+            }
+        }
+
+        if (currentStep === 1) {
+            if (parameters.length === 0) {
+                toast.error('Please add at least one parameter');
+                return;
+            }
+            // Validate each parameter
+            for (let i = 0; i < parameters.length; i++) {
+                const param = parameters[i];
+                if (!param.key?.trim()) {
+                    toast.error(`Parameter ${i + 1}: Key is required`);
+                    return;
+                }
+                if (!/^[A-Za-z0-9_]+$/.test(param.key)) {
+                    toast.error(`Parameter ${i + 1}: Key can only contain letters, numbers, and underscores`);
+                    return;
+                }
+                if (!param.name?.trim()) {
+                    toast.error(`Parameter ${i + 1}: Name is required`);
+                    return;
+                }
+            }
+        }
+
         if (currentStep < steps.length - 1) {
             setCurrentStep(currentStep + 1);
         } else {
@@ -175,14 +215,14 @@ export default function NewDeviceModelPage() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <Input
-                                label="Model ID (Unique)"
+                                label="Model ID (Unique) *"
                                 placeholder="e.g. SPS_WV01"
                                 value={modelId}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModelId(e.target.value)}
                                 required
                             />
                             <Input
-                                label="Display Name"
+                                label="Display Name *"
                                 placeholder="e.g. Weather Station Pro"
                                 value={modelName}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModelName(e.target.value)}

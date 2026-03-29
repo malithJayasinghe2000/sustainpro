@@ -134,6 +134,33 @@ export default function AddServiceWizard({
             }
         }
 
+        // Validate Alert Rules step
+        if (currentStep === 2 && alertRules.length > 0) {
+            const invalidRules = alertRules.filter(rule => {
+                if (!rule.metric) return true;
+                if (!rule.threshold && rule.threshold !== '0') return true;
+                if (!rule.name?.trim()) return true;
+                return false;
+            });
+            if (invalidRules.length > 0) {
+                toast.error('Please complete all alert rule fields (name, metric, threshold)');
+                return;
+            }
+        }
+
+        // Validate Escalation Policies step
+        if (currentStep === 3 && escalationPolicies.length > 0) {
+            const invalidPolicies = escalationPolicies.filter(policy => {
+                if (!policy.autoAssignTo) return true;
+                if (!policy.delayMinutes || policy.delayMinutes < 1) return true;
+                return false;
+            });
+            if (invalidPolicies.length > 0) {
+                toast.error('Please assign a user and set delay time for all escalation levels');
+                return;
+            }
+        }
+
         if (Object.keys(errors).length > 0) {
             setFieldErrors(errors);
             return;

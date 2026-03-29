@@ -497,53 +497,96 @@ export default function EventDetailPage() {
                                 </div>
                             </div>
                         </div>
-                        {(canUpdate || canDelete) && (
-                            <div className="space-y-6">
-                                <div className="bg-card border border-border rounded-lg p-6">
-                                    <h3 className="font-semibold text-base mb-6">Quick Actions</h3>
-                                    <div className="space-y-2">
-                                        {canUpdate && (
-                                            <button className="w-full flex items-center justify-start gap-2 px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors text-sm"> <Edit className="w-4 h-4" /> Edit Event </button>
-                                        )}
-                                        {canDelete && (
-                                            <button onClick={() => handleDelete()} className="w-full flex items-center justify-start gap-2 px-4 py-2 border border-border rounded-lg hover:bg-destructive/10 text-destructive transition-colors text-sm"> <Trash2 className="w-4 h-4" /> Delete Event </button>
-                                        )}
+                        {/* Event Info Card */}
+                        <div className="space-y-6">
+                            <div className="bg-card border border-border rounded-lg p-6">
+                                <h3 className="font-semibold text-base mb-6">Event Information</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Location</dt>
+                                        <dd className="text-sm font-medium text-foreground">{event.location || 'Not specified'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Organization</dt>
+                                        <dd className="text-sm font-medium text-foreground">{event.organization_name || 'N/A'}</dd>
                                     </div>
                                 </div>
                             </div>
-                        )}
+                        </div>
                     </div>
                 )}
 
                 {/* Content: Settings (Reconstructed Basic) */}
                 {activeTab === 'settings' && (
-                    <div className="bg-card border border-border rounded-xl p-6 max-w-2xl">
-                        <h3 className="font-semibold text-lg mb-6">Event Settings</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Event Name</label>
-                                <input type="text" disabled={!canUpdate} value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full p-2 border rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Description</label>
-                                <textarea disabled={!canUpdate} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full p-2 border rounded-md bg-background min-h-[100px] disabled:opacity-50 disabled:cursor-not-allowed" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
+                    <div className="max-w-2xl space-y-6">
+                        <div className="bg-card border border-border rounded-xl p-6">
+                            <h3 className="font-semibold text-lg mb-6">Event Settings</h3>
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">Start Date</label>
-                                    <input type="datetime-local" disabled={!canUpdate} value={formData.start_date} onChange={e => setFormData({ ...formData, start_date: e.target.value })} className="w-full p-2 border rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed" />
+                                    <label className="block text-sm font-medium mb-1">Event Name</label>
+                                    <input type="text" disabled={!canUpdate} value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full p-2 border rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">End Date</label>
-                                    <input type="datetime-local" disabled={!canUpdate} value={formData.end_date} onChange={e => setFormData({ ...formData, end_date: e.target.value })} className="w-full p-2 border rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed" />
+                                    <label className="block text-sm font-medium mb-1">Description</label>
+                                    <textarea disabled={!canUpdate} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full p-2 border rounded-md bg-background min-h-[100px] disabled:opacity-50 disabled:cursor-not-allowed" />
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Location</label>
+                                    <input type="text" disabled={!canUpdate} value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} className="w-full p-2 border rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed" placeholder="e.g., Dubai Exhibition Centre" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Start Date</label>
+                                        <input type="datetime-local" disabled={!canUpdate} value={formData.start_date} onChange={e => setFormData({ ...formData, start_date: e.target.value })} className="w-full p-2 border rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">End Date</label>
+                                        <input type="datetime-local" disabled={!canUpdate} value={formData.end_date} onChange={e => setFormData({ ...formData, end_date: e.target.value })} className="w-full p-2 border rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed" />
+                                    </div>
+                                </div>
+                                {canUpdate && (
+                                    <button disabled={isSaving} onClick={handleSaveDetails} className="bg-primary text-primary-foreground px-4 py-2 rounded-lg mt-4 flex items-center gap-2">
+                                        {isSaving ? 'Saving...' : <><Save className="w-4 h-4" /> Save Changes</>}
+                                    </button>
+                                )}
                             </div>
-                            {canUpdate && (
-                                <button disabled={isSaving} onClick={handleSaveDetails} className="bg-primary text-primary-foreground px-4 py-2 rounded-lg mt-4 flex items-center gap-2">
-                                    {isSaving ? 'Saving...' : <><Save className="w-4 h-4" /> Save Changes</>}
-                                </button>
-                            )}
                         </div>
+
+                        {/* Danger Zone */}
+                        {(canDelete || canEndEvent) && (
+                            <div className="bg-card border border-destructive/30 rounded-xl p-6">
+                                <h3 className="font-semibold text-lg text-destructive mb-4 flex items-center gap-2">
+                                    <Shield className="w-5 h-5" />
+                                    Danger Zone
+                                </h3>
+                                <div className="space-y-4">
+                                    {canEndEvent && event.status === 'ACTIVE' && (
+                                        <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                                            <div>
+                                                <p className="font-medium text-sm">End Event</p>
+                                                <p className="text-xs text-muted-foreground">Mark this event as ended. This action can be reversed.</p>
+                                            </div>
+                                            <button onClick={() => setIsEndEventModalOpen(true)} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors flex items-center gap-2">
+                                                <Archive className="w-4 h-4" />
+                                                End Event
+                                            </button>
+                                        </div>
+                                    )}
+                                    {canDelete && (
+                                        <div className="flex items-center justify-between p-4 border border-destructive/30 rounded-lg">
+                                            <div>
+                                                <p className="font-medium text-sm text-destructive">Deactivate Event</p>
+                                                <p className="text-xs text-muted-foreground">Permanently deactivate this event. This action requires password confirmation.</p>
+                                            </div>
+                                            <button onClick={() => setShowDeleteDialog(true)} className="px-4 py-2 bg-destructive text-white rounded-lg text-sm font-medium hover:bg-destructive/90 transition-colors flex items-center gap-2">
+                                                <Trash2 className="w-4 h-4" />
+                                                Deactivate
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -603,6 +646,57 @@ export default function EventDetailPage() {
                     ) : (
                         <button onClick={async () => { await eventsApi.requestEnd(event.id); setIsEndEventModalOpen(false); toast.success('Request sent'); fetchEventData(); }} className="w-full bg-orange-600 text-white px-4 py-2 rounded-lg">Request End</button>
                     )}
+                </div>
+            </Modal>
+
+            {/* Delete/Deactivate Confirmation Modal */}
+            <Modal 
+                isOpen={showDeleteDialog} 
+                onClose={() => { setShowDeleteDialog(false); setDeletePassword(''); }} 
+                title="Deactivate Event" 
+                variant="destructive"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                        This action will permanently deactivate <strong>{event?.name}</strong>. 
+                        To confirm, please enter your password below.
+                    </p>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Password</label>
+                        <input 
+                            type="password" 
+                            value={deletePassword} 
+                            onChange={e => setDeletePassword(e.target.value)} 
+                            className="w-full p-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-destructive/50"
+                            placeholder="Enter your password"
+                            autoComplete="current-password"
+                        />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                        <button 
+                            onClick={() => { setShowDeleteDialog(false); setDeletePassword(''); }} 
+                            className="flex-1 px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            onClick={handleDelete} 
+                            disabled={isDeleting || !deletePassword}
+                            className="flex-1 px-4 py-2 text-sm font-medium bg-destructive text-white rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {isDeleting ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Deactivating...
+                                </>
+                            ) : (
+                                <>
+                                    <Trash2 className="w-4 h-4" />
+                                    Deactivate Event
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </Modal>
 
