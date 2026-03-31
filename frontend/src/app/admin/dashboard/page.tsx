@@ -144,35 +144,28 @@ export default function AdminDashboardPage() {
 
             socket.on('dashboard:telemetry', handleTelemetry);
 
-            // Poll stats every 5 seconds
-            const pollStats = async () => {
-                try {
-                    const result = await telemetryApi.getDashboardStats();
-
-                    if (result.success && result.stats) {
-                        setStats(prev => {
-                            if (!prev) return result.stats;
-
-                            if (prev.total_devices === result.stats.total_devices &&
-                                prev.online_devices === result.stats.online_devices &&
-                                prev.offline_devices === result.stats.offline_devices &&
-                                prev.active_alerts === result.stats.active_alerts) {
-                                return prev;
-                            }
-
-                            return result.stats;
-                        });
+            // Listen for regular dashboard stats from WebSocket
+            const handleDashboardStats = (newStats: any) => {
+                setStats(prev => {
+                    if (!prev) return newStats;
+                    if (prev.total_devices === newStats.total_devices &&
+                        prev.online_devices === newStats.devices_online &&
+                        prev.offline_devices === newStats.devices_offline) {
+                        return prev;
                     }
-                } catch (error) {
-                    console.error('Error polling stats:', error);
-                }
+                    return {
+                        ...prev,
+                        total_devices: newStats.total_devices,
+                        online_devices: newStats.devices_online,
+                        offline_devices: newStats.devices_offline,
+                    };
+                });
             };
-
-            const statsInterval = setInterval(pollStats, 5000);
+            socket.on('dashboard:stats', handleDashboardStats);
 
             return () => {
                 socket.off('dashboard:telemetry', handleTelemetry);
-                clearInterval(statsInterval);
+                socket.off('dashboard:stats', handleDashboardStats);
             };
         }
     }, [authLoading, user]);

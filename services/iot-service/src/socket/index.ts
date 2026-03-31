@@ -1,11 +1,16 @@
 import { Server, Socket } from 'socket.io';
 import http from 'http';
+import os from 'os';
 import { config } from '../config';
 import { createLogger } from '@sustainpro/shared-utils';
+
+import { telemetryService } from '../services/telemetry.service';
 
 const logger = createLogger({ service: 'socket-io' });
 
 let io: Server | null = null;
+let systemHealthInterval: NodeJS.Timeout | null = null;
+let dashboardStatsInterval: NodeJS.Timeout | null = null;
 
 export interface TelemetryPayload {
     device_code: string;
@@ -103,6 +108,46 @@ export const initSocket = (server: http.Server): Server => {
             logger.error('Socket error', { socketId: socket.id, error: error.message });
         });
     });
+
+    // Start emitting system health every 5 seconds over WebSocket instead of HTTP polling
+    if (!systemHealthInterval) {
+        systemHealthInterval = setInterval(() => {
+            if (!io || io.engine.clientsCount === 0) return;
+            
+            const cpus = os.cpus();
+            const totalMemory = os.totalmem();
+            const freeMemory = os.freemem();
+            const usedMemory = totalMemory - freeMemory;
+            
+            io.to('dashboard').emit('dashboard:system_health', {
+                cpu: {
+                    count: cpus.length,
+                    model: cpus[0]?.model || 'Unknown',
+                    usage: cpus.map(cpu => {
+                        const total = Object.values(cpu.times).reduce((a, b) => a + b, 0);
+                        return {
+                            user: ((cpu.times.user / total) * 100).toFixed(2),
+                            system: ((cpu.times.sys / total) * 100).toFixed(2),
+                            idle: ((cpu.times.idle / total) * 100).toFixed(2),
+                        };
+                    }),
+                },
+                memory: {
+                    total: Math.round(totalMemory / 1024 / 1024),
+                    used: Math.round(usedMemory / 1024 / 1024),
+                    free: Math.round(freeMemory / 1024 / 1024),
+                    usagePercent: ((usedMemory / totalMemory) * 100).toFixed(2),
+                },
+                uptime: {
+                    system: os.uptime(),
+                    process: process.uptime(),
+                },
+                platform: os.platform(),
+                nodeVersion: process.version,
+                timestamp: new Date().toISOString(),
+            });
+        }, 5000);
+    }
 
     logger.info('Socket.IO initialized');
 

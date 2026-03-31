@@ -7,6 +7,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { Sun, Moon, Bell, Clock, AlertTriangle, Info, XCircle, X, CheckCheck, Loader2, ExternalLink, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminApi, systemNotificationsApi, SystemNotification, escalationsApi } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 import UniversalCreator from './UniversalCreator';
 import { getFullImageUrl } from './ImageUpload';
 import { Plus, Activity, Cpu } from 'lucide-react';
@@ -172,23 +173,22 @@ export default function Navbar() {
         return () => clearInterval(timer);
     }, [effectiveTimezone]);
 
-    // Poll Server Stats (Super Admin Only)
+    // Poll Server Stats (Super Admin Only) using WebSocket
     useEffect(() => {
         if (!user?.is_super_admin) return;
 
-        const pollStats = async () => {
-            try {
-                const stats = await adminApi.getSystemHealth();
-                setServerStats(stats);
-            } catch (err) {
-                // Silent fail
-            }
+        const socket = getSocket();
+        socket.emit('subscribe:dashboard');
+
+        const handleSystemHealth = (stats: any) => {
+            setServerStats(stats);
         };
 
-        pollStats();
-        const interval = setInterval(pollStats, 5000);
+        socket.on('dashboard:system_health', handleSystemHealth);
 
-        return () => clearInterval(interval);
+        return () => {
+            socket.off('dashboard:system_health', handleSystemHealth);
+        };
     }, [user]);
 
     useEffect(() => {
@@ -360,17 +360,17 @@ export default function Navbar() {
                         <div className="flex items-center gap-3">
 
                             {/* Server Stats (Super Admin Only) */}
-                            {user?.is_super_admin && serverStats?.data && (
+                            {user?.is_super_admin && serverStats && (
                                 <div className="hidden lg:flex items-center gap-4 mr-2">
                                     {/* CPU */}
                                     <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/30 px-2 py-1 rounded-md border border-border/50">
                                         <Cpu className="w-3.5 h-3.5 text-primary" />
-                                        <span>{serverStats.data.cpu?.usage?.[0] ? (100 - parseFloat(serverStats.data.cpu.usage[0].idle)).toFixed(0) : 0}%</span>
+                                        <span>{serverStats.cpu?.usage?.[0] ? (100 - parseFloat(serverStats.cpu.usage[0].idle)).toFixed(0) : 0}%</span>
                                     </div>
                                     {/* RAM */}
                                     <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground bg-muted/30 px-2 py-1 rounded-md border border-border/50">
                                         <Activity className="w-3.5 h-3.5 text-blue-500" />
-                                        <span>{serverStats.data.memory?.usagePercent || 0}%</span>
+                                        <span>{serverStats.memory?.usagePercent || 0}%</span>
                                     </div>
                                 </div>
                             )}

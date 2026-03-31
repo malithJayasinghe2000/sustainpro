@@ -6,6 +6,7 @@ import { createLogger, auditLogger } from '@sustainpro/shared-utils';
 import { initDatabase, closeDatabase, getPrismaClient } from '@sustainpro/shared-database';
 import { startIotSubscriber } from './iot';
 import { escalationScheduler } from './services/escalation-scheduler.service';
+import { telemetryService } from './services/telemetry.service';
 
 const logger = createLogger({ service: 'iot-service' });
 

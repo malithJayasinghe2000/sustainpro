@@ -136,12 +136,42 @@ export default function DashboardPage() {
         };
     }, []);
 
-    // Fetch Stats using authenticated API
+    // Connect to WebSocket for real-time stats instead of heavy polling
     useEffect(() => {
         fetchDashboardData();
-        const statsInterval = setInterval(fetchDashboardData, 3000);
-        return () => clearInterval(statsInterval);
-    }, []);
+        
+        let socket: ReturnType<typeof import('@/lib/socket').getSocket>;
+        
+        if (user) {
+            import('@/lib/socket').then(({ getSocket }) => {
+                socket = getSocket();
+                
+                socket.on('dashboard:stats', (newStats: any) => {
+                    setStats(prev => {
+                        if (!prev) return newStats;
+                        return {
+                            ...prev,
+                            total_devices: newStats.total_devices || prev.total_devices,
+                            online_devices: newStats.devices_online || newStats.online_devices,
+                            offline_devices: newStats.devices_offline || newStats.offline_devices,
+                        };
+                    });
+                    setLastUpdated(new Date());
+                });
+
+                socket.on('dashboard:telemetry', () => {
+                    // Refresh data or specific lists when telemetry arrives if needed
+                });
+            });
+        }
+
+        return () => {
+            if (socket) {
+                socket.off('dashboard:stats');
+                socket.off('dashboard:telemetry');
+            }
+        };
+    }, [user]);
 
     // Fetch Org Structure if Org Admin
     useEffect(() => {
