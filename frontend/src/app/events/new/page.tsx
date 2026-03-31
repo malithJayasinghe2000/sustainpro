@@ -147,6 +147,7 @@ export default function NewEventPage() {
 
         if (currentStep === 0) {
             if (!formData.name) errors.name = "Event Name is required";
+            if (formData.name && formData.name.length > 50) errors.name = "Event Name cannot exceed 50 characters";
             if (!formData.organization_id) errors.organization_id = "Organization is required";
             if (!formData.start_date) errors.start_date = "Start date is required";
             if (!formData.end_date) errors.end_date = "End date is required";

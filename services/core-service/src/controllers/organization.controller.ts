@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrganizationService, AuditContext } from '../services/organization.service';
-import { AppError } from '@sustainpro/shared-utils';
+import { AppError, ValidationError } from '@sustainpro/shared-utils';
 
 const orgService = new OrganizationService();
 
@@ -74,6 +74,46 @@ export const getById = async (req: Request, res: Response, next: NextFunction): 
  */
 export const create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+        const { name, website, phone, admin_name, admin_email, admin_password } = req.body;
+        const errors: { field: string; message: string }[] = [];
+
+        if (!name || name.trim() === "") {
+            errors.push({ field: 'name', message: 'Organization name is required' });
+        } else if (name.length > 30) {
+            errors.push({ field: 'name', message: 'Organization name cannot exceed 30 characters' });
+        }
+
+        if (website) {
+            try {
+                new URL(website.startsWith('http') ? website : `https://${website}`);
+                if (/^\d+$/.test(website)) {
+                    errors.push({ field: 'website', message: 'Website cannot be just numbers' });
+                }
+            } catch (e) {
+                errors.push({ field: 'website', message: 'Please enter a valid website URL' });
+            }
+        }
+
+        if (phone && !/^\+?[0-9\s\-\(\)\.]+$/.test(phone)) {
+            errors.push({ field: 'phone', message: 'Please enter a valid phone number' });
+        }
+        
+        if (!admin_name || admin_name.trim() === "") {
+            errors.push({ field: 'admin_full_name', message: 'Admin full name is required' });
+        }
+        
+        if (!admin_email || admin_email.trim() === "") {
+            errors.push({ field: 'contact_email', message: 'Admin email is required' });
+        }
+        
+        if (!admin_password) {
+            errors.push({ field: 'admin_password', message: 'Password is required' });
+        }
+
+        if (errors.length > 0) {
+            throw new ValidationError(errors);
+        }
+
         const auditCtx = getAuditContext(req);
         const organization = await orgService.create(req.body, req.user?.id, auditCtx);
 
@@ -83,10 +123,14 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
         });
     } catch (error) {
         if (error instanceof AppError) {
-            res.status(error.statusCode).json({
+            const body: any = {
                 success: false,
                 error: error.message,
-            });
+            };
+            if ('errors' in error) {
+                body.errors = (error as any).errors;
+            }
+            res.status(error.statusCode).json(body);
             return;
         }
         next(error);

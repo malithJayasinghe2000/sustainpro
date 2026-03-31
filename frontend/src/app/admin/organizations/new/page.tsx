@@ -97,12 +97,37 @@ export default function NewOrganizationPage() {
         const errors: Record<string, string> = {};
 
         if (currentStep === 0) {
-            if (!newOrg.name) errors.name = "Organization name is required";
+            if (!newOrg.name || newOrg.name.trim() === "") {
+                errors.name = "Organization name is required";
+            } else if (newOrg.name.length > 30) {
+                errors.name = "Organization name cannot exceed 30 characters";
+            }
+
+            if (newOrg.website) {
+                if (/^\d+$/.test(newOrg.website)) {
+                    errors.website = "Website cannot be just numbers";
+                } else {
+                    const urlPattern = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,})(:\d{1,5})?(\/.*)?$/i;
+                    if (!urlPattern.test(newOrg.website)) {
+                        errors.website = "Please enter a valid website URL";
+                    }
+                }
+            }
+        }
+
+        if (currentStep === 2) {
+            if (newOrg.phone && !/^[0-9\s()+]+$/.test(newOrg.phone)) {
+                errors.phone = "Please enter a valid phone number";
+            }
         }
 
         if (currentStep === 3) { // Organization Admin Setup
             if (!newOrg.admin_full_name.trim()) errors.admin_full_name = 'Admin full name is required';
+            if (newOrg.admin_full_name.length > 50) errors.admin_full_name = 'Admin full name cannot exceed 50 characters';
             if (!newOrg.contact_email.trim()) errors.contact_email = 'Admin email is required';
+            if(newOrg.contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newOrg.contact_email)) 
+                errors.contact_email = 'Please enter a valid email address';
+            
             if (!newOrg.admin_password) errors.admin_password = 'Password is required';
             if (!isPasswordValid) errors.admin_password = 'Password does not meet requirements';
             if (!newOrg.admin_password_confirm) errors.admin_password_confirm = 'Please confirm password';
@@ -173,9 +198,19 @@ export default function NewOrganizationPage() {
 
             router.push('/admin/organizations');
         } catch (err: any) {
-            const errorMsg = err.response?.data?.error || 'Failed to create organization';
-            setFieldErrors({ submit: errorMsg });
-            toast.error('Creation Failed', { description: errorMsg });
+            const errData = err.response?.data;
+            if (errData?.errors) {
+                const newErrors: Record<string, string> = {};
+                errData.errors.forEach((e: any) => {
+                    newErrors[e.field] = e.message;
+                });
+                setFieldErrors(newErrors);
+                toast.error('Validation Failed', { description: 'Please check the form for errors' });
+            } else {
+                const errorMsg = errData?.error || 'Failed to create organization';
+                setFieldErrors({ submit: errorMsg });
+                toast.error('Creation Failed', { description: errorMsg });
+            }
         } finally {
             setIsLoading(false);
         }
@@ -209,7 +244,11 @@ export default function NewOrganizationPage() {
                 <RichSelect
                     label="Organization Type"
                     value={newOrg.type}
-                    onChange={val => setNewOrg({ ...newOrg, type: val })}
+                    onChange={val => {
+                        setNewOrg({ ...newOrg, type: val });
+                        setFieldErrors(prev => ({ ...prev, type: '' }));
+                    }}
+                    error={fieldErrors.type}
                     options={[
                         { value: 'CLIENT', label: 'Client', icon: Briefcase },
                         { value: 'PARTNER', label: 'Partner', icon: Globe },
@@ -220,13 +259,21 @@ export default function NewOrganizationPage() {
                     label="Industry Sector"
                     placeholder="Manufacturing, Energy..."
                     value={newOrg.industry}
-                    onChange={e => setNewOrg({ ...newOrg, industry: e.target.value })}
+                    onChange={e => {
+                        setNewOrg({ ...newOrg, industry: e.target.value });
+                        setFieldErrors(prev => ({ ...prev, industry: '' }));
+                    }}
+                    error={fieldErrors.industry}
                 />
                 <Input
                     label="Corporate Website"
                     placeholder="https://acme.com"
                     value={newOrg.website}
-                    onChange={e => setNewOrg({ ...newOrg, website: e.target.value })}
+                    onChange={e => {
+                        setNewOrg({ ...newOrg, website: e.target.value });
+                        setFieldErrors(prev => ({ ...prev, website: '' }));
+                    }}
+                    error={fieldErrors.website}
                     icon={Globe}
                 />
                 <div className="md:col-span-2">
@@ -234,7 +281,11 @@ export default function NewOrganizationPage() {
                         label="Description"
                         placeholder="Brief overview of the organization..."
                         value={newOrg.description}
-                        onChange={e => setNewOrg({ ...newOrg, description: e.target.value })}
+                        onChange={e => {
+                            setNewOrg({ ...newOrg, description: e.target.value });
+                            setFieldErrors(prev => ({ ...prev, description: '' }));
+                        }}
+                        error={fieldErrors.description}
                         className="resize-none min-h-[100px]"
                     />
                 </div>
@@ -320,7 +371,11 @@ export default function NewOrganizationPage() {
                     <RichSelect
                         label="Timezone"
                         value={newOrg.timezone}
-                        onChange={val => setNewOrg({ ...newOrg, timezone: val })}
+                        onChange={val => {
+                            setNewOrg({ ...newOrg, timezone: val });
+                            setFieldErrors(prev => ({ ...prev, timezone: '' }));
+                        }}
+                        error={fieldErrors.timezone}
                         options={timezoneOptions}
                         searchable
                         placeholder="Search timezones..."
@@ -475,7 +530,11 @@ export default function NewOrganizationPage() {
                         label="Street Address"
                         placeholder="123 Industrial Ave"
                         value={newOrg.address}
-                        onChange={e => setNewOrg({ ...newOrg, address: e.target.value })}
+                        onChange={e => {
+                            setNewOrg({ ...newOrg, address: e.target.value });
+                            setFieldErrors(prev => ({ ...prev, address: '' }));
+                        }}
+                        error={fieldErrors.address}
                         icon={MapPin}
                     />
                 </div>
@@ -483,20 +542,35 @@ export default function NewOrganizationPage() {
                     label="City"
                     placeholder="New York"
                     value={newOrg.city}
-                    onChange={e => setNewOrg({ ...newOrg, city: e.target.value })}
+                    onChange={e => {
+                        setNewOrg({ ...newOrg, city: e.target.value });
+                        setFieldErrors(prev => ({ ...prev, city: '' }));
+                    }}
+                    error={fieldErrors.city}
                 />
                 <Input
                     label="Country"
                     placeholder="United States"
                     value={newOrg.country}
-                    onChange={e => setNewOrg({ ...newOrg, country: e.target.value })}
+                    onChange={e => {
+                        setNewOrg({ ...newOrg, country: e.target.value });
+                        setFieldErrors(prev => ({ ...prev, country: '' }));
+                    }}
+                    error={fieldErrors.country}
                 />
                 <div className="md:col-span-2">
                     <Input
                         label="Phone Number"
                         placeholder="+1 (555) 000-0000"
                         value={newOrg.phone}
-                        onChange={e => setNewOrg({ ...newOrg, phone: e.target.value })}
+                        onChange={e => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9\s()+]+$/.test(val)) {
+                                setNewOrg({ ...newOrg, phone: val });
+                                setFieldErrors(prev => ({ ...prev, phone: '' }));
+                            }
+                        }}
+                        error={fieldErrors.phone}
                         icon={Phone}
                     />
                 </div>
