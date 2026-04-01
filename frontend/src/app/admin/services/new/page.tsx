@@ -6,10 +6,9 @@ import DashboardLayout from '@/components/DashboardLayout';
 import SetupWizard from '@/components/SetupWizard';
 import { RichSelect } from '@/components/ui/RichSelect';
 import { Input } from '@/components/ui/Input';
-import { servicesApi, deviceModelsApi, uploadApi } from '@/lib/api';
+import { servicesApi, deviceModelsApi, uploadApi, getImageUrl } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Layers, Globe, Lock, Building2, Plus, Trash2, Cpu, Activity, Square, CheckSquare, Upload, ImageIcon, X } from 'lucide-react';
-import Image from 'next/image';
 import { ServiceParameter } from '@/types/dashboard';
 
 const SCOPE_OPTIONS = [
@@ -228,11 +227,10 @@ export default function NewServicePage() {
                                 >
                                     {imageUrl ? (
                                         <div className="relative w-full h-full">
-                                            <Image
-                                                src={imageUrl}
+                                            <img
+                                                src={getImageUrl(imageUrl) || ''}
                                                 alt="Service"
-                                                fill
-                                                className="object-cover rounded-lg"
+                                                className="w-full h-full object-cover rounded-lg"
                                             />
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setImageUrl(''); }}
@@ -516,7 +514,7 @@ export default function NewServicePage() {
                             <div className="flex items-start gap-4">
                                 {imageUrl && (
                                     <div className="w-20 h-20 rounded-lg overflow-hidden relative shrink-0">
-                                        <Image src={imageUrl} alt={name} fill className="object-cover" />
+                                        <Image src={getImageUrl(imageUrl) || ''} alt={name} fill className="object-cover" />
                                     </div>
                                 )}
                                 <div className="flex-1">
