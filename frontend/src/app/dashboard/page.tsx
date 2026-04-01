@@ -1,4 +1,5 @@
 'use client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -271,9 +272,7 @@ export default function DashboardPage() {
 
                 {/* Loading State */}
                 {isLoading ? (
-                    <div className="flex items-center justify-center py-20">
-                        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    </div>
+                    <LoadingSpinner />
                 ) : (
                     <>
                         {/* Stats Cards - Hidden for Org Admin per request */}

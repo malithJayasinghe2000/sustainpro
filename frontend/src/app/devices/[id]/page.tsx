@@ -1,4 +1,5 @@
 'use client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -248,7 +249,7 @@ export default function DeviceDashboardPage() {
                     <div className="flex flex-col items-center gap-4">
                         <div className="relative w-10 h-10">
                             <div className="absolute inset-0 rounded-full border-2 border-border"></div>
-                            <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin"></div>
+                            <LoadingSpinner className="absolute inset-0 flex items-center justify-center" />
                         </div>
                         <p className="text-sm text-muted-foreground">Loading device...</p>
                     </div>

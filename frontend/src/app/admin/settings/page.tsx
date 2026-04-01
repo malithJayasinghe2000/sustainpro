@@ -1,4 +1,5 @@
 'use client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 import { useState, useEffect, useMemo } from 'react';
 import {
@@ -1406,9 +1407,7 @@ export default function SystemSettingsPage() {
     if (isLoading) {
         return (
             <DashboardLayout>
-                <div className="flex items-center justify-center py-20">
-                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                </div>
+                <LoadingSpinner />
             </DashboardLayout>
         );
     }

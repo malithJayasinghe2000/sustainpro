@@ -57,7 +57,7 @@ export const config = {
     // Email Templates Configuration
     templates: {
         otpExpiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES || '10'),
-        companyName: process.env.COMPANY_NAME || 'SustainPro',
+        title: process.env.COMPANY_NAME || 'SustainPro',
         supportEmail: process.env.SUPPORT_EMAIL || 'support@sustainpro.io',
         logoUrl: process.env.LOGO_URL || 'https://sustainpro.io/logo.png',
     },
@@ -82,3 +82,4 @@ if (config.nodeEnv === 'production') {
         console.warn('⚠️  SMTP_USER not configured - emails will fail');
     }
 }
+

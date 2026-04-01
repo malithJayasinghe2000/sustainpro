@@ -242,7 +242,7 @@ export default function NewServicePage() {
                                             </button>
                                         </div>
                                     ) : isUploadingImage ? (
-                                        <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+                                        <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                                     ) : (
                                         <div className="text-center text-muted-foreground">
                                             <ImageIcon className="w-8 h-8 mx-auto mb-1" />

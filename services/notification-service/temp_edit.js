@@ -1,0 +1,1 @@
+const fs = require('fs'); const path = 'scripts/test-emails.ts'; let content = fs.readFileSync(path, 'utf8'); const start = content.indexOf('const emailsToTest = ['); const end = content.indexOf('];\n\nasync function runTest()'); content = content.substring(0, start) + content.substring(end + 3); fs.writeFileSync(path, content);

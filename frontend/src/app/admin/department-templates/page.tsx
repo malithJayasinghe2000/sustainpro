@@ -1,4 +1,5 @@
 'use client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -130,7 +131,7 @@ export default function DepartmentTemplatesPage() {
         return (
             <DashboardLayout>
                 <div className="flex h-[60vh] items-center justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <LoadingSpinner className="" />
                 </div>
             </DashboardLayout>
         );

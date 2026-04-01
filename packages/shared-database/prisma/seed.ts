@@ -377,8 +377,10 @@ async function main() {
     });
 
     // Email Templates
-    console.log('📨 Seeding email templates...');
+    console.log('📨 Skipping email templates seeding (moved to codebase)...');
+    /*
     const emailTemplates = [
+    
         {
             code: 'WELCOME',
             name: 'Welcome Email',
@@ -619,6 +621,7 @@ async function main() {
         },
     ];
 
+    /*
     for (const template of emailTemplates) {
         await prisma.sps_email_templates.upsert({
             where: { code: template.code },
@@ -626,6 +629,7 @@ async function main() {
             create: template as any,
         });
     }
+    */
 
     // ==================================================================================
     // 2. PROVIDER ORGANIZATION

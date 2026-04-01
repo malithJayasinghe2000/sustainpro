@@ -1,4 +1,5 @@
 'use client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -297,7 +298,7 @@ export default function DeviceModelsPage() {
                 {isLoading ? (
                     <div className="flex items-center justify-center py-20">
                         <div className="text-center">
-                            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <LoadingSpinner className="flex justify-center my-4 mb-4" />
                             <p className="text-muted-foreground">Loading device models...</p>
                         </div>
                     </div>

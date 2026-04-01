@@ -1,3 +1,4 @@
+import LoadingSpinner from '@/components/LoadingSpinner';
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronUp, Clock, Activity, Bell, Mail, Webhook, ArrowUp } from 'lucide-react';
 import { servicesApi } from '@/lib/api';
@@ -235,7 +236,7 @@ export default function AlertRulesStep({ serviceTemplateId, rules, onRulesChange
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <LoadingSpinner className="" />
             </div>
         );
     }

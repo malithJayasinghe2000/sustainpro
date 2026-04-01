@@ -1,4 +1,5 @@
 'use client';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 import { useState, useEffect } from 'react';
 import {
@@ -181,7 +182,7 @@ export default function OrgSettingsPage() {
         return (
             <DashboardLayout>
                 <div className="flex items-center justify-center min-h-[60vh]">
-                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                    <LoadingSpinner className="" />
                 </div>
             </DashboardLayout>
         );
@@ -277,7 +278,7 @@ export default function OrgSettingsPage() {
                 {/* Loading State */}
                 {isLoading && (
                     <div className="flex flex-col items-center justify-center py-20 gap-3">
-                        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                        <LoadingSpinner className="" />
                         <p className="text-sm text-muted-foreground">Loading settings...</p>
                     </div>
                 )}

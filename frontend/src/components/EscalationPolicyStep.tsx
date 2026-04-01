@@ -1,3 +1,4 @@
+import LoadingSpinner from '@/components/LoadingSpinner';
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, ArrowUp, Users, Clock, Mail, Bell, MessageSquare, CheckCircle2, User, UserCog, Settings } from 'lucide-react';
 import { usersApi } from '@/lib/api';
@@ -138,7 +139,7 @@ export default function EscalationPolicyStep({
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <LoadingSpinner className="" />
             </div>
         );
     }
