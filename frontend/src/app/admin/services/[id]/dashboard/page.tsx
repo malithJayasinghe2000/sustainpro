@@ -126,6 +126,7 @@ export default function ServiceDashboardPage() {
     const handleSave = async (template: any) => {
         console.log(`Saving ${activeTab} dashboard template...`, template);
         setIsSaving(true);
+        const toastId = toast.loading('Saving dashboard...');
         try {
             // Map activeTab to dashboard_type for the API
             const dashboardTypeMap: Record<string, 'main' | 'device' | 'public'> = {
@@ -144,11 +145,11 @@ export default function ServiceDashboardPage() {
             if (activeTab === 'main') setMainTemplate(template);
             if (activeTab === 'public') setPublicTemplate(template);
 
-            toast.success(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Dashboard saved successfully! ✓`);
+            toast.success(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Dashboard saved successfully! ✓`, { id: toastId });
             setHasUnsavedChanges(false);
         } catch (error) {
             console.error('Save error details:', error);
-            toast.error('Failed to save dashboard. Please try again.');
+            toast.error('Failed to save dashboard. Please try again.', { id: toastId });
         } finally {
             setIsSaving(false);
         }

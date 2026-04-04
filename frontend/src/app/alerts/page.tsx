@@ -39,8 +39,9 @@ import {
     eventsApi,
     departmentsApi,
     departmentServicesApi,
+    escalationsApi
 } from '@/lib/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 
 interface Alert {
     id: string;
@@ -51,7 +52,7 @@ interface Alert {
     device_id: string;
     rule_id: string;
     severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-    status: 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED' | 'EXPIRED';
+    status: 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED' | 'EXPIRED' | 'VERIFIED';
     message: string;
     value: any;
     threshold: any;
@@ -143,6 +144,8 @@ const getStatusBadge = (status: string) => {
             return { icon: CheckCircle, color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' };
         case 'EXPIRED':
             return { icon: XCircle, color: 'bg-gray-500/10 text-gray-600 border-gray-500/20' };
+        case 'VERIFIED':
+            return { icon: ThumbsUp, color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' };
         default:
             return { icon: Bell, color: 'bg-gray-500/10 text-gray-600 border-gray-500/20' };
     }
@@ -492,9 +495,25 @@ export default function AlertsPage() {
         try {
             const response = await alertsApi.acknowledge(alertId);
             if (response.success) {
+                // Also attempt to acknowledge any existing escalation
+                try {
+                     const escalations = await escalationsApi.getAll({ alert_id: alertId, limit: 1 });
+                     if (escalations.success && escalations.data?.length > 0 && escalations.data[0].status === 'OPEN') {
+                          await escalationsApi.acknowledge(escalations.data[0].id);
+                     }
+                } catch(e) {
+                     console.error('Failed to sync escalation acknowledge', e);
+                }
+
+                toast.success('Alert Acknowledged', {
+                    description: `Alert has been successfully acknowledged by you.`
+                });
                 fetchAlerts();
             }
         } catch (err: any) {
+            toast.error('Action Failed', {
+                description: err.message || 'Failed to acknowledge alert'
+            });
             setError(err.message || 'Failed to acknowledge alert');
         } finally {
             setActionLoading(null);
@@ -506,9 +525,27 @@ export default function AlertsPage() {
         try {
             const response = await alertsApi.resolve(alertId);
             if (response.success) {
+                // Also attempt to resolve any existing escalation
+                try {
+                     const escalations = await escalationsApi.getAll({ alert_id: alertId, limit: 1 });
+                     if (escalations.success && escalations.data?.length > 0 && escalations.data[0].status !== 'RESOLVED') {
+                          await escalationsApi.resolve(escalations.data[0].id, {
+                              resolution_notes: 'Resolved via Alert Page'
+                          });
+                     }
+                } catch(e) {
+                     console.error('Failed to sync escalation resolve', e);
+                }
+
+                toast.success('Alert Resolved', {
+                    description: `Alert has been successfully resolved.`
+                });
                 fetchAlerts();
             }
         } catch (err: any) {
+            toast.error('Action Failed', {
+                description: err.message || 'Failed to resolve alert'
+            });
             setError(err.message || 'Failed to resolve alert');
         } finally {
             setActionLoading(null);
@@ -524,9 +561,15 @@ export default function AlertsPage() {
 
             const response = await alertsApi.escalate(alertId, nextLevel, assignTo);
             if (response.success) {
+                toast.success('Alert Escalated', {
+                    description: `Alert has been escalated to level ${nextLevel}.`
+                });
                 fetchAlerts();
             }
         } catch (err: any) {
+            toast.error('Action Failed', {
+                description: err.message || 'Failed to escalate alert'
+            });
             setError(err.message || 'Failed to escalate alert');
         } finally {
             setActionLoading(null);
@@ -538,9 +581,15 @@ export default function AlertsPage() {
         try {
             const response = await alertsApi.approve(alertId);
             if (response.success) {
+                toast.success('Resolution Approved', {
+                    description: `Alert resolution has been approved.`
+                });
                 fetchAlerts();
             }
         } catch (err: any) {
+            toast.error('Action Failed', {
+                description: err.message || 'Failed to approve resolution'
+            });
             setError(err.message || 'Failed to approve resolution');
         } finally {
             setActionLoading(null);
@@ -682,6 +731,7 @@ export default function AlertsPage() {
                                     <option value="ACKNOWLEDGED">Acknowledged</option>
                                     <option value="RESOLVED">Resolved</option>
                                     <option value="EXPIRED">Expired</option>
+                                    <option value="VERIFIED">Verified</option>
                                 </select>
                             </div>
                             <div>
@@ -800,7 +850,10 @@ export default function AlertsPage() {
                                         const isLoading = actionLoading === alert.id;
 
                                         return (
-                                            <tr key={alert.id} className="hover:bg-muted/30 transition-colors">
+                                            <tr key={alert.id} className={cn(
+                                                "transition-colors",
+                                                alert.escalation_level > 0 ? "bg-red-50 hover:bg-red-100/80 dark:bg-red-500/10 dark:hover:bg-red-500/20" : "hover:bg-muted/30"
+                                            )}>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2">
                                                         <Clock className="w-3.5 h-3.5 text-muted-foreground" />
@@ -900,22 +953,6 @@ export default function AlertsPage() {
                                                             </button>
                                                         )}
 
-                                                        {/* Escalate button */}
-                                                        {(alert.status === 'ACTIVE' || alert.status === 'ACKNOWLEDGED') && canEscalate() && (
-                                                            <button
-                                                                onClick={() => handleEscalate(alert.id)}
-                                                                disabled={isLoading}
-                                                                className="p-1.5 text-orange-600 hover:bg-orange-500/10 rounded-md transition-all disabled:opacity-50"
-                                                                title="Escalate"
-                                                            >
-                                                                {isLoading ? (
-                                                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                                                ) : (
-                                                                    <ArrowUp className="w-4 h-4" />
-                                                                )}
-                                                            </button>
-                                                        )}
-
                                                         {/* Approve button - for resolved alerts */}
                                                         {alert.status === 'RESOLVED' && canApprove() && !alert.metadata?.approved && (
                                                             <button
@@ -978,127 +1015,173 @@ export default function AlertsPage() {
 
                 {/* Detail Modal */}
                 {selectedAlert && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedAlert(null)}>
-                        <div className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[80vh] overflow-auto shadow-xl" onClick={e => e.stopPropagation()}>
-                            <div className="sticky top-0 bg-card border-b border-border p-4 flex items-center justify-between">
-                                <h3 className="text-lg font-semibold flex items-center gap-2">
-                                    <AlertTriangle className="w-5 h-5 text-primary" />
-                                    Alert Details
-                                </h3>
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setSelectedAlert(null)}>
+                        <div className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                            <div className="bg-muted/30 border-b border-border p-5 flex items-center justify-between rounded-t-xl">
+                                <div>
+                                    <h3 className="text-xl font-semibold flex items-center gap-2.5">
+                                        <AlertTriangle className={cn(
+                                            "w-5 h-5",
+                                            selectedAlert.severity === 'CRITICAL' ? 'text-red-500' :
+                                            selectedAlert.severity === 'HIGH' ? 'text-orange-500' :
+                                            selectedAlert.severity === 'MEDIUM' ? 'text-yellow-500' : 'text-blue-500'
+                                        )} />
+                                        Alert Details
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground mt-1 font-mono">
+                                        {selectedAlert.id}
+                                    </p>
+                                </div>
                                 <button
                                     onClick={() => setSelectedAlert(null)}
-                                    className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                                    className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors"
                                 >
-                                    <XCircle className="w-5 h-5" />
+                                    <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <div className="p-4 space-y-4">
-                                {/* Basic Info */}
-                                <div className="grid grid-cols-2 gap-4">
+                            
+                            <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+                                {/* Header / Main Values */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted/20 p-4 rounded-xl border border-border/50">
                                     <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Time</label>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1.5 block">Time</span>
                                         <p className="text-sm font-medium">
-                                            <TimeDisplay timestamp={selectedAlert.created_at} format="full" />
+                                            <TimeDisplay timestamp={selectedAlert.created_at} format="short" />
                                         </p>
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Severity</label>
-                                        <p className={cn(
-                                            "text-sm font-medium inline-flex items-center gap-1.5",
-                                            selectedAlert.severity === 'CRITICAL' ? 'text-red-600' :
-                                                selectedAlert.severity === 'HIGH' ? 'text-orange-600' :
-                                                    selectedAlert.severity === 'MEDIUM' ? 'text-yellow-600' : 'text-blue-600'
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1.5 block">Severity</span>
+                                        <span className={cn(
+                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                                            getSeverityBadge(selectedAlert.severity).color
                                         )}>
                                             {selectedAlert.severity}
-                                        </p>
+                                        </span>
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Status</label>
-                                        <p className={cn(
-                                            "text-sm font-medium",
-                                            selectedAlert.status === 'ACTIVE' ? 'text-red-600' :
-                                                selectedAlert.status === 'ACKNOWLEDGED' ? 'text-yellow-600' :
-                                                    selectedAlert.status === 'RESOLVED' ? 'text-emerald-600' : 'text-gray-600'
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1.5 block">Status</span>
+                                        <span className={cn(
+                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                                            getStatusBadge(selectedAlert.status).color
                                         )}>
                                             {selectedAlert.status}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1.5 block">Device</span>
+                                        <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                                            <Monitor className="w-3.5 h-3.5 text-muted-foreground" />
+                                            {selectedAlert.device?.name || '-'}
                                         </p>
                                     </div>
-                                    <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Device</label>
-                                        <p className="text-sm font-medium">{selectedAlert.device?.name || '-'}</p>
+                                </div>
+
+                                {/* Message block */}
+                                <div>
+                                    <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-2 block">Message</span>
+                                    <div className="bg-red-50/50 dark:bg-red-950/10 border border-red-100 dark:border-red-900/30 rounded-lg p-4">
+                                        <p className="text-[15px] font-medium leading-relaxed">
+                                            {selectedAlert.message}
+                                        </p>
                                     </div>
                                 </div>
 
-                                {/* Message */}
-                                <div>
-                                    <label className="text-xs text-muted-foreground uppercase font-medium">Message</label>
-                                    <p className="text-sm mt-1">{selectedAlert.message}</p>
-                                </div>
-
-                                {/* Value & Threshold */}
+                                {/* Values & Thresholds */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Value</label>
-                                        <p className="text-sm font-mono bg-muted px-2 py-0.5 rounded inline-block">
+                                    <div className="bg-muted/10 border border-border/50 rounded-lg p-4">
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-2 block">Trigger Value</span>
+                                        <p className="text-base font-mono font-semibold text-foreground">
                                             {JSON.stringify(selectedAlert.value)}
                                         </p>
                                     </div>
-                                    <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Threshold</label>
-                                        <p className="text-sm font-mono bg-muted px-2 py-0.5 rounded inline-block">
+                                    <div className="bg-muted/10 border border-border/50 rounded-lg p-4">
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-2 block">Rule Threshold</span>
+                                        <p className="text-base font-mono font-semibold text-foreground">
                                             {JSON.stringify(selectedAlert.threshold)}
                                         </p>
                                     </div>
                                 </div>
 
-                                {/* Acknowledged By */}
-                                {selectedAlert.acknowledged_by_user && (
-                                    <div className="border-t border-border pt-4">
-                                        <label className="text-xs text-muted-foreground uppercase font-medium mb-2 block">Acknowledged</label>
-                                        <div className="text-sm">
-                                            <span className="text-muted-foreground">By: </span>
-                                            <span className="font-medium text-yellow-700">{selectedAlert.acknowledged_by_user.full_name}</span>
-                                            {selectedAlert.acknowledged_at && (
-                                                <span className="text-muted-foreground ml-2">
-                                                    ({formatDistanceToNow(new Date(selectedAlert.acknowledged_at), { addSuffix: true })})
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Resolved By */}
-                                {selectedAlert.resolved_by_user && (
-                                    <div className="border-t border-border pt-4">
-                                        <label className="text-xs text-muted-foreground uppercase font-medium mb-2 block">Resolved</label>
-                                        <div className="text-sm">
-                                            <span className="text-muted-foreground">By: </span>
-                                            <span className="font-medium text-emerald-700">{selectedAlert.resolved_by_user.full_name}</span>
-                                            {selectedAlert.resolved_at && (
-                                                <span className="text-muted-foreground ml-2">
-                                                    ({formatDistanceToNow(new Date(selectedAlert.resolved_at), { addSuffix: true })})
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Location hierarchy */}
+                                {/* Location Details */}
                                 {(selectedAlert.organization || selectedAlert.event || selectedAlert.department || selectedAlert.service) && (
-                                    <div className="border-t border-border pt-4">
-                                        <label className="text-xs text-muted-foreground uppercase font-medium mb-2 block">Location</label>
-                                        <div className="text-sm space-y-1">
+                                    <div>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-3 block">Location & Service Hierarchy</span>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                                             {selectedAlert.organization && (
-                                                <p><span className="text-muted-foreground">Organization:</span> {selectedAlert.organization.name}</p>
+                                                <div className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
+                                                    <span className="text-muted-foreground flex items-center gap-2"><Building2 className="w-4 h-4"/> Organization</span> 
+                                                    <span className="font-medium text-right ml-2">{selectedAlert.organization.name}</span>
+                                                </div>
                                             )}
                                             {selectedAlert.event && (
-                                                <p><span className="text-muted-foreground">Event:</span> {selectedAlert.event.name}</p>
+                                                <div className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
+                                                    <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-4 h-4"/> Event</span> 
+                                                    <span className="font-medium text-right ml-2">{selectedAlert.event.name}</span>
+                                                </div>
                                             )}
                                             {selectedAlert.department && (
-                                                <p><span className="text-muted-foreground">Department:</span> {selectedAlert.department.name}</p>
+                                                <div className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
+                                                    <span className="text-muted-foreground flex items-center gap-2"><Layers className="w-4 h-4"/> Department</span> 
+                                                    <span className="font-medium text-right ml-2">{selectedAlert.department.name}</span>
+                                                </div>
                                             )}
                                             {selectedAlert.service?.service_template && (
-                                                <p><span className="text-muted-foreground">Service:</span> {selectedAlert.service.service_template.name}</p>
+                                                <div className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
+                                                    <span className="text-muted-foreground flex items-center gap-2"><Settings className="w-4 h-4"/> Service</span> 
+                                                    <span className="font-medium text-right ml-2">{selectedAlert.service.service_template.name}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Action Logs */}
+                                {(selectedAlert.acknowledged_by_user || selectedAlert.resolved_by_user) && (
+                                    <div>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-3 block">Activity History</span>
+                                        <div className="space-y-3 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
+                                            {selectedAlert.acknowledged_by_user && (
+                                                <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                                                    {/* Timeline Marker */}
+                                                    <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-card bg-yellow-100 text-yellow-600 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10">
+                                                        <Clock className="w-4 h-4" />
+                                                    </div>
+                                                    {/* Content Card */}
+                                                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-border bg-card shadow-sm">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-sm font-medium text-foreground">Acknowledged</span>
+                                                            <span className="text-xs text-muted-foreground flex items-center gap-1.5"><User className="w-3 h-3"/> {selectedAlert.acknowledged_by_user.full_name}</span>
+                                                            {selectedAlert.acknowledged_at && (
+                                                                <span className="text-[11px] text-muted-foreground mt-1">
+                                                                    {formatDistanceToNow(new Date(selectedAlert.acknowledged_at), { addSuffix: true })} 
+                                                                    &nbsp;({format(new Date(selectedAlert.acknowledged_at), "MMM d, h:mm a")})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
+                                            {selectedAlert.resolved_by_user && (
+                                                <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                                                    {/* Timeline Marker */}
+                                                    <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-card bg-emerald-100 text-emerald-600 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10">
+                                                        <CheckCircle className="w-4 h-4" />
+                                                    </div>
+                                                    {/* Content Card */}
+                                                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-border bg-card shadow-sm">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-sm font-medium text-foreground">Resolved</span>
+                                                            <span className="text-xs text-muted-foreground flex items-center gap-1.5"><User className="w-3 h-3"/> {selectedAlert.resolved_by_user.full_name}</span>
+                                                            {selectedAlert.resolved_at && (
+                                                                <span className="text-[11px] text-muted-foreground mt-1">
+                                                                    {formatDistanceToNow(new Date(selectedAlert.resolved_at), { addSuffix: true })} 
+                                                                    &nbsp;({format(new Date(selectedAlert.resolved_at), "MMM d, h:mm a")})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     </div>

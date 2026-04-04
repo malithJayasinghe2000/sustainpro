@@ -41,8 +41,9 @@ import {
     departmentServicesApi,
     uploadApi,
     getImageUrl,
+    alertsApi
 } from '@/lib/api';
-import toast, { Toaster } from 'react-hot-toast';
+import { toast } from 'sonner';
 
 interface Pagination {
     page: number;
@@ -387,7 +388,12 @@ export default function EscalationsPage() {
             if (startDate) params.from_date = startDate;
             if (endDate) params.to_date = endDate;
 
-            const response = await escalationsApi.getAll(params);
+            let response;
+            if (viewMode === 'my') {
+                response = await escalationsApi.getMyEscalations(params);
+            } else {
+                response = await escalationsApi.getAll(params);
+            }
 
             if (response.success && response.data.length > 0) {
                 const headers = ['ID', 'Escalated At', 'Severity', 'Status', 'Reason', 'Message', 'Assigned To', 'Organization', 'Event'];
@@ -410,7 +416,7 @@ export default function EscalationsPage() {
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `escalations_export_${new Date().toISOString().slice(0, 10)}.csv`;
+                link.download = `${viewMode === 'my' ? 'my_' : ''}escalations_export_${new Date().toISOString().slice(0, 10)}.csv`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -430,13 +436,30 @@ export default function EscalationsPage() {
     const handleAcknowledge = async (escalationId: string) => {
         setActionLoading(escalationId);
         try {
+            const currentEscalation = escalations.find(e => e.id === escalationId);
+            
             const response = await escalationsApi.acknowledge(escalationId);
             if (response.success) {
-                toast.success('Escalation acknowledged');
+                
+                // Keep alert synced automatically
+                if (currentEscalation?.sps_alerts?.id) {
+                    try {
+                        await alertsApi.acknowledge(currentEscalation.sps_alerts.id);
+                    } catch (e) {
+                         console.error('Failed to sync alert acknowledge state', e);
+                    }
+                }
+                
+                toast.success('Escalation Acknowledged', {
+                     description: `You have successfully acknowledged this escalation.`
+                });
+                
                 fetchEscalations();
             }
         } catch (err: any) {
-            toast.error(err.message || 'Failed to acknowledge escalation');
+            toast.error('Action Failed', {
+                 description: err.message || 'Failed to acknowledge escalation'
+            });
         } finally {
             setActionLoading(null);
         }
@@ -460,13 +483,26 @@ export default function EscalationsPage() {
             });
 
             if (response.success) {
-                toast.success('Escalation resolved');
+                // Keep alert synced automatically
+                try {
+                     if(selectedEscalation.sps_alerts?.id) {
+                         await alertsApi.resolve(selectedEscalation.sps_alerts.id);
+                     }
+                } catch(e) {
+                     console.error('Failed to sync alert resolution', e);
+                }
+
+                toast.success('Escalation Resolved', {
+                    description: 'Escalation successfully resolved and closed.'
+                });
                 setResolveModalOpen(false);
                 setSelectedEscalation(null);
                 fetchEscalations();
             }
         } catch (err: any) {
-            toast.error(err.message || 'Failed to resolve escalation');
+            toast.error('Action Failed', {
+                 description: err.message || 'Failed to resolve escalation'
+            });
         } finally {
             setActionLoading(null);
         }
@@ -547,7 +583,7 @@ export default function EscalationsPage() {
     return (
         <DashboardLayout>
             <div className="page-padding max-w-[1600px] mx-auto space-y-6">
-                <Toaster position="bottom-right" />
+                {/* <Toaster position="bottom-right" /> */}
 
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -931,167 +967,218 @@ export default function EscalationsPage() {
 
                 {/* Detail Modal */}
                 {selectedEscalation && !resolveModalOpen && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedEscalation(null)}>
-                        <div className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[80vh] overflow-auto shadow-xl" onClick={e => e.stopPropagation()}>
-                            <div className="sticky top-0 bg-card border-b border-border p-4 flex items-center justify-between">
-                                <h3 className="text-lg font-semibold flex items-center gap-2">
-                                    <AlertTriangle className="w-5 h-5 text-primary" />
-                                    Escalation Details
-                                </h3>
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => setSelectedEscalation(null)}>
+                        <div className="bg-card border border-border rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                            <div className="bg-muted/30 border-b border-border p-5 flex items-center justify-between rounded-t-xl">
+                                <div>
+                                    <h3 className="text-xl font-semibold flex items-center gap-2.5">
+                                        <AlertTriangle className={cn(
+                                            "w-5 h-5",
+                                            selectedEscalation.severity === 'CRITICAL' ? 'text-red-500' :
+                                            selectedEscalation.severity === 'HIGH' ? 'text-orange-500' :
+                                            selectedEscalation.severity === 'MEDIUM' ? 'text-yellow-500' : 'text-blue-500'
+                                        )} />
+                                        Escalation Details
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground mt-1 font-mono">
+                                        {selectedEscalation.id}
+                                    </p>
+                                </div>
                                 <button
                                     onClick={() => setSelectedEscalation(null)}
-                                    className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                                    className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors"
                                 >
-                                    <XCircle className="w-5 h-5" />
+                                    <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <div className="p-4 space-y-4">
-                                {/* Basic Info */}
-                                <div className="grid grid-cols-2 gap-4">
+                            
+                            <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+                                {/* Header / Main Values */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted/20 p-4 rounded-xl border border-border/50">
                                     <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Escalated At</label>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1.5 block">Time</span>
                                         <p className="text-sm font-medium">
-                                            <TimeDisplay timestamp={selectedEscalation.escalated_at} format="full" />
+                                            <TimeDisplay timestamp={selectedEscalation.escalated_at} format="short" />
                                         </p>
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Severity</label>
-                                        <p className={cn(
-                                            "text-sm font-medium",
-                                            selectedEscalation.severity === 'CRITICAL' ? 'text-red-600' :
-                                                selectedEscalation.severity === 'HIGH' ? 'text-orange-600' :
-                                                    selectedEscalation.severity === 'MEDIUM' ? 'text-yellow-600' : 'text-blue-600'
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1.5 block">Severity</span>
+                                        <span className={cn(
+                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                                            getSeverityBadge(selectedEscalation.severity).color
                                         )}>
                                             {selectedEscalation.severity}
-                                        </p>
+                                        </span>
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Status</label>
-                                        <p className={cn(
-                                            "text-sm font-medium",
-                                            selectedEscalation.status === 'OPEN' ? 'text-red-600' :
-                                                selectedEscalation.status === 'ACKNOWLEDGED' ? 'text-yellow-600' : 'text-emerald-600'
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1.5 block">Status</span>
+                                        <span className={cn(
+                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                                            getStatusBadge(selectedEscalation.status).color
                                         )}>
                                             {selectedEscalation.status}
-                                        </p>
+                                        </span>
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted-foreground uppercase font-medium">Reason</label>
-                                        <p className="text-sm font-medium">{REASON_LABELS[selectedEscalation.reason] || selectedEscalation.reason}</p>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1.5 block">Reason</span>
+                                        <p className="text-sm font-medium text-foreground">
+                                            {REASON_LABELS[selectedEscalation.reason] || selectedEscalation.reason}
+                                        </p>
                                     </div>
                                 </div>
 
-                                {/* Message */}
+                                {/* Message block */}
                                 <div>
-                                    <label className="text-xs text-muted-foreground uppercase font-medium">Alert Message</label>
-                                    <p className="text-sm mt-1">{selectedEscalation.sps_alerts?.message || 'No message'}</p>
+                                    <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-2 block">Alert Message</span>
+                                    <div className="bg-red-50/50 dark:bg-red-950/10 border border-red-100 dark:border-red-900/30 rounded-lg p-4">
+                                        <p className="text-[15px] font-medium leading-relaxed">
+                                            {selectedEscalation.sps_alerts?.message || 'No message'}
+                                        </p>
+                                    </div>
                                 </div>
 
-                                {/* Assignment */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    {selectedEscalation.assigned_user && (
-                                        <div>
-                                            <label className="text-xs text-muted-foreground uppercase font-medium">Assigned To</label>
-                                            <p className="text-sm font-medium">{selectedEscalation.assigned_user.full_name}</p>
-                                        </div>
-                                    )}
+                                {/* Location Details */}
+                                <div>
+                                    <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-3 block">Assignment & Location</span>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                        {selectedEscalation.assigned_user && (
+                                            <div className="flex items-center justify-between p-3 border border-border/50 rounded-lg sm:col-span-2">
+                                                <span className="text-muted-foreground flex items-center gap-2"><User className="w-4 h-4 text-primary"/> Assigned To</span> 
+                                                <span className="font-medium text-right ml-2 text-primary">{selectedEscalation.assigned_user.full_name}</span>
+                                            </div>
+                                        )}
+                                        {selectedEscalation.sps_organizations && (
+                                            <div className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
+                                                <span className="text-muted-foreground flex items-center gap-2"><Building2 className="w-4 h-4"/> Organization</span> 
+                                                <span className="font-medium text-right ml-2">{selectedEscalation.sps_organizations.name}</span>
+                                            </div>
+                                        )}
+                                        {selectedEscalation.sps_events && (
+                                            <div className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
+                                                <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-4 h-4"/> Event</span> 
+                                                <span className="font-medium text-right ml-2">{selectedEscalation.sps_events.name}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
-                                {/* Acknowledged By */}
-                                {selectedEscalation.acknowledged_user && (
-                                    <div className="border-t border-border pt-4">
-                                        <label className="text-xs text-muted-foreground uppercase font-medium mb-2 block">Acknowledged</label>
-                                        <div className="text-sm">
-                                            <span className="text-muted-foreground">By: </span>
-                                            <span className="font-medium text-yellow-700">{selectedEscalation.acknowledged_user.full_name}</span>
-                                            {selectedEscalation.acknowledged_at && (
-                                                <span className="text-muted-foreground ml-2">
-                                                    ({formatDistanceToNow(new Date(selectedEscalation.acknowledged_at), { addSuffix: true })})
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Resolved By */}
-                                {selectedEscalation.resolved_user && (
-                                    <div className="border-t border-border pt-4">
-                                        <label className="text-xs text-muted-foreground uppercase font-medium mb-2 block">Resolved</label>
-                                        <div className="text-sm">
-                                            <span className="text-muted-foreground">By: </span>
-                                            <span className="font-medium text-emerald-700">{selectedEscalation.resolved_user.full_name}</span>
-                                            {selectedEscalation.resolved_at && (
-                                                <span className="text-muted-foreground ml-2">
-                                                    ({formatDistanceToNow(new Date(selectedEscalation.resolved_at), { addSuffix: true })})
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Resolution Notes */}
-                                {selectedEscalation.resolution_notes && (
-                                    <div className="border-t border-border pt-4">
-                                        <label className="text-xs text-muted-foreground uppercase font-medium mb-2 block">Resolution Notes</label>
-                                        <p className="text-sm bg-muted/50 p-3 rounded-lg">{selectedEscalation.resolution_notes}</p>
-                                    </div>
-                                )}
-
-                                {/* Evidence */}
+                                {/* Evidence Section */}
                                 {selectedEscalation.evidence_urls && selectedEscalation.evidence_urls.length > 0 && (
-                                    <div className="border-t border-border pt-4">
-                                        <label className="text-xs text-muted-foreground uppercase font-medium mb-2 block">Evidence ({selectedEscalation.evidence_urls.length})</label>
-                                        <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-3 block">Evidence Attached ({selectedEscalation.evidence_urls.length})</span>
+                                        <div className="grid grid-cols-2 gap-3">
                                             {selectedEscalation.evidence_urls.map((url, index) => (
                                                 <a
                                                     key={index}
                                                     href={url}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm hover:bg-blue-100"
+                                                    className="flex items-center justify-between p-3 bg-muted/30 border border-border/50 rounded-lg text-sm hover:bg-muted transition-colors group"
                                                 >
-                                                    {url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                                                        <ImageIcon className="w-4 h-4" />
-                                                    ) : url.match(/\.(mp4|webm|mov)$/i) ? (
-                                                        <Video className="w-4 h-4" />
-                                                    ) : (
-                                                        <FileUp className="w-4 h-4" />
-                                                    )}
-                                                    Evidence {index + 1}
-                                                    <ExternalLink className="w-3 h-3 ml-auto" />
+                                                    <span className="flex items-center gap-2 text-foreground font-medium">
+                                                        {url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                                                            <ImageIcon className="w-4 h-4 text-blue-500" />
+                                                        ) : url.match(/\.(mp4|webm|mov)$/i) ? (
+                                                            <Video className="w-4 h-4 text-purple-500" />
+                                                        ) : (
+                                                            <FileUp className="w-4 h-4 text-gray-500" />
+                                                        )}
+                                                        Attachment {index + 1}
+                                                    </span>
+                                                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
                                                 </a>
                                             ))}
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Action buttons */}
-                                {(selectedEscalation.status === 'OPEN' || selectedEscalation.status === 'ACKNOWLEDGED') && (
-                                    <div className="border-t border-border pt-4 flex gap-3">
-                                        {selectedEscalation.status === 'OPEN' && (
-                                            <button
-                                                onClick={() => {
-                                                    handleAcknowledge(selectedEscalation.id);
-                                                    setSelectedEscalation(null);
-                                                }}
-                                                className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 flex items-center gap-2"
-                                            >
-                                                <Eye className="w-4 h-4" />
-                                                Acknowledge
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={() => {
-                                                setResolveModalOpen(true);
-                                            }}
-                                            className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 flex items-center gap-2"
-                                        >
-                                            <Check className="w-4 h-4" />
-                                            Resolve with Evidence
-                                        </button>
+                                {/* Resolution Notes Block */}
+                                {selectedEscalation.resolution_notes && (
+                                    <div>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-2 block">Resolution Notes</span>
+                                        <div className="bg-green-50/50 dark:bg-green-950/10 border border-green-100 dark:border-green-900/30 rounded-lg p-4">
+                                            <p className="text-sm font-medium leading-relaxed italic">
+                                                "{selectedEscalation.resolution_notes}"
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Action Logs */}
+                                {(selectedEscalation.acknowledged_user || selectedEscalation.resolved_user) && (
+                                    <div>
+                                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-3 block">Activity History</span>
+                                        <div className="space-y-3 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
+                                            {selectedEscalation.acknowledged_user && (
+                                                <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                                                    <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-card bg-yellow-100 text-yellow-600 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10">
+                                                        <Clock className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-border bg-card shadow-sm">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-sm font-medium text-foreground">Acknowledged</span>
+                                                            <span className="text-xs text-muted-foreground flex items-center gap-1.5"><User className="w-3 h-3"/> {selectedEscalation.acknowledged_user.full_name}</span>
+                                                            {selectedEscalation.acknowledged_at && (
+                                                                <span className="text-[11px] text-muted-foreground mt-1">
+                                                                    {formatDistanceToNow(new Date(selectedEscalation.acknowledged_at), { addSuffix: true })} 
+                                                                    &nbsp;({format(new Date(selectedEscalation.acknowledged_at), "MMM d, h:mm a")})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
+                                            {selectedEscalation.resolved_user && (
+                                                <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                                                    <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-card bg-emerald-100 text-emerald-600 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10">
+                                                        <CheckCircle className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-border bg-card shadow-sm">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-sm font-medium text-foreground">Resolved</span>
+                                                            <span className="text-xs text-muted-foreground flex items-center gap-1.5"><User className="w-3 h-3"/> {selectedEscalation.resolved_user.full_name}</span>
+                                                            {selectedEscalation.resolved_at && (
+                                                                <span className="text-[11px] text-muted-foreground mt-1">
+                                                                    {formatDistanceToNow(new Date(selectedEscalation.resolved_at), { addSuffix: true })} 
+                                                                    &nbsp;({format(new Date(selectedEscalation.resolved_at), "MMM d, h:mm a")})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
+
+                            {/* Action Buttons Footer */}
+                            {(selectedEscalation.status === 'OPEN' || selectedEscalation.status === 'ACKNOWLEDGED') && (
+                                <div className="bg-muted/30 border-t border-border p-5 rounded-b-xl flex gap-3 justify-end items-center">
+                                    {selectedEscalation.status === 'OPEN' && (
+                                        <button
+                                            onClick={() => {
+                                                handleAcknowledge(selectedEscalation.id);
+                                                setSelectedEscalation(null);
+                                            }}
+                                            className="px-5 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
+                                        >
+                                            <Check className="w-4 h-4" />
+                                            Mark as Acknowledged
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => {
+                                            setResolveModalOpen(true);
+                                        }}
+                                        className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm"
+                                    >
+                                        <CheckCircle className="w-4 h-4" />
+                                        Provide Resolution & Evidence
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

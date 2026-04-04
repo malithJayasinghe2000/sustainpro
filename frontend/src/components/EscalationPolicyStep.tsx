@@ -210,6 +210,7 @@ export default function EscalationPolicyStep({
 
                                 {/* Main Content Area */}
                                 <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="flex flex-col col-span-2 space-y-1">
                                     <RichSelect
                                         label="Filter by Role"
                                         value={policy.filterRole || ''}
@@ -219,7 +220,18 @@ export default function EscalationPolicyStep({
                                         icon={Settings}
                                         className="min-w-[140px]"
                                     />
+                                    <RichSelect
+                                        label="Notify via"
+                                        value={policy.notifyMethod}
+                                        onChange={(val) => updatePolicy(policy.id, 'notifyMethod', val)}
+                                        options={NOTIFY_METHOD_OPTIONS}
+                                        placeholder="Select method..."
+                                        icon={Bell}
+                                    />                                  
+                                    </div>
 
+                                    <div className="flex flex-col col-span-2 space-y-1">
+                                    
                                     <RichSelect
                                         label="Assign To User"
                                         value={policy.autoAssignTo}
@@ -229,15 +241,7 @@ export default function EscalationPolicyStep({
                                         icon={Users}
                                         className="min-w-[160px]"
                                     />
-
-                                    <RichSelect
-                                        label="Notify via"
-                                        value={policy.notifyMethod}
-                                        onChange={(val) => updatePolicy(policy.id, 'notifyMethod', val)}
-                                        options={NOTIFY_METHOD_OPTIONS}
-                                        placeholder="Select method..."
-                                        icon={Bell}
-                                    />
+                                    
 
                                     <div className="space-y-1">
                                         <RichSelect
@@ -248,6 +252,7 @@ export default function EscalationPolicyStep({
                                             placeholder="Time to wait..."
                                             icon={Clock}
                                         />
+                                    </div>
                                     </div>
                                 </div>
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import DashboardLayout from '@/components/DashboardLayout';
 import SetupWizard from '@/components/SetupWizard';
 import { RichSelect } from '@/components/ui/RichSelect';
@@ -514,7 +515,7 @@ export default function NewServicePage() {
                             <div className="flex items-start gap-4">
                                 {imageUrl && (
                                     <div className="w-20 h-20 rounded-lg overflow-hidden relative shrink-0">
-                                        <Image src={getImageUrl(imageUrl) || ''} alt={name} fill className="object-cover" />
+                                        <img src={getImageUrl(imageUrl) || ''} alt={name} className="w-full h-full object-cover" />
                                     </div>
                                 )}
                                 <div className="flex-1">

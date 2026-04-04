@@ -7,7 +7,7 @@ import PasswordRequirements, { usePasswordValidation } from '@/components/Passwo
 import { User, Mail, Lock, Building2, UserPlus, ArrowLeft, ArrowRight, Check, AlertCircle, Calendar, Users, Activity, Settings, Briefcase, ChevronRight, Info, Eye, Truck, ShieldAlert, LucideIcon } from 'lucide-react';
 import { organizationsApi, eventsApi, departmentsApi, servicesApi, usersApi, deviceModelsApi, rolesApi, Role } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { hasRole } from '@/lib/roles';
+import { hasRole, ROLE_LEVELS } from '@/lib/roles';
 import { RichSelect } from '@/components/ui/RichSelect';
 import SetupWizard from '@/components/SetupWizard';
 import { toast } from 'sonner';
@@ -43,6 +43,7 @@ function NewUserPageContent() {
     const [currentStep, setCurrentStep] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (!currentUser) return;
@@ -79,18 +80,31 @@ function NewUserPageContent() {
 
     // --- Dynamic Fetching Handlers ---
 
-    // Fetch assignable roles from API
+    // Fetch assignable roles from API (filtered by current user's permission level)
     useEffect(() => {
         rolesApi.getAssignable()
             .then(roles => {
                 // Filter out SUPER_ADMIN from assignable roles (handled by is_super_admin flag)
-                setAvailableRoles(roles.filter(r => r.code !== 'SUPER_ADMIN'));
+                let filteredRoles = roles.filter(r => r.code !== 'SUPER_ADMIN');
+                
+                // If not SUPER_ADMIN, only show roles with lower privilege (higher level number)
+                if (currentUser && !currentUser.is_super_admin) {
+                    const currentUserRole = currentUser.roles?.[0]?.role || 'VIEWER';
+                    const currentUserLevel = ROLE_LEVELS[currentUserRole] ?? 99;
+                    
+                    filteredRoles = filteredRoles.filter((role: Role) => {
+                        const roleLevel = ROLE_LEVELS[role.code] ?? 99;
+                        return roleLevel > currentUserLevel;
+                    });
+                }
+                
+                setAvailableRoles(filteredRoles);
             })
             .catch(err => {
                 console.error('Failed to fetch roles:', err);
                 setAvailableRoles([]);
             });
-    }, []);
+    }, [currentUser]);
 
     // Get query parameters for pre-selection
     const searchParams = useSearchParams();
@@ -108,21 +122,120 @@ function NewUserPageContent() {
         }
     }, [currentUser]);
 
-    // Pre-select fields from query parameters
+    // Auto pre-select context fields based on current user's role hierarchy
     useEffect(() => {
-        setFormData(prev => ({
-            ...prev,
-            organization_id: preselectedOrgId || prev.organization_id,
-            event_id: preselectedEventId || prev.event_id,
-            dept_id: preselectedDeptId || prev.dept_id,
-            role: preselectedRole || prev.role
-        }));
+        if (!currentUser || currentUser.is_super_admin) {
+            return; // SUPER_ADMIN can manually select all contexts
+        }
+
+        const currentUserRole = currentUser.roles?.[0]?.role || 'VIEWER';
+        const currentUserRoleAssignment = currentUser.roles?.[0];
+
+        setFormData(prev => {
+            const nextFormData = { ...prev };
+
+            // Always use user's organization if not SUPER_ADMIN
+            nextFormData.organization_id = currentUser.organization_id || '';
+
+            switch (currentUserRole) {
+                case 'ORG_ADMIN': {
+                    // ORG_ADMIN: Auto-select their organization (cannot change)
+                    // Can change: Event, Department, Service (all below)
+                    break;
+                }
+
+                case 'EVENT_MANAGER': {
+                    // EVENT_MANAGER: Auto-select their event (cannot change)
+                    // Can change: Department, Service (all below)
+                    // CANNOT see: Organization
+                    if (currentUserRoleAssignment?.event_id) {
+                        nextFormData.event_id = currentUserRoleAssignment.event_id;
+                    }
+                    break;
+                }
+
+                case 'DEPT_HEAD': {
+                    // DEPT_HEAD: Auto-select their department (cannot change)
+                    // Can change: Service (below)
+                    // CANNOT see: Organization, Event
+                    if (currentUserRoleAssignment?.dept_id) {
+                        nextFormData.dept_id = currentUserRoleAssignment.dept_id;
+                    }
+                    break;
+                }
+
+                case 'SERVICE_SUPERVISOR': {
+                    // SERVICE_SUPERVISOR: Auto-select everything (cannot change anything)
+                    // CANNOT see: Organization, Event, Department
+                    if (currentUserRoleAssignment?.event_id) {
+                        nextFormData.event_id = currentUserRoleAssignment.event_id;
+                    }
+                    if (currentUserRoleAssignment?.dept_id) {
+                        nextFormData.dept_id = currentUserRoleAssignment.dept_id;
+                    }
+                    if (currentUserRoleAssignment?.service_id) {
+                        nextFormData.service_id = currentUserRoleAssignment.service_id;
+                    }
+                    break;
+                }
+            }
+
+            return nextFormData;
+        });
+    }, [currentUser]);
+
+    // Pre-select fields from query parameters (with authority validation)
+    useEffect(() => {
+        setFormData(prev => {
+            const nextFormData = { ...prev };
+            const currentUserRole = currentUser?.roles?.[0]?.role || 'VIEWER';
+            const currentUserRoleAssignment = currentUser?.roles?.[0];
+            
+            // Organization: Only SUPER_ADMIN can select different orgs
+            if (currentUser?.is_super_admin && preselectedOrgId) {
+                nextFormData.organization_id = preselectedOrgId;
+            }
+            
+            // Event: Only allow if authorized (SUPER_ADMIN, ORG_ADMIN, or EVENT_MANAGER with matching event)
+            if (preselectedEventId && formData.organization_id) {
+                if (currentUser?.is_super_admin || currentUserRole === 'ORG_ADMIN' || 
+                    (currentUserRole === 'EVENT_MANAGER' && currentUserRoleAssignment?.event_id === preselectedEventId)) {
+                    nextFormData.event_id = preselectedEventId;
+                }
+            }
+            
+            // Department: Only allow if authorized (SUPER_ADMIN, ORG_ADMIN, EVENT_MANAGER, or DEPT_HEAD with matching dept)
+            if (preselectedDeptId && formData.organization_id) {
+                if (currentUser?.is_super_admin || currentUserRole === 'ORG_ADMIN' || 
+                    currentUserRole === 'EVENT_MANAGER' ||
+                    (currentUserRole === 'DEPT_HEAD' && currentUserRoleAssignment?.dept_id === preselectedDeptId)) {
+                    nextFormData.dept_id = preselectedDeptId;
+                }
+            }
+            
+            // Service: Only allow if authorized (SUPER_ADMIN, ORG_ADMIN, EVENT_MANAGER, DEPT_HEAD, or SERVICE_SUPERVISOR with matching service)
+            const preselectedServiceId = searchParams.get('service') || searchParams.get('service_id');
+            if (preselectedServiceId && formData.organization_id) {
+                if (currentUser?.is_super_admin || currentUserRole === 'ORG_ADMIN' || 
+                    currentUserRole === 'EVENT_MANAGER' || currentUserRole === 'DEPT_HEAD' ||
+                    (currentUserRole === 'SERVICE_SUPERVISOR' && currentUserRoleAssignment?.service_id === preselectedServiceId)) {
+                    nextFormData.service_id = preselectedServiceId;
+                }
+            }
+            
+            // Role
+            if (preselectedRole) {
+                nextFormData.role = preselectedRole;
+            }
+            
+            return nextFormData;
+        });
 
         // If role is pre-selected, move to next step
         if (preselectedRole) {
             setCurrentStep(1);
         }
-    }, [preselectedOrgId, preselectedEventId, preselectedDeptId, preselectedRole]);
+    }, [preselectedOrgId, preselectedEventId, preselectedDeptId, preselectedRole, currentUser]);
 
     // Fetch events when organization is selected
     useEffect(() => {
@@ -159,7 +272,92 @@ function NewUserPageContent() {
     }, [formData.organization_id]);
 
 
-    // --- Role Visibility Logic ---
+    // --- Validation Functions ---
+
+    const validateRoleStep = (): boolean => {
+        const errors: Record<string, string> = {};
+        
+        if (!formData.role) {
+            errors.role = 'Please select a role';
+        }
+        
+        setFieldErrors(errors);
+        if (Object.keys(errors).length > 0) {
+            toast.error('Validation Error', { description: errors.role || 'Please fill in all required fields' });
+            return false;
+        }
+        return true;
+    };
+
+    const validateContextStep = (): boolean => {
+        const errors: Record<string, string> = {};
+        const currentUserRole = currentUser?.roles?.[0]?.role || 'VIEWER';
+        
+        // Validation based on role requirements
+        if (!formData.organization_id && (currentUser?.is_super_admin || currentUserRole === 'ORG_ADMIN')) {
+            errors.organization_id = 'Organization is required';
+        }
+        
+        if (['EVENT_MANAGER', 'DEPT_HEAD', 'SERVICE_SUPERVISOR'].includes(formData.role) && !formData.event_id) {
+            errors.event_id = 'Event is required for this role';
+        }
+        
+        if (['DEPT_HEAD', 'SERVICE_SUPERVISOR'].includes(formData.role) && !formData.dept_id) {
+            errors.dept_id = 'Department is required for this role';
+        }
+        
+        if (formData.role === 'SERVICE_SUPERVISOR' && !formData.service_id) {
+            errors.service_id = 'Service Unit is required for this role';
+        }
+        
+        setFieldErrors(errors);
+        if (Object.keys(errors).length > 0) {
+            toast.error('Validation Error', { description: Object.values(errors)[0] });
+            return false;
+        }
+        return true;
+    };
+
+    const validateAccountStep = (): boolean => {
+        const errors: Record<string, string> = {};
+        
+        // Full Name validation
+        if (!formData.full_name.trim()) {
+            errors.full_name = 'Full Name is required';
+        } else if (formData.full_name.length > 30) {
+            errors.full_name = 'Full Name must be less than 30 characters';
+        }
+        
+        // Email validation
+        if (!formData.email.trim()) {
+            errors.email = 'Email is required';
+        } else if (formData.email.length > 50) {
+            errors.email = 'Email must be less than 50 characters';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+            errors.email = 'Please enter a valid email address';
+        }
+        
+        // Password validation
+        if (!formData.password) {
+            errors.password = 'Password is required';
+        } else if (!isPasswordValid) {
+            errors.password = 'Password does not meet requirements';
+        }
+        
+        // Confirm Password validation
+        if (formData.password !== formData.confirmPassword) {
+            errors.confirmPassword = 'Passwords do not match';
+        }
+        
+        setFieldErrors(errors);
+        if (Object.keys(errors).length > 0) {
+            toast.error('Validation Error', { description: Object.values(errors)[0] });
+            return false;
+        }
+        return true;
+    };
+
+    // --- Validation Functions ---
     const canCreateRole = (roleToCheck: string) => {
         if (currentUser?.is_super_admin) return true;
 
@@ -191,6 +389,37 @@ function NewUserPageContent() {
     };
 
 
+    // --- Context Field Disable Logic & Visibility ---
+    const getContextFieldState = () => {
+        const currentUserRole = currentUser?.roles?.[0]?.role || 'VIEWER';
+        
+        return {
+            // Organization
+            organization: {
+                hidden: !currentUser?.is_super_admin && currentUserRole !== 'ORG_ADMIN',
+                disabled: !currentUser?.is_super_admin
+            },
+            
+            // Event - hidden for DEPT_HEAD and below, disabled for EVENT_MANAGER
+            event: {
+                hidden: ['DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN', 'VIEWER'].includes(currentUserRole),
+                disabled: currentUserRole === 'EVENT_MANAGER' && !!currentUser?.roles?.[0]?.event_id
+            },
+            
+            // Department - hidden for SERVICE_SUPERVISOR and below, disabled for DEPT_HEAD
+            department: {
+                hidden: ['SERVICE_SUPERVISOR', 'TECHNICIAN', 'VIEWER'].includes(currentUserRole),
+                disabled: currentUserRole === 'DEPT_HEAD' && !!currentUser?.roles?.[0]?.dept_id
+            },
+            
+            // Service - only show for SERVICE_SUPERVISOR and TECHNICIAN, disabled if SERVICE_SUPERVISOR
+            service: {
+                hidden: !['SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role),
+                disabled: currentUserRole === 'SERVICE_SUPERVISOR' && !!currentUser?.roles?.[0]?.service_id
+            },
+        };
+    };
+
     // --- Steps Renderers ---
 
     const renderRoleSelection = () => {
@@ -203,6 +432,12 @@ function NewUserPageContent() {
         return (
             <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
                 <h2 className="header-section">What type of user are you creating?</h2>
+                {fieldErrors.role && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" />
+                        {fieldErrors.role}
+                    </div>
+                )}
 
                 {availableRoles.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
@@ -217,7 +452,10 @@ function NewUserPageContent() {
                             return (
                                 <button
                                     key={role.code}
-                                    onClick={() => setFormData({ ...formData, role: role.code })}
+                                    onClick={() => {
+                                        setFormData({ ...formData, role: role.code });
+                                        if (fieldErrors.role) setFieldErrors({ ...fieldErrors, role: '' });
+                                    }}
                                     className={`p-6 rounded-xl border-2 text-left transition-all hover:scale-[1.02] ${isSelected
                                         ? 'border-primary bg-primary/5 shadow-md'
                                         : 'border-border bg-card hover:border-primary/50'
@@ -245,195 +483,227 @@ function NewUserPageContent() {
         );
     };
 
-    const renderContextSelection = () => (
-        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
-            <h2 className="header-section">Where will this user work?</h2>
+    const renderContextSelection = () => {
+        const currentUserRole = currentUser?.roles?.[0]?.role || 'VIEWER';
+        const fieldState = getContextFieldState();
 
-            <div className="space-y-4 max-w-xl">
-                {/* Org Selection (Only for Super Admins) */}
-                {currentUser?.is_super_admin && (
-                    <div>
+        return (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                <h2 className="header-section">Where will this user work?</h2>
 
-                        {orgs.length === 0 ? (
-                            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 flex flex-col gap-3">
-                                <div className="flex items-center gap-2 text-yellow-600">
-                                    <AlertCircle className="w-5 h-5" />
-                                    <span className="font-medium">No Organizations Found</span>
+                <div className="space-y-4 max-w-xl">
+                    {/* Organization Selection - Only for Super Admins and ORG_ADMIN */}
+                    {!fieldState.organization.hidden && (
+                        <div>
+                            {orgs.length === 0 ? (
+                                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 flex flex-col gap-3">
+                                    <div className="flex items-center gap-2 text-yellow-600">
+                                        <AlertCircle className="w-5 h-5" />
+                                        <span className="font-medium">No Organizations Found</span>
+                                    </div>
+                                    <p className="text-sm text-yellow-600/80">
+                                        You need to create an organization before you can add users.
+                                    </p>
+                                    <button
+                                        onClick={() => router.push('/admin/organizations/new')}
+                                        className="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-yellow-600 transition-colors w-fit flex items-center gap-2"
+                                    >
+                                        <UserPlus className="w-4 h-4" />
+                                        Create Organization
+                                    </button>
                                 </div>
-                                <p className="text-sm text-yellow-600/80">
-                                    You need to create an organization before you can add users.
-                                </p>
-                                <button
-                                    onClick={() => router.push('/admin/organizations/new')}
-                                    className="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-yellow-600 transition-colors w-fit flex items-center gap-2"
-                                >
-                                    <UserPlus className="w-4 h-4" />
-                                    Create Organization
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="flex gap-2 w-full">
+                            ) : (
+                                <div className="flex gap-2 w-full">
+                                    <div className="flex-1">
+                                        <RichSelect
+                                            label="Organization"
+                                            value={formData.organization_id}
+                                            onChange={(val) => setFormData({ ...formData, organization_id: val, event_id: '', dept_id: '', service_id: '' })}
+                                            options={[
+                                                { value: '', label: 'Select Organization', icon: Building2 },
+                                                ...orgs.map(org => ({ value: org.id, label: org.name, image: org.logo_url }))
+                                            ]}
+                                            icon={Building2}
+                                            disabled={fieldState.organization.disabled}
+                                        />
+                                    </div>
+                                    {/* <button
+                                        onClick={() => router.push('/admin/organizations/new')}
+                                        className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg mt-6 h-[42px]"
+                                        title="Create New Organization"
+                                    >
+                                        +
+                                    </button> */}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Event Selection - Hidden for DEPT_HEAD, SERVICE_SUPERVISOR, TECHNICIAN */}
+                    {!fieldState.event.hidden && ['EVENT_MANAGER', 'DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
+                        <div>
+                            <div className="flex gap-2">
                                 <div className="flex-1">
-                                    <RichSelect
-                                        label="Organization"
-                                        value={formData.organization_id}
-                                        onChange={(val) => setFormData({ ...formData, organization_id: val, event_id: '', dept_id: '', service_id: '' })}
+                                <RichSelect
+                                        label="Event"
+                                        value={formData.event_id}
+                                        onChange={(val) => setFormData({ ...formData, event_id: val, dept_id: '', service_id: '' })}
                                         options={[
-                                            { value: '', label: 'Select Organization', icon: Building2 },
-                                            ...orgs.map(org => ({ value: org.id, label: org.name, image: org.logo_url }))
+                                            { value: '', label: 'Select Event', icon: Calendar },
+                                            ...events.map(e => ({ 
+                                                value: e.id, 
+                                                label: e.name, 
+                                                image: e.logo_url || e.image_url || e.image || e.logo || undefined
+                                            }))
                                         ]}
-                                        icon={Building2}
+                                        icon={Calendar}
+                                        disabled={fieldState.event.disabled}
                                     />
                                 </div>
-                                <button
-                                    onClick={() => router.push('/admin/organizations/new')}
-                                    className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg mt-6 h-[42px]"
-                                    title="Create New Organization"
+                                {/* <button
+                                    onClick={() => router.push('/events/new')}
+                                    className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]"
+                                    title="Create New Event"
                                 >
                                     +
-                                </button>
+                                </button> */}
                             </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Event Selection */}
-                {['EVENT_MANAGER', 'DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
-                    <div>
-
-                        <div className="flex gap-2">
-                            <div className="flex-1">
-                                <RichSelect
-                                    value={formData.event_id}
-                                    onChange={(val) => setFormData({ ...formData, event_id: val, dept_id: '', service_id: '' })}
-                                    options={[
-                                        { value: '', label: 'Select Event', icon: Calendar },
-                                        ...events.map(e => ({ value: e.id, label: e.name, image: e.image_url }))
-                                    ]}
-                                    icon={Calendar}
-                                // disabled={!formData.organization_id} // RichSelect needs disabled prop support if we want to disable it. 
-                                // For now, if no org, events list is empty, so it acts disabled effectively or just empty.
-                                />
-                            </div>
-                            <button
-                                onClick={() => router.push('/events/new')}
-                                className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]"
-                                title="Create New Event"
-                            >
-                                +
-                            </button>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {/* Department Selection */}
-                {['DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
-                    <div>
-
-                        <div className="flex gap-2">
-                            <div className="flex-1">
-                                <RichSelect
-                                    value={formData.dept_id}
-                                    onChange={(val) => setFormData({ ...formData, dept_id: val, service_id: '' })}
-                                    options={[
-                                        { value: '', label: 'Select Department', icon: Users },
-                                        ...depts
-                                            .filter(d => !formData.event_id || d.event_id === formData.event_id)
-                                            .map(d => ({ value: d.id, label: d.name }))
-                                    ]}
-                                    icon={Users}
-                                />
+                    {/* Department Selection - Hidden for SERVICE_SUPERVISOR and below */}
+                    {!fieldState.department.hidden && ['DEPT_HEAD', 'SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
+                        <div>
+                            <div className="flex gap-2">
+                                <div className="flex-1">
+                                    <RichSelect
+                                        label="Department"
+                                        value={formData.dept_id}
+                                        onChange={(val) => setFormData({ ...formData, dept_id: val, service_id: '' })}
+                                        options={[
+                                            { value: '', label: 'Select Department', icon: Users },
+                                            ...depts
+                                                .filter(d => !formData.event_id || d.event_id === formData.event_id)
+                                                .map(d => ({ value: d.id, label: d.name }))
+                                        ]}
+                                        icon={Users}
+                                        disabled={fieldState.department.disabled}
+                                    />
+                                </div>
+                                {/* <button className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]" title="Create New Department">+</button> */}
                             </div>
-                            <button className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]" title="Create New Department">+</button>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {/* Service Selection */}
-                {['SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
-                    <div>
-
-                        <div className="flex gap-2">
-                            <div className="flex-1">
-                                <RichSelect
-                                    value={formData.service_id}
-                                    onChange={(val) => setFormData({ ...formData, service_id: val })}
-                                    options={[
-                                        { value: '', label: 'Select Service Unit', icon: Activity },
-                                        ...services
-                                            .filter(s => !formData.dept_id || s.department_id === formData.dept_id)
-                                            .map(s => ({ value: s.id, label: `${s.name} (${s.definition_name})` }))
-                                    ]}
-                                    icon={Activity}
-                                />
+                    {/* Service Selection - Only for SERVICE_SUPERVISOR and TECHNICIAN */}
+                    {!fieldState.service.hidden && ['SERVICE_SUPERVISOR', 'TECHNICIAN'].includes(formData.role) && (
+                        <div>
+                            <div className="flex gap-2">
+                                <div className="flex-1">
+                                    <RichSelect
+                                        label="Service Unit"
+                                        value={formData.service_id}
+                                        onChange={(val) => setFormData({ ...formData, service_id: val })}
+                                        options={[
+                                            { value: '', label: 'Select Service Unit', icon: Activity },
+                                            ...services
+                                                .filter(s => !formData.dept_id || s.department_id === formData.dept_id)
+                                                .map(s => ({ value: s.id, label: `${s.name} (${s.definition_name})` }))
+                                        ]}
+                                        icon={Activity}
+                                        disabled={fieldState.service.disabled}
+                                    />
+                                </div>
+                                {/* <button className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]" title="Create New Service">+</button> */}
                             </div>
-                            <button className="px-3 py-2 bg-muted rounded-lg border border-border hover:bg-muted/80 text-lg h-[42px]" title="Create New Service">+</button>
                         </div>
-                    </div>
-                )}
+                    )}
 
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const renderAccountDetails = () => (
         <div className="space-y-6 animate-in slide-in-from-right-4 duration-500 max-w-xl">
             <h2 className="header-section">Account Information</h2>
 
-            <div>
-                <label className="label-compact">Full Name</label>
+            <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground/80">Full Name</label>
                 <div className="relative">
-                    <User className="icon-input" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none w-4 h-4" />
                     <input
                         type="text"
-                        className="input-compactWithIcon"
+                        className={`flex h-10 w-full rounded-lg border bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 hover:border-primary/50 ${fieldErrors.full_name ? 'border-destructive focus-visible:ring-destructive' : 'border-border focus-visible:ring-primary'}`}
                         placeholder="John Doe"
                         value={formData.full_name}
-                        onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                        onChange={(e) => {
+                            setFormData({ ...formData, full_name: e.target.value });
+                            if (fieldErrors.full_name) setFieldErrors({ ...fieldErrors, full_name: '' });
+                        }}
                     />
+                </div>
+                <div className="flex justify-between items-start">
+                    
+                    {fieldErrors.full_name && <p className="text-xs text-destructive font-medium animate-in slide-in-from-top-1">{fieldErrors.full_name}</p>}
                 </div>
             </div>
 
-            <div>
-                <label className="label-compact">Email Address</label>
+            <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground/80">Email Address</label>
                 <div className="relative">
-                    <Mail className="icon-input" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none w-4 h-4" />
                     <input
                         type="email"
-                        className="input-compactWithIcon"
+                        className={`flex h-10 w-full rounded-lg border bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 hover:border-primary/50 ${fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : 'border-border focus-visible:ring-primary'}`}
                         placeholder="john.doe@company.com"
                         value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        onChange={(e) => {
+                            setFormData({ ...formData, email: e.target.value });
+                            if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' });
+                        }}
                     />
+                </div>
+                <div className="flex justify-between items-start">
+                    
+                    {fieldErrors.email && <p className="text-xs text-destructive font-medium animate-in slide-in-from-top-1">{fieldErrors.email}</p>}
                 </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="label-compact">Password</label>
+                <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground/80">Password</label>
                     <div className="relative">
-                        <Lock className="icon-input" />
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none w-4 h-4" />
                         <input
                             type="password"
-                            className="input-compactWithIcon"
+                            className={`flex h-10 w-full rounded-lg border bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 hover:border-primary/50 ${fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : 'border-border focus-visible:ring-primary'}`}
                             placeholder="••••••••"
                             value={formData.password}
-                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                            onChange={(e) => {
+                                setFormData({ ...formData, password: e.target.value });
+                                if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: '' });
+                            }}
                         />
                     </div>
+                    {fieldErrors.password && <p className="text-xs text-destructive font-medium animate-in slide-in-from-top-1">{fieldErrors.password}</p>}
                 </div>
-                <div>
-                    <label className="label-compact">Confirm Password</label>
+                <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground/80">Confirm Password</label>
                     <div className="relative">
-                        <Lock className="icon-input" />
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none w-4 h-4" />
                         <input
                             type="password"
-                            className="input-compactWithIcon"
+                            className={`flex h-10 w-full rounded-lg border bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 hover:border-primary/50 ${fieldErrors.confirmPassword ? 'border-destructive focus-visible:ring-destructive' : 'border-border focus-visible:ring-primary'}`}
                             placeholder="••••••••"
                             value={formData.confirmPassword}
-                            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                            onChange={(e) => {
+                                setFormData({ ...formData, confirmPassword: e.target.value });
+                                if (fieldErrors.confirmPassword) setFieldErrors({ ...fieldErrors, confirmPassword: '' });
+                            }}
                         />
                     </div>
+                    {fieldErrors.confirmPassword && <p className="text-xs text-destructive font-medium animate-in slide-in-from-top-1">{fieldErrors.confirmPassword}</p>}
                 </div>
             </div>
 
@@ -443,26 +713,9 @@ function NewUserPageContent() {
     );
 
     const handleSubmit = async () => {
-        // Password is REQUIRED
-        if (!formData.password || formData.password.trim() === '') {
-            setError("Password is required. This password will be sent to the user via email.");
-            return;
-        }
-
-        if (!isPasswordValid) {
-            setError("Password does not meet requirements.");
-            return;
-        }
-
-        // Password must match confirmation
-        if (formData.password !== formData.confirmPassword) {
-            setError("Passwords do not match");
-            return;
-        }
-
         try {
             setIsLoading(true);
-            setError('');
+            setFieldErrors({});
 
             // Send form data - password is sent to user via email
             await usersApi.create(formData);
@@ -472,23 +725,31 @@ function NewUserPageContent() {
 
             router.push('/users');
         } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to create user');
+            const errorMsg = err.response?.data?.error || 'Failed to create user';
+            toast.error('Error', { description: errorMsg });
         } finally {
             setIsLoading(false);
         }
     };
 
     const nextStep = () => {
-        // Validation logic per step could go here
-        if (currentStep === 0 && !formData.role) return setError("Please select a role");
+        setFieldErrors({});
+        
+        // Step-specific validation
+        if (currentStep === 0) {
+            if (!validateRoleStep()) return;
+        } else if (currentStep === 1) {
+            if (!validateContextStep()) return;
+        } else if (currentStep === 2) {
+            if (!validateAccountStep()) return;
+        }
 
-        setError('');
         setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1));
     };
 
     const prevStep = () => {
         setCurrentStep(prev => Math.max(prev - 1, 0));
-        setError('');
+        setFieldErrors({});
     };
 
     // Get the organization name for breadcrumbs
@@ -516,14 +777,6 @@ function NewUserPageContent() {
                 isLastStep={currentStep === STEPS.length - 1}
                 isLoading={isLoading}
             >
-                {/* Error Banner */}
-                {error && (
-                    <div className="absolute top-4 left-4 right-4 bg-red-500/10 border border-red-500/20 text-red-600 px-4 py-3 rounded-lg flex items-center gap-2 text-sm animate-in slide-in-from-top-2 z-10">
-                        <AlertCircle className="w-4 h-4" />
-                        {error}
-                    </div>
-                )}
-
                 {currentStep === 0 && renderRoleSelection()}
                 {currentStep === 1 && renderContextSelection()}
                 {currentStep === 2 && renderAccountDetails()}

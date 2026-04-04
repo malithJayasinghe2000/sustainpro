@@ -24,7 +24,7 @@ interface User {
     id: string;
     email: string;
     full_name?: string;
-    roles: { role: string }[];
+    roles: { role: string; org_id?: string; event_id?: string; dept_id?: string; service_id?: string }[];
     role_code?: string;
     role_name?: string;
     is_active: boolean;
@@ -33,7 +33,11 @@ interface User {
     last_login_at?: string;
     org_name?: string; // For Super Admin view
     org_logo?: string;
-    org_id?: string; // Ideally we have this
+    org_id?: string; // Organization ID
+    organization_id?: string; // Alternative name for Organization ID
+    event_id?: string;
+    dept_id?: string;
+    service_id?: string;
 }
 
 type ViewMode = 'table' | 'tree';
@@ -95,12 +99,27 @@ export default function UsersPage() {
     const [passwordError, setPasswordError] = useState('');
     const [passwordStrength, setPasswordStrength] = useState(0);
 
-    // Fetch available roles for filter
+    // Fetch available roles for filter and creation
     useEffect(() => {
         rolesApi.getAll()
-            .then(roles => setAvailableRoles(roles.filter(r => r.code !== 'SUPER_ADMIN')))
+            .then(roles => {
+                let filteredRoles = roles.filter(r => r.code !== 'SUPER_ADMIN');
+                
+                // If not SUPER_ADMIN, only show roles with lower privilege (higher level number)
+                if (user && !user.is_super_admin) {
+                    const currentUserRole = user.roles?.[0]?.role || 'VIEWER';
+                    const currentUserLevel = getRolePriority(currentUserRole);
+                    
+                    filteredRoles = filteredRoles.filter(role => {
+                        const roleLevel = ROLE_LEVELS[role.code] ?? 99;
+                        return roleLevel > currentUserLevel;
+                    });
+                }
+                
+                setAvailableRoles(filteredRoles);
+            })
             .catch(err => console.error('Failed to fetch roles:', err));
-    }, []);
+    }, [user]);
 
     // Permission Check: Allow Super Admin OR users with users.view permission
     useEffect(() => {
@@ -139,6 +158,7 @@ export default function UsersPage() {
         }
     }, [isModalOpen]);
 
+    
 
 
     const fetchUsers = async () => {
@@ -152,7 +172,66 @@ export default function UsersPage() {
                 organization_id: orgFilter === 'ALL' ? undefined : orgFilter
             });
             if (data.success) {
-                setUsers(data.data);
+                let filteredUsers = data.data;
+
+                // Apply role-based AND context-based filtering
+                // SUPER_ADMIN can see all users
+                // Other roles can only see users with lower privilege AND matching context
+                if (user && !user.is_super_admin) {
+                    const currentUserRole = user.roles?.[0]?.role || 'VIEWER';
+                    const currentUserLevel = getRolePriority(currentUserRole);
+                    
+                    // Get context from current user's role assignment
+                    const currentUserRoleAssignment = user.roles?.[0];
+
+                    filteredUsers = filteredUsers.filter((targetUser: User) => {
+                        const targetUserRole = targetUser.role_code || targetUser.roles?.[0]?.role || 'VIEWER';
+                        const targetUserLevel = getRolePriority(targetUserRole);
+
+                        // Filter 1: Only show users with LOWER privilege (HIGHER level number)
+                        if (targetUserLevel <= currentUserLevel) {
+                            return false;
+                        }
+
+                        // Filter 2: Apply context-based filtering based on current user's role
+                        switch (currentUserRole) {
+                            case 'ORG_ADMIN': {
+                                // ORG_ADMIN can only see users in their organization
+                                const currentOrgId = currentUserRoleAssignment?.org_id || user.organization_id;
+                                const targetOrgId = targetUser.org_id;
+                                return targetOrgId === currentOrgId;
+                            }
+                            
+                            case 'EVENT_MANAGER': {
+                                // EVENT_MANAGER can only see users assigned to their event
+                                const currentEventId = currentUserRoleAssignment?.event_id;
+                                const targetEventIds = targetUser.roles?.flatMap(r => r.event_id).filter(Boolean) || [];
+                                return currentEventId && targetEventIds.includes(currentEventId);
+                            }
+                            
+                            case 'DEPT_HEAD': {
+                                // DEPT_HEAD can only see users in their department
+                                const currentDeptId = currentUserRoleAssignment?.dept_id;
+                                const targetDeptIds = targetUser.roles?.flatMap(r => r.dept_id).filter(Boolean) || [];
+                                return currentDeptId && targetDeptIds.includes(currentDeptId);
+                            }
+                            
+                            case 'SERVICE_SUPERVISOR': {
+                                // SERVICE_SUPERVISOR can only see users assigned to their service
+                                const currentServiceId = currentUserRoleAssignment?.service_id;
+                                const targetServiceIds = targetUser.roles?.flatMap(r => r.service_id).filter(Boolean) || [];
+                                return currentServiceId && targetServiceIds.includes(currentServiceId);
+                            }
+                            
+                            default: {
+                                // Other roles (TECHNICIAN, VIEWER, etc.) can't manage users
+                                return false;
+                            }
+                        }
+                    });
+                }
+
+                setUsers(filteredUsers);
                 if (data.meta) {
                     setPagination(prev => ({
                         ...prev,
@@ -264,6 +343,13 @@ export default function UsersPage() {
 
             // Only include role if it's been changed (not empty)
             if (editFormData.role) {
+                // Validate that the role being assigned is one available to this user
+                const isValidRole = availableRoles.some(r => r.code === editFormData.role);
+                if (!isValidRole) {
+                    toast.error('Cannot assign this role - outside your authority level');
+                    setIsSubmitting(false);
+                    return;
+                }
                 updatePayload.role = editFormData.role;
             }
 

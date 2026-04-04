@@ -122,11 +122,13 @@ export default function AddServiceWizard({
 
         if (currentStep === 1 && createSupervisor) {
             if (!userData.full_name) errors.full_name = "Full name is required";
+            if(userData.full_name.length > 20) errors.full_name = "Full name cannot exceed 20 characters";
             if (!userData.email) {
                 errors.email = "Email is required";
             } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email)) {
                 errors.email = "Invalid email format";
             }
+            if(userData.email.length> 50) errors.email = "Email cannot exceed 50 characters";
             if (!userData.password) errors.password = "Password is required";
             if (!isPasswordValid) errors.password = "Password does not meet requirements";
             if (userData.password !== userData.confirmPassword) {
